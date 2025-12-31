@@ -438,12 +438,12 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                         {sortedPurchases.map((item, i) => (
                             <div key={i} style={{ display: 'grid', gridTemplateColumns: '85px 1fr 90px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.875rem', alignItems: 'center' }}>
-                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatDate(item.date)}</div>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatDate(item.parsedDate || item.date)}</div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.supplier}</span>
+                                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.originalDesc || item.supplier}</span>
                                     {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.remarks}</span>}
                                 </div>
-                                <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600 }}>₹{item.amount.toLocaleString('en-IN')}</div>
+                                <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600 }}>₹{(item.parsedAmount || item.amount || 0).toLocaleString('en-IN')}</div>
                             </div>
                         ))}
                     </div>

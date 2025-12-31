@@ -300,7 +300,8 @@ export const parseExcelFile = (files) => {
                         }
                     }
                     // --- TYPE 2: CUSTOMERWISE PROFIT ---
-                    else if (contentString.includes('customer name') && contentString.includes('profit/margin')) {
+                    // Relaxed check: Look for "Customer" AND ("Profit" OR "Margin")
+                    else if (contentString.includes('customer') && (contentString.includes('profit') || contentString.includes('margin'))) {
                         const nameIdx = headerRow.findIndex(h => /customer name/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
                         const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));

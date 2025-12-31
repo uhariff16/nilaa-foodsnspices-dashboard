@@ -87,8 +87,7 @@ function App() {
                 parsedAmount: Number(t.amount),
                 parsedType: t.payment_mode === 'Expense' ? 'Expense' : 'Sales',
                 originalDesc: t.item_name || 'Item',
-                invoiceNo: t.invoice_no,
-                customerName: t.customer_name || 'Walking Customer'
+                invoiceNo: t.invoice_no
             }));
 
             // 2. Fetch Production Logs (With Pagination Loop)
@@ -111,6 +110,35 @@ function App() {
             }
             const dbLogs = allLogs;
 
+            // 3. Fetch Customer Stats (With Pagination)
+            let allCusts = [];
+            let cFrom = 0;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('customer_stats')
+                    .select('*')
+                    .order('date', { ascending: true })
+                    .range(cFrom, cFrom + batchSize - 1);
+
+                if (error) {
+                    console.error("Error fetching customers:", error);
+                    // Don't throw, just log, in case table doesn't exist yet
+                } else {
+                    allCusts = [...allCusts, ...data];
+                    if (data.length < batchSize) break;
+                    cFrom += batchSize;
+                }
+                if (error) break;
+            }
+
+            const mappedCustomers = allCusts.map(c => ({
+                id: c.id,
+                name: c.customer_name,
+                revenue: Number(c.revenue),
+                profit: Number(c.profit),
+                parsedDate: c.date
+            }));
+
             // Split into categories
             const newProdData = {
                 stockIn: [],
@@ -131,30 +159,12 @@ function App() {
                 else if (log.type === 'production') newProdData.postProduction.push(entry);
             });
 
-            // Derive Items and Customers from Transactions (Dynamic Generation)
-            const derivedItems = mappedTransactions.filter(t => t.parsedType === 'Sales').map(t => ({
-                id: t.id,
-                name: t.originalDesc,
-                revenue: t.parsedAmount,
-                parsedDate: t.parsedDate,
-                qty: 1,
-                profit: 0
-            }));
-
-            const derivedCustomers = mappedTransactions.filter(t => t.parsedType === 'Sales').map(t => ({
-                id: t.id,
-                name: t.customerName,
-                revenue: t.parsedAmount,
-                parsedDate: t.parsedDate,
-                profit: 0
-            }));
-
             // 3. Update State
             setData(prev => ({
                 ...prev,
                 transactions: mappedTransactions,
-                items: derivedItems,
-                customers: derivedCustomers
+                items: [], // Items still empty unless we derive them
+                customers: mappedCustomers // Populated from DB
             }));
 
             setProductionData(newProdData);

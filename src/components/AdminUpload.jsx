@@ -57,13 +57,11 @@ const AdminUpload = () => {
             // 1. Parse Local File
             const parsedData = await parseExcelFile(files);
 
-            if (!parsedData.transactions || parsedData.transactions.length === 0) {
-                // Debug: If no transactions, check if customers/items were found?
-                // Or just error out.
-                throw new Error("No transaction data found in files. Please use the 'File Inspector' below to check if the format matches.");
+            if ((!parsedData.transactions || parsedData.transactions.length === 0) && (!parsedData.customers || parsedData.customers.length === 0)) {
+                throw new Error("No transaction or customer data found in files. Please use the 'File Inspector' below to check if the format matches.");
             }
 
-            setStatus({ type: 'info', message: `Parsed ${parsedData.transactions.length} rows. Validating...` });
+            setStatus({ type: 'info', message: `Parsed ${parsedData.transactions.length} txns & ${parsedData.customers.length} customer records. Validating...` });
 
             // 2. Format & Validate for Supabase
             let droppedCount = 0;
@@ -76,8 +74,7 @@ const AdminUpload = () => {
                     item_name: t.originalDesc || 'Unknown Item',
                     amount: t.parsedAmount || 0,
                     quantity: 0,
-                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale',
-                    customer_name: t.customerName // New Field
+                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale'
                 };
 
                 // Logging logic for dropped rows
@@ -98,20 +95,38 @@ const AdminUpload = () => {
                 console.warn(`Dropped ${droppedCount} rows. Sample reasons:\n${droppedReasons.join('\n')}`);
             }
 
-            if (dbRows.length === 0) {
-                const errorMsg = `All ${parsedData.transactions.length} rows were rejected!\nProbable Cause: Date format mismatch.\n\nSample Rejections:\n${droppedReasons.join('\n')}`;
+            if (dbRows.length === 0 && parsedData.transactions.length > 0) {
+                const errorMsg = `All ${parsedData.transactions.length} sales rows were rejected!\nProbable Cause: Date format mismatch.\n\nSample Rejections:\n${droppedReasons.join('\n')}`;
                 alert(errorMsg);
-                throw new Error("Validation Failed: No valid rows to insert.");
+                // Don't throw if we have valid customers
+                if (parsedData.customers.length === 0) throw new Error("Validation Failed: No valid rows to insert.");
             }
 
-            // 3. Batch Insert
-            const { error } = await supabase
-                .from('transactions')
-                .insert(dbRows);
+            // 3. Batch Insert - Transactions
+            if (dbRows.length > 0) {
+                const { error } = await supabase
+                    .from('transactions')
+                    .insert(dbRows);
+                if (error) throw error;
+            }
 
-            if (error) throw error;
+            // 4. Batch Insert - Customer Stats
+            if (parsedData.customers && parsedData.customers.length > 0) {
+                const custRows = parsedData.customers.map(c => ({
+                    date: c.parsedDate,
+                    customer_name: c.name,
+                    revenue: c.revenue,
+                    profit: c.profit
+                }));
 
-            const successMsg = `Successfully uploaded ${dbRows.length} sales records! (${droppedCount} rows skipped - check console for details)`;
+                const { error: custError } = await supabase
+                    .from('customer_stats')
+                    .upsert(custRows, { onConflict: 'date, customer_name' });
+
+                if (custError) throw custError;
+            }
+
+            const successMsg = `Successfully uploaded ${dbRows.length} sales & ${parsedData.customers.length} customer records!`;
             setStatus({ type: 'success', message: successMsg });
 
             if (droppedCount > (parsedData.transactions.length * 0.5)) {

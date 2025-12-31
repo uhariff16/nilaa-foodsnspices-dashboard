@@ -327,7 +327,6 @@ export const parseExcelFile = (files) => {
                     else if (contentString.includes('particulars') && contentString.includes('amount')) {
                         let currentDate = null;
                         let currentInvoiceNo = null;
-                        let currentCustomer = null;
 
                         // Dynamic Column Detection
                         // Scan first 10 rows to find the "Amount" column index
@@ -348,8 +347,8 @@ export const parseExcelFile = (files) => {
                             if (!row || row.length === 0) return;
                             const particulars = String(row[1] || '');
 
-                            // Check for Header row (e.g. "INV-1165 Date : 01-Dec-25 Client : XYZ Hotel")
-                            // Robust regex to capture INV-XXXX, Date, and Client
+                            // Check for Header row (e.g. "INV-1165 Date : 01-Dec-25 Client : ...")
+                            // Robust regex to capture INV-XXXX and Date
                             if (particulars.includes('INV-') || particulars.includes('Date :')) {
                                 // Extract Invoice No
                                 const invMatch = particulars.match(/(INV-[\w-]+)/i);
@@ -359,23 +358,6 @@ export const parseExcelFile = (files) => {
                                 const dateMatch = particulars.match(/Date\s*:\s*([\d-]+-[a-zA-Z]+-[\d]+)/);
                                 if (dateMatch) {
                                     currentDate = normalizeDate(dateMatch[1]);
-                                }
-
-                                // Extract Client/Party Name
-                                // Matches "Client :" OR "Party :" followed by text until end or next label
-                                const clientMatch = particulars.match(/(?:Client|Party|M\/s)\s*[:.-]\s*([^\n\r]+)/i);
-                                if (clientMatch) {
-                                    // Clean up the name (remove extra spaces or trailing dates if regex overshot)
-                                    // Usually "Client : Name Date :" or "Client : Name"
-                                    let name = clientMatch[1].trim();
-                                    // If name captured keys like "Date :", truncate it
-                                    if (name.includes('Date :')) {
-                                        name = name.split('Date :')[0].trim();
-                                    }
-                                    if (name.includes('Inv No')) {
-                                        name = name.split('Inv No')[0].trim();
-                                    }
-                                    currentCustomer = name;
                                 }
                             }
 
@@ -394,8 +376,7 @@ export const parseExcelFile = (files) => {
                                         parsedAmount: amount,
                                         parsedType: 'Sales',
                                         originalDesc: row[1] || 'Item',
-                                        invoiceNo: currentInvoiceNo, // Attach captured Invoice No
-                                        customerName: currentCustomer || 'Unknown' // Attach Customer
+                                        invoiceNo: currentInvoiceNo // Attach captured Invoice No
                                     });
                                 }
                             }

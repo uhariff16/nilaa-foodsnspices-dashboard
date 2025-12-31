@@ -85,7 +85,18 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
     // Shared Filtered Data
     const filteredStockIn = useMemo(() => getFilteredItems(stockIn), [stockIn, selectedMonth, selectedYear]);
-    const filteredPurchases = useMemo(() => getFilteredItems(purchases), [purchases, selectedMonth, selectedYear]);
+
+    // Strict Filter for "Raw Materials" only (User Request)
+    // Exclude general expenses like Tea, Packing, Transport, etc.
+    const filteredPurchases = useMemo(() => {
+        const dateFiltered = getFilteredItems(purchases);
+        return dateFiltered.filter(item => {
+            const desc = (item.originalDesc || item.supplier || item.remarks || '').toLowerCase();
+            // Whitelist: Only allow Ginger and Garlic related records
+            // This ensures we don't show Tea, Packing, etc.
+            return desc.includes('ginger') || desc.includes('garlic');
+        });
+    }, [purchases, selectedMonth, selectedYear]);
 
 
     // 1. Process Physical Stock (Quantity) - Dynamic Grouping

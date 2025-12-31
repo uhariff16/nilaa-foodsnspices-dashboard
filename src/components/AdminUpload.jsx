@@ -76,7 +76,8 @@ const AdminUpload = () => {
                     item_name: t.originalDesc || 'Unknown Item',
                     amount: t.parsedAmount || 0,
                     quantity: 0,
-                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale'
+                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale',
+                    customer_name: t.customerName // New Field
                 };
 
                 // Logging logic for dropped rows

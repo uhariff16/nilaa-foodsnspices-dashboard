@@ -87,7 +87,8 @@ function App() {
                 parsedAmount: Number(t.amount),
                 parsedType: t.payment_mode === 'Expense' ? 'Expense' : 'Sales',
                 originalDesc: t.item_name || 'Item',
-                invoiceNo: t.invoice_no
+                invoiceNo: t.invoice_no,
+                customerName: t.customer_name || 'Walking Customer'
             }));
 
             // 2. Fetch Production Logs (With Pagination Loop)
@@ -130,12 +131,30 @@ function App() {
                 else if (log.type === 'production') newProdData.postProduction.push(entry);
             });
 
+            // Derive Items and Customers from Transactions (Dynamic Generation)
+            const derivedItems = mappedTransactions.filter(t => t.parsedType === 'Sales').map(t => ({
+                id: t.id,
+                name: t.originalDesc,
+                revenue: t.parsedAmount,
+                parsedDate: t.parsedDate,
+                qty: 1,
+                profit: 0
+            }));
+
+            const derivedCustomers = mappedTransactions.filter(t => t.parsedType === 'Sales').map(t => ({
+                id: t.id,
+                name: t.customerName,
+                revenue: t.parsedAmount,
+                parsedDate: t.parsedDate,
+                profit: 0
+            }));
+
             // 3. Update State
             setData(prev => ({
                 ...prev,
                 transactions: mappedTransactions,
-                items: [],
-                customers: []
+                items: derivedItems,
+                customers: derivedCustomers
             }));
 
             setProductionData(newProdData);

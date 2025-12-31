@@ -3,47 +3,11 @@ import { supabase } from '../lib/supabaseClient';
 import { parseExcelFile } from '../utils/excelParser';
 import { parseProductionFile } from '../utils/productionParser';
 import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw } from 'lucide-react';
-import * as XLSX from 'xlsx'; // Import for Inspector
 
 const AdminUpload = () => {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const [loading, setLoading] = useState(false);
     const [dbReport, setDbReport] = useState(null);
-    const [inspectData, setInspectData] = useState(null); // New state for inspector
-
-    // --- 0. FILE INSPECTOR (DEBUGGER) ---
-    const handleFileInspect = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setLoading(true);
-        setStatus({ type: 'info', message: 'Reading raw file...' });
-        setInspectData(null);
-
-        try {
-            const data = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const wb = XLSX.read(e.target.result, { type: 'binary' });
-                        const firstSheet = wb.Sheets[wb.SheetNames[0]];
-                        const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-                        resolve({ name: file.name, sheet: wb.SheetNames[0], rows: json.slice(0, 15) });
-                    } catch (err) { reject(err); }
-                };
-                reader.onerror = reject;
-                reader.readAsBinaryString(file);
-            });
-
-            setInspectData(data);
-            setStatus({ type: 'success', message: 'File read successfully. Check inspector below.' });
-        } catch (err) {
-            console.error(err);
-            setStatus({ type: 'error', message: "Inspection Failed: " + err.message });
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // --- 1. HANDLE SALES / INVOICE UPLOAD ---
     const handleSalesUpload = async (e) => {
@@ -58,9 +22,7 @@ const AdminUpload = () => {
             const parsedData = await parseExcelFile(files);
 
             if (!parsedData.transactions || parsedData.transactions.length === 0) {
-                // Debug: If no transactions, check if customers/items were found?
-                // Or just error out.
-                throw new Error("No transaction data found in files. Please use the 'File Inspector' below to check if the format matches.");
+                throw new Error("No transaction data found in files.");
             }
 
             setStatus({ type: 'info', message: `Parsed ${parsedData.transactions.length} rows. Validating...` });
@@ -154,8 +116,6 @@ const AdminUpload = () => {
             ];
 
             if (allRows.length === 0) {
-                // Pass silent if file was just empty or unrelated?
-                // But user explicitly selected it.
                 throw new Error("No production data found.");
             }
 
@@ -234,6 +194,41 @@ const AdminUpload = () => {
         }
     };
 
+    // --- 4. TEST PARSE (DRY RUN) ---
+    const handleTestParse = async (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        setLoading(true);
+        setStatus({ type: 'info', message: 'Test Parsing (No Upload)...' });
+
+        try {
+            const parsedData = await parseExcelFile(files);
+            const rawCount = parsedData.transactions.length;
+
+            if (rawCount === 0) {
+                alert("TEST RESULT: 0 Transactions Found.\n\nThe parser could not find any valid data rows.\nPossible causes:\n1. 'Amount' or 'Date' column names don't match.\n2. Sheet name doesn't match expected format.");
+                setStatus({ type: 'error', message: 'Test Parse: 0 rows found.' });
+            } else {
+                const sample = parsedData.transactions.slice(0, 3).map(t =>
+                    `${t.parsedDate} | ₹${t.parsedAmount} | ${t.originalDesc}`
+                ).join('\n');
+
+                alert(`TEST RESULT: Success! Found ${rawCount} valid rows.\n\nSample Data:\n${sample}\n\nYou can safely upload this file.`);
+                setStatus({ type: 'success', message: `Test Parse: ${rawCount} rows found.` });
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert(`TEST FAILED: ${err.message}`);
+            setStatus({ type: 'error', message: err.message });
+        } finally {
+            setLoading(false);
+            // Reset input so user can re-select same file
+            e.target.value = null;
+        }
+    };
+
     return (
         <div className="p-8 max-w-4xl mx-auto bg-[#0f172a] min-h-screen text-slate-100">
             <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
@@ -257,16 +252,16 @@ const AdminUpload = () => {
                     <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm animate-in fade-in slide-in-from-top-4 duration-300">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
                             <h3 className="text-lg font-bold text-white">Database Report</h3>
-                            <span className="text-slate-400 text-xs text-right">Count: {dbReport.total}</span>
+                            <span className="text-slate-400 text-xs text-right">Based on latest uploads</span>
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-6">
                             <div>
                                 <h4 className="font-semibold text-blue-400 mb-2 uppercase text-xs tracking-wider">📅 Monthly Distribution</h4>
-                                {dbReport.months.length === 0 ? <p className="text-slate-500 italic">No data found.</p> :
-                                    <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden max-h-60 overflow-y-auto">
+                                {dbReport.months.length === 0 ? <p className="text-slate-500 italic">No data found in latest 200.</p> :
+                                    <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden">
                                         <table className="w-full text-left text-xs">
-                                            <thead className="bg-slate-950 text-slate-400 sticky top-0">
+                                            <thead className="bg-slate-950 text-slate-400">
                                                 <tr>
                                                     <th className="p-2">Month</th>
                                                     <th className="p-2 text-right">Records</th>
@@ -319,52 +314,6 @@ const AdminUpload = () => {
                 </div>
             )}
 
-            {/* FILE INSPECTOR UI */}
-            <div className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-slate-800 dashed border-2 border-slate-700">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-purple-500/10 rounded text-purple-400">
-                        <FileText size={20} />
-                    </div>
-                    <h2 className="text-lg font-semibold text-purple-300">File Inspector (Debug)</h2>
-                </div>
-                <p className="text-slate-400 text-sm mb-4">
-                    Select <b>one file</b> (e.g., August.xlsx) to see its raw content. This helps debug parsing issues.
-                </p>
-
-                <input
-                    type="file"
-                    onChange={handleFileInspect}
-                    className="block w-full text-sm text-slate-500
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-sm file:font-semibold
-                        file:bg-purple-50 file:text-purple-700
-                        hover:file:bg-purple-100
-                        cursor-pointer mb-4
-                    "
-                />
-
-                {inspectData && (
-                    <div className="bg-black/50 p-4 rounded overflow-auto border border-slate-700 max-h-96">
-                        <p className="text-xs text-slate-500 mb-2">File: {inspectData.name} | Sheet: {inspectData.sheet}</p>
-                        <table className="w-full text-left text-xs border-collapse font-mono">
-                            <tbody>
-                                {inspectData.rows.map((row, i) => (
-                                    <tr key={i} className="border-b border-slate-800 hover:bg-white/5">
-                                        <td className="p-2 text-slate-500 border-r border-slate-800">{i}</td>
-                                        {row.map((cell, j) => (
-                                            <td key={j} className="p-2 border-r border-slate-800 text-slate-300 whitespace-nowrap">
-                                                {String(cell).substring(0, 50)}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
             <div className="grid md:grid-cols-2 gap-8">
                 {/* Card 1: Sales Upload */}
                 <div className="bg-[#1e293b] p-6 rounded-xl border border-slate-700 hover:border-blue-500 transition-all">
@@ -376,21 +325,39 @@ const AdminUpload = () => {
                     </div>
                     <p className="text-slate-400 mb-6 text-sm">
                         Upload invoice Excel files. This will populate the <b>Transactions</b> table (Sales & Expenses).
+                        <br /><span className="text-yellow-500 font-bold block mt-2">⚠ Note: Re-uploading creates duplicates!</span>
                     </p>
 
-                    <label className={`block w-full p-4 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${loading ? 'border-slate-700 bg-slate-800' : 'border-slate-600 hover:border-blue-500 hover:bg-slate-800'
-                        }`}>
-                        <Upload className="mx-auto mb-2 text-slate-400" />
-                        <span className="text-sm text-slate-300">Choose Excel Files</span>
-                        <input
-                            type="file"
-                            multiple
-                            accept=".xlsx, .xls"
-                            onChange={handleSalesUpload}
-                            disabled={loading}
-                            className="hidden"
-                        />
-                    </label>
+                    <div className="flex gap-2">
+                        {/* ACTUAL UPLOAD */}
+                        <label className={`flex-1 block p-4 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${loading ? 'border-slate-700 bg-slate-800' : 'border-slate-600 hover:border-blue-500 hover:bg-slate-800'
+                            }`}>
+                            <Upload className="mx-auto mb-2 text-slate-400" />
+                            <span className="text-sm text-slate-300">Upload Files</span>
+                            <input
+                                type="file"
+                                multiple
+                                accept=".xlsx, .xls"
+                                onChange={handleSalesUpload}
+                                disabled={loading}
+                                className="hidden"
+                            />
+                        </label>
+
+                        {/* TEST RUN */}
+                        <label className={`flex-none w-24 block p-4 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${loading ? 'border-slate-700 bg-slate-800' : 'border-slate-600 hover:border-purple-500 hover:bg-slate-800'
+                            }`}>
+                            <RefreshCw className="mx-auto mb-2 text-purple-400" />
+                            <span className="text-xs text-purple-300 font-bold">Test Only</span>
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={handleTestParse}
+                                disabled={loading}
+                                className="hidden"
+                            />
+                        </label>
+                    </div>
                 </div>
 
                 {/* Card 2: Production Upload */}

@@ -288,6 +288,69 @@ const AdminUpload = () => {
         }
     };
 
+    // --- DETECT DUPLICATES ---
+    const handleCheckDuplicates = async () => {
+        setLoading(true);
+        setStatus({ type: 'info', message: 'Scanning for duplicates...' });
+
+        try {
+            // Fetch all transactions
+            let allTxns = [];
+            let tFrom = 0;
+            const batchSize = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .select('*') // Need all fields for accurate check
+                    .order('date', { ascending: true })
+                    .range(tFrom, tFrom + batchSize - 1);
+
+                if (error) throw error;
+                allTxns = [...allTxns, ...data];
+                if (data.length < batchSize) break;
+                tFrom += batchSize;
+                setStatus({ type: 'info', message: `Scanning... Loaded ${allTxns.length} records.` });
+            }
+
+            // Identify Duplicates
+            // Key: Date + Amount + Item + Invoice (if exists)
+            const map = {};
+            let badCount = 0;
+            const duplicateSamples = [];
+
+            allTxns.forEach(t => {
+                const key = `${t.date}|${t.amount}|${t.item_name}|${t.invoice_no || ''}`;
+                if (!map[key]) map[key] = 0;
+                map[key]++;
+
+                if (map[key] === 2) {
+                    badCount++; // Count ONCE per group (or count every extra row? let's count groups)
+                    if (duplicateSamples.length < 5) duplicateSamples.push(`${t.date} - ${t.item_name} (₹${t.amount})`);
+                } else if (map[key] > 2) {
+                    // Already counted this group
+                }
+            });
+
+            // Count total excess rows
+            const totalExcess = Object.values(map).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0);
+
+            if (totalExcess > 0) {
+                const msg = `WARNING: Found ${totalExcess} duplicate records affecting ${badCount} distinct transactions.\n\nSample Duplicates:\n${duplicateSamples.join('\n')}\n\nRecommendation: Use 'Wipe All Data' and re-upload cleanly.`;
+                alert(msg);
+                setStatus({ type: 'error', message: `Scan Failed: Found ${totalExcess} duplicates!` });
+            } else {
+                alert("Scan Clean: No duplicate transactions found.");
+                setStatus({ type: 'success', message: "Scan Complete: No duplicates found." });
+            }
+
+        } catch (err) {
+            console.error(err);
+            setStatus({ type: 'error', message: "Duplicate Check Failed: " + err.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // --- 4. TEST PARSE (DRY RUN) ---
     const handleTestParse = async (e) => {
         const files = Array.from(e.target.files);
@@ -364,6 +427,15 @@ const AdminUpload = () => {
                 >
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Debug: Check Database Content
+                </button>
+
+                <button
+                    onClick={handleCheckDuplicates}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-900/50 hover:bg-amber-800 rounded-lg text-sm font-medium transition-colors border border-amber-700 text-amber-200"
+                >
+                    <FileText className="w-4 h-4" />
+                    Scan for Duplicates
                 </button>
 
                 <button

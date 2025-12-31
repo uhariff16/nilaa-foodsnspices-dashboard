@@ -24,18 +24,45 @@ const AdminUpload = () => {
                 throw new Error("No transaction data found in files.");
             }
 
-            setStatus({ type: 'info', message: `Uploading ${parsedData.transactions.length} sales records...` });
+            setStatus({ type: 'info', message: `Parsed ${parsedData.transactions.length} rows. Validating...` });
 
-            // 2. Format for Supabase
-            // Map parsed fields to DB Columns
-            const dbRows = parsedData.transactions.map(t => ({
-                date: t.parsedDate,
-                invoice_no: t.invoiceNo,
-                item_name: t.originalDesc || 'Unknown Item',
-                amount: t.parsedAmount || 0,
-                quantity: 0, // Default 0 as parser doesn't extract qty for summary view yet
-                payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale'
-            })).filter(row => row.date && row.amount); // Filter invalid rows
+            // 2. Format & Validate for Supabase
+            let droppedCount = 0;
+            let droppedReasons = [];
+
+            const dbRows = parsedData.transactions.map((t, index) => {
+                const row = {
+                    date: t.parsedDate,
+                    invoice_no: t.invoiceNo,
+                    item_name: t.originalDesc || 'Unknown Item',
+                    amount: t.parsedAmount || 0,
+                    quantity: 0,
+                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale'
+                };
+
+                // Logging logic for dropped rows
+                if (!row.date) {
+                    droppedCount++;
+                    if (droppedReasons.length < 5) droppedReasons.push(`Row ${index}: Date Missing (Orig: ${t.dateStr || 'N/A'})`);
+                    return null;
+                }
+                if (!row.amount) {
+                    droppedCount++;
+                    if (droppedReasons.length < 5) droppedReasons.push(`Row ${index}: Amount 0 or Missing`);
+                    return null;
+                }
+                return row;
+            }).filter(Boolean);
+
+            if (droppedCount > 0) {
+                console.warn(`Dropped ${droppedCount} rows. Sample reasons:\n${droppedReasons.join('\n')}`);
+            }
+
+            if (dbRows.length === 0) {
+                const errorMsg = `All ${parsedData.transactions.length} rows were rejected!\nProbable Cause: Date format mismatch.\n\nSample Rejections:\n${droppedReasons.join('\n')}`;
+                alert(errorMsg);
+                throw new Error("Validation Failed: No valid rows to insert.");
+            }
 
             // 3. Batch Insert
             const { error } = await supabase
@@ -44,7 +71,12 @@ const AdminUpload = () => {
 
             if (error) throw error;
 
-            setStatus({ type: 'success', message: `Successfully uploaded ${dbRows.length} sales records!` });
+            const successMsg = `Successfully uploaded ${dbRows.length} sales records! (${droppedCount} rows skipped - check console for details)`;
+            setStatus({ type: 'success', message: successMsg });
+
+            if (droppedCount > (parsedData.transactions.length * 0.5)) {
+                alert(`Warning: High Rejection Rate.\nUploaded: ${dbRows.length}\nSkipped: ${droppedCount}\n\nPlease check the console (F12) or try formatting the Dates in Excel as "YYYY-MM-DD".`);
+            }
 
         } catch (err) {
             console.error(err);

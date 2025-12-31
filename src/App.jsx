@@ -59,11 +59,12 @@ function App() {
         try {
             console.log("Fetching data from Supabase DB...");
 
-            // 1. Fetch Sales (Transactions)
+            // 1. Fetch Sales (Transactions) - Increase limit to handle history
             const { data: dbTxns, error: txnError } = await supabase
                 .from('transactions')
                 .select('*')
-                .order('date', { ascending: false });
+                .order('date', { ascending: false })
+                .range(0, 9999); // Fetch up to 10k rows to bypass default 1000 limit
 
             if (txnError) {
                 console.error("Error fetching transactions:", txnError);

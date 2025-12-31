@@ -229,6 +229,31 @@ const AdminUpload = () => {
         }
     };
 
+    // --- 5. DANGEROUS: CLEAR DATABASE ---
+    const handleClearDatabase = async () => {
+        if (!window.confirm("ARE YOU SURE?\n\nThis will DELETE ALL DATA from the database.\nThis action cannot be undone.")) return;
+        if (!window.confirm("Double Check: You are about to wipe the entire dashboard history.\n\nClick OK to proceed.")) return;
+
+        setLoading(true);
+        setStatus({ type: 'info', message: 'Wiping database...' });
+
+        try {
+            const { error: tErr } = await supabase.from('transactions').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all transaction rows
+            const { error: pErr } = await supabase.from('production_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all production rows
+
+            if (tErr) throw tErr;
+            if (pErr) throw pErr;
+
+            setStatus({ type: 'success', message: 'Database cleared successfully. You can now re-upload fresh data.' });
+            setDbReport(null); // Clear report
+        } catch (err) {
+            console.error(err);
+            setStatus({ type: 'error', message: "Clear Failed: " + err.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="p-8 max-w-4xl mx-auto bg-[#0f172a] min-h-screen text-slate-100">
             <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
@@ -236,8 +261,8 @@ const AdminUpload = () => {
                 Data Ingestion (Admin)
             </h1>
 
-            {/* Check DB Button */}
-            <div className="mb-6 space-y-4">
+            {/* Top Toolbar: Check DB & Clear DB */}
+            <div className="mb-6 flex flex-wrap gap-4 justify-between items-center">
                 <button
                     onClick={checkDbStatus}
                     disabled={loading}
@@ -246,6 +271,19 @@ const AdminUpload = () => {
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Debug: Check Database Content
                 </button>
+
+                <button
+                    onClick={handleClearDatabase}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-900/50 hover:bg-red-800 rounded-lg text-sm font-medium transition-colors border border-red-700 text-red-200"
+                >
+                    <AlertCircle className="w-4 h-4" />
+                    Reset: Wipe All Data
+                </button>
+            </div>
+
+            <div className="mb-6">
+
 
                 {/* DB REPORT DISPLAY */}
                 {dbReport && (

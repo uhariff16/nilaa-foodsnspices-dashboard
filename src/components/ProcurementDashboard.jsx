@@ -69,16 +69,18 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     // Helper: Filter by Month/Year
     const getFilteredItems = (items) => {
         if (!items) return [];
+        const getDate = (item) => item.date || item.parsedDate || ''; // Handle both schemas
+
         if (selectedMonth === 'Overall') {
             if (selectedYear) {
-                return items.filter(item => item.date && item.date.startsWith(selectedYear));
+                return items.filter(item => getDate(item).startsWith(selectedYear));
             }
             return items;
         }
         const [selMonth, selYear] = selectedMonth.split(' ');
         const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
         const targetPrefix = `${selYear}-${monthMap[selMonth]}`;
-        return items.filter(item => item.date && item.date.startsWith(targetPrefix));
+        return items.filter(item => getDate(item).startsWith(targetPrefix));
     };
 
     // Shared Filtered Data
@@ -124,6 +126,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             months.forEach(m => monthMap[m] = { name: m, Ginger: 0, Garlic: 0, Others: 0 });
 
             procurementItems.forEach(item => {
+                // item.date is from Production Logs which uses 'date'
                 const dateParts = item.date.split('-'); // YYYY-MM-DD
                 if (dateParts.length >= 2) {
                     const monthIndex = parseInt(dateParts[1], 10) - 1;
@@ -144,8 +147,9 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
 
     // 2. Process Financials
-    const totalSpent = filteredPurchases.reduce((sum, i) => sum + i.amount, 0);
-    const sortedPurchases = [...filteredPurchases].sort((a, b) => b.date.localeCompare(a.date));
+    // Use 'parsedAmount' and 'parsedDate' from App.jsx mapping
+    const totalSpent = filteredPurchases.reduce((sum, i) => sum + (i.parsedAmount || i.amount || 0), 0);
+    const sortedPurchases = [...filteredPurchases].sort((a, b) => (b.parsedDate || b.date).localeCompare(a.parsedDate || a.date));
 
     // Calculate Cost & Count per Material (Heuristic)
     const materialStats = useMemo(() => {
@@ -154,25 +158,28 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         materialGroups.forEach(g => stats[g.name] = { cost: 0, count: 0 });
 
         filteredPurchases.forEach(p => {
-            const str = (String(p.supplier || '') + ' ' + String(p.remarks || '')).toLowerCase();
+            // Use originalDesc as supplier/remarks fallback
+            const str = (String(p.originalDesc || p.supplier || p.remarks || '')).toLowerCase();
+            const amt = p.parsedAmount || p.amount || 0;
             let matched = false;
 
             materialGroups.forEach(g => {
                 if (matched) return;
                 const groupKey = g.name.toLowerCase();
                 if (str.includes(groupKey)) {
-                    stats[g.name].cost += p.amount;
+                    stats[g.name].cost += amt;
                     stats[g.name].count += 1;
                     matched = true;
                 }
             });
 
             if (!matched) {
-                if (str.includes('ginger') || str.includes('jayakodi')) {
-                    stats['Ginger'].cost += p.amount;
+                // Generous fallback if no direct match found
+                if (stats['Ginger'] && (str.includes('ginger') || str.includes('jayakodi'))) {
+                    stats['Ginger'].cost += amt;
                     stats['Ginger'].count += 1;
-                } else if (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk')) {
-                    stats['Garlic'].cost += p.amount;
+                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk'))) {
+                    stats['Garlic'].cost += amt;
                     stats['Garlic'].count += 1;
                 }
             }
@@ -183,9 +190,11 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     // Supplier Summary Data
     const supplierSummary = useMemo(() => {
         const summary = filteredPurchases.reduce((acc, curr) => {
-            const sName = curr.supplier.toUpperCase();
+            // Use 'originalDesc' as 'Supplier' name since we don't have explicit supplier field in mapped txns
+            // Or extract from desc if possible? For now, group by Item Name (originalDesc)
+            const sName = (curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
             if (!acc[sName]) acc[sName] = { amount: 0, count: 0 };
-            acc[sName].amount += curr.amount;
+            acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
             acc[sName].count += 1;
             return acc;
         }, {});

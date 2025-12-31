@@ -59,17 +59,26 @@ function App() {
         try {
             console.log("Fetching data from Supabase DB...");
 
-            // 1. Fetch Sales (Transactions) - Increase limit to handle history
-            const { data: dbTxns, error: txnError } = await supabase
-                .from('transactions')
-                .select('*')
-                .order('date', { ascending: false })
-                .range(0, 9999); // Fetch up to 10k rows to bypass default 1000 limit
+            // 1. Fetch Transactions (With Pagination Loop)
+            let allTxns = [];
+            let tFrom = 0;
+            const batchSize = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .select('*')
+                    .order('date', { ascending: false })
+                    .range(tFrom, tFrom + batchSize - 1);
 
-            if (txnError) {
-                console.error("Error fetching transactions:", txnError);
-                throw txnError;
+                if (error) {
+                    console.error("Error fetching transactions:", error);
+                    throw error;
+                }
+                allTxns = [...allTxns, ...data];
+                if (data.length < batchSize) break;
+                tFrom += batchSize;
             }
+            const dbTxns = allTxns;
 
             // Map DB Schema -> App Legacy Schema
             const mappedTransactions = (dbTxns || []).map(t => ({
@@ -81,17 +90,25 @@ function App() {
                 invoiceNo: t.invoice_no
             }));
 
-            // 2. Fetch Stock (Production Logs)
-            const { data: dbLogs, error: logError } = await supabase
-                .from('production_logs')
-                .select('*')
-                .order('date', { ascending: true })
-                .range(0, 9999); // Fix 1000 row limit for production logs too
+            // 2. Fetch Production Logs (With Pagination Loop)
+            let allLogs = [];
+            let pFrom = 0;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('production_logs')
+                    .select('*')
+                    .order('date', { ascending: true })
+                    .range(pFrom, pFrom + batchSize - 1);
 
-            if (logError) {
-                console.error("Error fetching logs:", logError);
-                throw logError;
+                if (error) {
+                    console.error("Error fetching logs:", error);
+                    throw error;
+                }
+                allLogs = [...allLogs, ...data];
+                if (data.length < batchSize) break;
+                pFrom += batchSize;
             }
+            const dbLogs = allLogs;
 
             // Split into categories
             const newProdData = {

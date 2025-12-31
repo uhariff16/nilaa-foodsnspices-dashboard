@@ -185,20 +185,36 @@ const AdminUpload = () => {
 
         try {
             // 1. Get ALL Dates for Monthly Counts (Transactions)
-            const { data: allDates, error: countError } = await supabase
-                .from('transactions')
-                .select('date')
-                .range(0, 9999); // Force high limit to avoid 1k default
+            // PAGINATION LOOP required to bypass 1000 row limit
+            let allDates = [];
+            let tFrom = 0;
+            const batchSize = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('transactions')
+                    .select('date')
+                    .range(tFrom, tFrom + batchSize - 1);
 
-            if (countError) throw countError;
+                if (error) throw error;
+                allDates = [...allDates, ...data];
+                if (data.length < batchSize) break;
+                tFrom += batchSize;
+            }
 
             // 1b. Get ALL Dates for Production Logs
-            const { data: prodDates, error: prodError } = await supabase
-                .from('production_logs')
-                .select('date')
-                .range(0, 9999); // Force high limit to avoid 1k default
+            let prodDates = [];
+            let pFrom = 0;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('production_logs')
+                    .select('date')
+                    .range(pFrom, pFrom + batchSize - 1);
 
-            if (prodError) throw prodError;
+                if (error) throw error;
+                prodDates = [...prodDates, ...data];
+                if (data.length < batchSize) break;
+                pFrom += batchSize;
+            }
 
             // Aggregate Counts (Transactions)
             const months = {};
@@ -242,7 +258,7 @@ const AdminUpload = () => {
                 prodTotal: prodDates.length
             });
 
-            setStatus({ type: 'success', message: 'Database check complete.' });
+            setStatus({ type: 'success', message: `Check Complete. Found ${allDates.length} Sales & ${prodDates.length} Prod Logs.` });
 
         } catch (err) {
             console.error(err);
@@ -365,6 +381,9 @@ const AdminUpload = () => {
                                                 </tr>
                                             ))}
                                         </tbody>
+                                        <tfoot className="bg-slate-950 text-blue-400 font-bold">
+                                            <tr><td className="p-2">Total</td><td className="p-2 text-right">{dbReport.total}</td></tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             }
@@ -384,6 +403,9 @@ const AdminUpload = () => {
                                                 </tr>
                                             ))}
                                         </tbody>
+                                        <tfoot className="bg-slate-950 text-green-400 font-bold">
+                                            <tr><td className="p-2">Total</td><td className="p-2 text-right">{dbReport.prodTotal}</td></tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             }

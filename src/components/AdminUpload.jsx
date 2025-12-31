@@ -226,15 +226,22 @@ const AdminUpload = () => {
                 const { data, error } = await supabase
                     .from('production_logs')
                     .select('date')
-                    .order('created_at', { ascending: true }) // Ensure stable order
+                    .order('created_at', { ascending: true })
                     .range(pFrom, pFrom + batchSize - 1);
 
                 if (error) throw error;
-                console.log(`Debug Production: Fetched ${data.length} rows (Offset: ${pFrom})`);
                 prodDates = [...prodDates, ...data];
                 if (data.length < batchSize) break;
                 pFrom += batchSize;
             }
+
+            // 1c. Get Customer Stats Count
+            const { count: custCount, error: custError } = await supabase
+                .from('customer_stats')
+                .select('*', { count: 'exact', head: true });
+
+            if (custError) console.error("Customer Stats Check Failed:", custError);
+
 
             // Aggregate Counts (Transactions)
             const months = {};
@@ -275,10 +282,11 @@ const AdminUpload = () => {
                 prodMonths: Object.entries(prodMonths).sort(),
                 latest: finalLatest || [],
                 total: allDates.length,
-                prodTotal: prodDates.length
+                prodTotal: prodDates.length,
+                custTotal: custCount || 0 // Report Customer Layout
             });
 
-            setStatus({ type: 'success', message: `Check Complete (v1.5 Pagination). Found ${allDates.length} Sales & ${prodDates.length} Prod Logs.` });
+            setStatus({ type: 'success', message: `Check Complete. Sales: ${allDates.length}, Prod: ${prodDates.length}, Customers: ${custCount || 0}` });
 
         } catch (err) {
             console.error(err);
@@ -335,9 +343,9 @@ const AdminUpload = () => {
             const totalExcess = Object.values(map).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0);
 
             if (totalExcess > 0) {
-                const msg = `WARNING: Found ${totalExcess} duplicate records affecting ${badCount} distinct transactions.\n\nSample Duplicates:\n${duplicateSamples.join('\n')}\n\nRecommendation: Use 'Wipe All Data' and re-upload cleanly.`;
+                const msg = `WARNING: Found ${totalExcess} duplicate records affecting ${badCount} distinct transactions.\n\nSample Duplicates:\n${duplicateSamples.join('\n')}\n\nNote: These dates appear multiple times with identical items/amouts.\nRecommendation: Use 'Wipe All Data' and re-upload cleanly.`;
                 alert(msg);
-                setStatus({ type: 'error', message: `Scan Failed: Found ${totalExcess} duplicates!` });
+                setStatus({ type: 'error', message: `Scan Failed: Found ${totalExcess} duplicates! Check popup details.` });
             } else {
                 alert("Scan Clean: No duplicate transactions found.");
                 setStatus({ type: 'success', message: "Scan Complete: No duplicates found." });

@@ -187,14 +187,16 @@ const AdminUpload = () => {
             // 1. Get ALL Dates for Monthly Counts (Transactions)
             const { data: allDates, error: countError } = await supabase
                 .from('transactions')
-                .select('date');
+                .select('date')
+                .range(0, 9999); // Force high limit to avoid 1k default
 
             if (countError) throw countError;
 
             // 1b. Get ALL Dates for Production Logs
             const { data: prodDates, error: prodError } = await supabase
                 .from('production_logs')
-                .select('date');
+                .select('date')
+                .range(0, 9999); // Force high limit to avoid 1k default
 
             if (prodError) throw prodError;
 

@@ -144,29 +144,44 @@ const AdminUpload = () => {
         setDbReport(null);
 
         try {
-            // 1. Get Latest 200 records for validation
-            const { data: rawData, error: rawError } = await supabase
+            // 1. Get ALL Dates for Monthly Counts (Lightweight)
+            const { data: allDates, error: countError } = await supabase
                 .from('transactions')
-                .select('date, amount, item_name, invoice_no')
-                .order('date', { ascending: false })
-                .limit(200);
+                .select('date');
 
-            if (rawError) throw rawError;
+            if (countError) throw countError;
 
-            // Aggregate
+            // Aggregate Counts
             const months = {};
-            rawData.forEach(r => {
+            allDates.forEach(r => {
                 const m = r.date ? r.date.substring(0, 7) : 'Unknown';
                 months[m] = (months[m] || 0) + 1;
             });
 
-            // 2. Get Latest 5 Transactions
-            const latestTxns = rawData.slice(0, 5);
+            // 2. Get Latest 5 Transactions (Full Details)
+            const { data: latestTxns, error: fetchError } = await supabase
+                .from('transactions')
+                .select('date, amount, item_name')
+                .order('created_at', { ascending: false }) // Use created_at to see actual latest insertions
+                .limit(5);
+
+            if (fetchError) throw fetchError;
+
+            // Fallback to sorting by date if created_at fails (e.g. column missing)
+            let finalLatest = latestTxns;
+            if (!latestTxns || latestTxns.length === 0) {
+                const { data: latestDateTxns } = await supabase
+                    .from('transactions')
+                    .select('date, amount, item_name')
+                    .order('date', { ascending: false })
+                    .limit(5);
+                finalLatest = latestDateTxns;
+            }
 
             setDbReport({
                 months: Object.entries(months).sort(),
-                latest: latestTxns,
-                total: rawData.length + "+ (Showing latest 200)"
+                latest: finalLatest || [],
+                total: allDates.length
             });
 
             setStatus({ type: 'success', message: 'Database check complete.' });

@@ -193,9 +193,11 @@ const AdminUpload = () => {
                 const { data, error } = await supabase
                     .from('transactions')
                     .select('date')
+                    .order('created_at', { ascending: true }) // Ensure stable order
                     .range(tFrom, tFrom + batchSize - 1);
 
                 if (error) throw error;
+                console.log(`Debug Sales: Fetched ${data.length} rows (Offset: ${tFrom})`);
                 allDates = [...allDates, ...data];
                 if (data.length < batchSize) break;
                 tFrom += batchSize;
@@ -208,9 +210,11 @@ const AdminUpload = () => {
                 const { data, error } = await supabase
                     .from('production_logs')
                     .select('date')
+                    .order('created_at', { ascending: true }) // Ensure stable order
                     .range(pFrom, pFrom + batchSize - 1);
 
                 if (error) throw error;
+                console.log(`Debug Production: Fetched ${data.length} rows (Offset: ${pFrom})`);
                 prodDates = [...prodDates, ...data];
                 if (data.length < batchSize) break;
                 pFrom += batchSize;
@@ -258,7 +262,7 @@ const AdminUpload = () => {
                 prodTotal: prodDates.length
             });
 
-            setStatus({ type: 'success', message: `Check Complete. Found ${allDates.length} Sales & ${prodDates.length} Prod Logs.` });
+            setStatus({ type: 'success', message: `Check Complete (v1.5 Pagination). Found ${allDates.length} Sales & ${prodDates.length} Prod Logs.` });
 
         } catch (err) {
             console.error(err);

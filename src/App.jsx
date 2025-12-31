@@ -85,7 +85,8 @@ function App() {
             const { data: dbLogs, error: logError } = await supabase
                 .from('production_logs')
                 .select('*')
-                .order('date', { ascending: true });
+                .order('date', { ascending: true })
+                .range(0, 9999); // Fix 1000 row limit for production logs too
 
             if (logError) {
                 console.error("Error fetching logs:", logError);

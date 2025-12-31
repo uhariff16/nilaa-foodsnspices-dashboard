@@ -328,8 +328,20 @@ export const parseExcelFile = (files) => {
                         let currentDate = null;
                         let currentInvoiceNo = null;
 
-                        // If effectiveDate exists (from filename or other sheets), use it as a base/fallback
-                        // But typically this format lists specific dates in rows.
+                        // Dynamic Column Detection
+                        // Scan first 10 rows to find the "Amount" column index
+                        let amountColIdx = 7; // Default fallback
+
+                        for (let r = 0; r < Math.min(jsonData.length, 15); r++) {
+                            const rowStr = JSON.stringify(jsonData[r] || []).toLowerCase();
+                            if (rowStr.includes('amount')) {
+                                const foundIdx = jsonData[r].findIndex(cell => String(cell).toLowerCase().includes('amount'));
+                                if (foundIdx !== -1) {
+                                    amountColIdx = foundIdx;
+                                    break;
+                                }
+                            }
+                        }
 
                         jsonData.forEach((row, index) => {
                             if (!row || row.length === 0) return;
@@ -351,11 +363,11 @@ export const parseExcelFile = (files) => {
 
                             // Check for Transaction row
                             // Ensure we have a date (either row specific or file level)
-                            if ((currentDate || effectiveDate) && row[7] !== undefined) {
+                            if ((currentDate || effectiveDate) && row[amountColIdx] !== undefined) {
                                 const desc = particulars.toLowerCase();
                                 if (desc.includes('total') || desc.includes('sub total') || desc.includes('round off') || desc === '') return;
 
-                                const amount = parseFloat(String(row[7]).replace(/,/g, ''));
+                                const amount = parseFloat(String(row[amountColIdx]).replace(/,/g, ''));
                                 if (!isNaN(amount) && amount > 0) {
                                     const tDate = currentDate || effectiveDate;
                                     mergedData.transactions.push({

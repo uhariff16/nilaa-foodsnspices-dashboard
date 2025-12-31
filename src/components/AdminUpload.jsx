@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { parseExcelFile } from '../utils/excelParser';
 import { parseProductionFile } from '../utils/productionParser';
-import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw } from 'lucide-react';
 
 const AdminUpload = () => {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const [loading, setLoading] = useState(false);
+    const [dbReport, setDbReport] = useState(null);
 
     // --- 1. HANDLE SALES / INVOICE UPLOAD ---
     const handleSalesUpload = async (e) => {
@@ -140,28 +141,35 @@ const AdminUpload = () => {
     const checkDbStatus = async () => {
         setLoading(true);
         setStatus({ type: 'info', message: 'Checking database content...' });
+        setDbReport(null);
+
         try {
-            // First check for function, if fails use manual query
+            // 1. Get Latest 200 records for validation
             const { data: rawData, error: rawError } = await supabase
                 .from('transactions')
-                .select('date');
+                .select('date, amount, item_name, invoice_no')
+                .order('date', { ascending: false })
+                .limit(200);
 
             if (rawError) throw rawError;
 
-            // Aggregate manually
+            // Aggregate
             const months = {};
             rawData.forEach(r => {
-                const m = r.date.substring(0, 7); // YYYY-MM
+                const m = r.date ? r.date.substring(0, 7) : 'Unknown';
                 months[m] = (months[m] || 0) + 1;
             });
 
-            const summary = Object.entries(months)
-                .sort()
-                .map(([m, count]) => `${m}: ${count} records`)
-                .join('\n');
+            // 2. Get Latest 5 Transactions
+            const latestTxns = rawData.slice(0, 5);
 
-            alert(`Database Status (Months in DB):\n${summary || 'No data found'}`);
-            setStatus({ type: 'success', message: 'Database check complete. See popup.' });
+            setDbReport({
+                months: Object.entries(months).sort(),
+                latest: latestTxns,
+                total: rawData.length + "+ (Showing latest 200)"
+            });
+
+            setStatus({ type: 'success', message: 'Database check complete.' });
 
         } catch (err) {
             console.error(err);
@@ -179,14 +187,70 @@ const AdminUpload = () => {
             </h1>
 
             {/* Check DB Button */}
-            <div className="mb-6 flex gap-4">
+            <div className="mb-6 space-y-4">
                 <button
                     onClick={checkDbStatus}
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors border border-slate-600"
                 >
-                    🔍 Debug: Check Months in DB
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    Debug: Check Database Content
                 </button>
+
+                {/* DB REPORT DISPLAY */}
+                {dbReport && (
+                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm animate-in fade-in slide-in-from-top-4 duration-300">
+                        <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                            <h3 className="text-lg font-bold text-white">Database Report</h3>
+                            <span className="text-slate-400 text-xs text-right">Based on latest uploads</span>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div>
+                                <h4 className="font-semibold text-blue-400 mb-2 uppercase text-xs tracking-wider">📅 Monthly Distribution</h4>
+                                {dbReport.months.length === 0 ? <p className="text-slate-500 italic">No data found in latest 200.</p> :
+                                    <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-950 text-slate-400">
+                                                <tr>
+                                                    <th className="p-2">Month</th>
+                                                    <th className="p-2 text-right">Records</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {dbReport.months.map(([m, c]) => (
+                                                    <tr key={m} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50">
+                                                        <td className="p-2 font-mono text-slate-300">{m}</td>
+                                                        <td className="p-2 text-right text-green-400 font-bold">{c}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+
+                            <div>
+                                <h4 className="font-semibold text-purple-400 mb-2 uppercase text-xs tracking-wider">🆕 Most Recent Uploads</h4>
+                                {dbReport.latest.length === 0 ? <p className="text-slate-500 italic">No transactions found.</p> :
+                                    <div className="bg-slate-900 rounded border border-slate-700 p-2 space-y-2">
+                                        {dbReport.latest.map((tx, i) => (
+                                            <div key={i} className="text-xs border-b border-slate-800 pb-2 last:border-0 last:padding-0">
+                                                <div className="flex justify-between mb-1">
+                                                    <span className="text-slate-200 font-medium">{tx.date}</span>
+                                                    <span className="text-emerald-400 font-mono">₹{tx.amount}</span>
+                                                </div>
+                                                <div className="text-slate-500 truncate" title={tx.item_name}>
+                                                    {tx.item_name}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Status Panel */}

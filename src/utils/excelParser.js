@@ -387,6 +387,8 @@ export const parseExcelFile = (files) => {
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /total amount/i.test(h));
                         const supplierIdx = headerRow.findIndex(h => /supplier/i.test(h));
+                        // Try to find Item/Product/Material column (Expanded Regex)
+                        const itemIdx = headerRow.findIndex(h => /item|product|material|particulars|description/i.test(h));
 
                         if (dateIdx !== -1 && amountIdx !== -1) {
                             jsonData.slice(1).forEach((row, index) => {
@@ -398,12 +400,19 @@ export const parseExcelFile = (files) => {
                                 const amount = parseFloat(String(row[amountIdx]).replace(/,/g, ''));
                                 if (!isNaN(amount) && amount > 0) {
                                     const pDate = normalizeDate(row[dateIdx]);
+
+                                    // Construct rich description: "Item Name - Supplier Name"
+                                    let desc = row[supplierIdx] || 'Purchase';
+                                    if (itemIdx !== -1 && row[itemIdx]) {
+                                        desc = `${row[itemIdx]} - ${desc}`;
+                                    }
+
                                     mergedData.transactions.push({
                                         id: `pur-${pDate}-${amount}-${supplier}-${index}`, // Unique ID
                                         parsedDate: pDate,
                                         parsedAmount: amount,
                                         parsedType: 'Expense',
-                                        originalDesc: row[supplierIdx] || 'Purchase'
+                                        originalDesc: desc
                                     });
                                 }
                             });

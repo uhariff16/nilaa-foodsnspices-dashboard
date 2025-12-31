@@ -93,8 +93,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         return dateFiltered.filter(item => {
             const desc = (item.originalDesc || item.supplier || item.remarks || '').toLowerCase();
             // Whitelist: Only allow Ginger and Garlic related records
-            // This ensures we don't show Tea, Packing, etc.
-            return desc.includes('ginger') || desc.includes('garlic');
+            // Also explicit allow for 'jayakodi' as fallback if item name is missing
+            return desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi');
         });
     }, [purchases, selectedMonth, selectedYear]);
 

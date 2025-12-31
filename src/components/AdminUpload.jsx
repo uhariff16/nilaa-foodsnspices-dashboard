@@ -3,11 +3,47 @@ import { supabase } from '../lib/supabaseClient';
 import { parseExcelFile } from '../utils/excelParser';
 import { parseProductionFile } from '../utils/productionParser';
 import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw } from 'lucide-react';
+import * as XLSX from 'xlsx'; // Import for Inspector
 
 const AdminUpload = () => {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
     const [loading, setLoading] = useState(false);
     const [dbReport, setDbReport] = useState(null);
+    const [inspectData, setInspectData] = useState(null); // New state for inspector
+
+    // --- 0. FILE INSPECTOR (DEBUGGER) ---
+    const handleFileInspect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setLoading(true);
+        setStatus({ type: 'info', message: 'Reading raw file...' });
+        setInspectData(null);
+
+        try {
+            const data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const wb = XLSX.read(e.target.result, { type: 'binary' });
+                        const firstSheet = wb.Sheets[wb.SheetNames[0]];
+                        const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                        resolve({ name: file.name, sheet: wb.SheetNames[0], rows: json.slice(0, 15) });
+                    } catch (err) { reject(err); }
+                };
+                reader.onerror = reject;
+                reader.readAsBinaryString(file);
+            });
+
+            setInspectData(data);
+            setStatus({ type: 'success', message: 'File read successfully. Check inspector below.' });
+        } catch (err) {
+            console.error(err);
+            setStatus({ type: 'error', message: "Inspection Failed: " + err.message });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // --- 1. HANDLE SALES / INVOICE UPLOAD ---
     const handleSalesUpload = async (e) => {
@@ -22,7 +58,9 @@ const AdminUpload = () => {
             const parsedData = await parseExcelFile(files);
 
             if (!parsedData.transactions || parsedData.transactions.length === 0) {
-                throw new Error("No transaction data found in files.");
+                // Debug: If no transactions, check if customers/items were found?
+                // Or just error out.
+                throw new Error("No transaction data found in files. Please use the 'File Inspector' below to check if the format matches.");
             }
 
             setStatus({ type: 'info', message: `Parsed ${parsedData.transactions.length} rows. Validating...` });
@@ -116,6 +154,8 @@ const AdminUpload = () => {
             ];
 
             if (allRows.length === 0) {
+                // Pass silent if file was just empty or unrelated?
+                // But user explicitly selected it.
                 throw new Error("No production data found.");
             }
 
@@ -144,30 +184,44 @@ const AdminUpload = () => {
         setDbReport(null);
 
         try {
-            // 1. Get ALL Dates for Monthly Counts (Lightweight)
+            // 1. Get ALL Dates for Monthly Counts (Transactions)
             const { data: allDates, error: countError } = await supabase
                 .from('transactions')
                 .select('date');
 
             if (countError) throw countError;
 
-            // Aggregate Counts
+            // 1b. Get ALL Dates for Production Logs
+            const { data: prodDates, error: prodError } = await supabase
+                .from('production_logs')
+                .select('date');
+
+            if (prodError) throw prodError;
+
+            // Aggregate Counts (Transactions)
             const months = {};
             allDates.forEach(r => {
                 const m = r.date ? r.date.substring(0, 7) : 'Unknown';
                 months[m] = (months[m] || 0) + 1;
             });
 
+            // Aggregate Counts (Production)
+            const prodMonths = {};
+            prodDates.forEach(r => {
+                const m = r.date ? r.date.substring(0, 7) : 'Unknown';
+                prodMonths[m] = (prodMonths[m] || 0) + 1;
+            });
+
             // 2. Get Latest 5 Transactions (Full Details)
             const { data: latestTxns, error: fetchError } = await supabase
                 .from('transactions')
                 .select('date, amount, item_name')
-                .order('created_at', { ascending: false }) // Use created_at to see actual latest insertions
+                .order('created_at', { ascending: false })
                 .limit(5);
 
             if (fetchError) throw fetchError;
 
-            // Fallback to sorting by date if created_at fails (e.g. column missing)
+            // Fallback for latest
             let finalLatest = latestTxns;
             if (!latestTxns || latestTxns.length === 0) {
                 const { data: latestDateTxns } = await supabase
@@ -180,8 +234,10 @@ const AdminUpload = () => {
 
             setDbReport({
                 months: Object.entries(months).sort(),
+                prodMonths: Object.entries(prodMonths).sort(),
                 latest: finalLatest || [],
-                total: allDates.length
+                total: allDates.length,
+                prodTotal: prodDates.length
             });
 
             setStatus({ type: 'success', message: 'Database check complete.' });
@@ -282,64 +338,76 @@ const AdminUpload = () => {
                 </button>
             </div>
 
-            <div className="mb-6">
+            {/* DB REPORT DISPLAY */}
+            {dbReport && (
+                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                        <h3 className="text-lg font-bold text-white">Database Report</h3>
+                        <span className="text-slate-400 text-xs text-right">Based on latest queries</span>
+                    </div>
 
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 className="font-semibold text-blue-400 mb-2 uppercase text-xs tracking-wider">📅 Sales Data (Months)</h4>
+                            {dbReport.months.length === 0 ? <p className="text-slate-500 italic">No sales data.</p> :
+                                <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden max-h-40 overflow-y-auto mb-4">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="bg-slate-950 text-slate-400 sticky top-0">
+                                            <tr><th className="p-2">Month</th><th className="p-2 text-right">Rows</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {dbReport.months.map(([m, c]) => (
+                                                <tr key={m} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50">
+                                                    <td className="p-2 font-mono text-slate-300">{m}</td>
+                                                    <td className="p-2 text-right text-blue-400 font-bold">{c}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
 
-                {/* DB REPORT DISPLAY */}
-                {dbReport && (
-                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 text-sm animate-in fade-in slide-in-from-top-4 duration-300">
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                            <h3 className="text-lg font-bold text-white">Database Report</h3>
-                            <span className="text-slate-400 text-xs text-right">Based on latest uploads</span>
+                            <h4 className="font-semibold text-green-400 mb-2 uppercase text-xs tracking-wider">🏭 Production Data (Months)</h4>
+                            {dbReport.prodMonths.length === 0 ? <p className="text-slate-500 italic">No production data.</p> :
+                                <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden max-h-40 overflow-y-auto">
+                                    <table className="w-full text-left text-xs">
+                                        <thead className="bg-slate-950 text-slate-400 sticky top-0">
+                                            <tr><th className="p-2">Month</th><th className="p-2 text-right">Rows</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {dbReport.prodMonths.map(([m, c]) => (
+                                                <tr key={m} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50">
+                                                    <td className="p-2 font-mono text-slate-300">{m}</td>
+                                                    <td className="p-2 text-right text-green-400 font-bold">{c}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
                         </div>
 
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div>
-                                <h4 className="font-semibold text-blue-400 mb-2 uppercase text-xs tracking-wider">📅 Monthly Distribution</h4>
-                                {dbReport.months.length === 0 ? <p className="text-slate-500 italic">No data found in latest 200.</p> :
-                                    <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden">
-                                        <table className="w-full text-left text-xs">
-                                            <thead className="bg-slate-950 text-slate-400">
-                                                <tr>
-                                                    <th className="p-2">Month</th>
-                                                    <th className="p-2 text-right">Records</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {dbReport.months.map(([m, c]) => (
-                                                    <tr key={m} className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50">
-                                                        <td className="p-2 font-mono text-slate-300">{m}</td>
-                                                        <td className="p-2 text-right text-green-400 font-bold">{c}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                }
-                            </div>
-
-                            <div>
-                                <h4 className="font-semibold text-purple-400 mb-2 uppercase text-xs tracking-wider">🆕 Most Recent Uploads</h4>
-                                {dbReport.latest.length === 0 ? <p className="text-slate-500 italic">No transactions found.</p> :
-                                    <div className="bg-slate-900 rounded border border-slate-700 p-2 space-y-2">
-                                        {dbReport.latest.map((tx, i) => (
-                                            <div key={i} className="text-xs border-b border-slate-800 pb-2 last:border-0 last:padding-0">
-                                                <div className="flex justify-between mb-1">
-                                                    <span className="text-slate-200 font-medium">{tx.date}</span>
-                                                    <span className="text-emerald-400 font-mono">₹{tx.amount}</span>
-                                                </div>
-                                                <div className="text-slate-500 truncate" title={tx.item_name}>
-                                                    {tx.item_name}
-                                                </div>
+                        <div>
+                            <h4 className="font-semibold text-purple-400 mb-2 uppercase text-xs tracking-wider">🆕 Most Recent Uploads (Sales)</h4>
+                            {dbReport.latest.length === 0 ? <p className="text-slate-500 italic">No transactions found.</p> :
+                                <div className="bg-slate-900 rounded border border-slate-700 p-2 space-y-2">
+                                    {dbReport.latest.map((tx, i) => (
+                                        <div key={i} className="text-xs border-b border-slate-800 pb-2 last:border-0 last:padding-0">
+                                            <div className="flex justify-between mb-1">
+                                                <span className="text-slate-200 font-medium">{tx.date}</span>
+                                                <span className="text-emerald-400 font-mono">₹{tx.amount}</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                }
-                            </div>
+                                            <div className="text-slate-500 truncate" title={tx.item_name}>
+                                                {tx.item_name}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            }
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Status Panel */}
             {status.message && (
@@ -351,6 +419,52 @@ const AdminUpload = () => {
                     <span>{status.message}</span>
                 </div>
             )}
+
+            {/* FILE INSPECTOR UI */}
+            <div className="mb-8 p-6 bg-slate-900/50 rounded-xl border border-slate-800 dashed border-2 border-slate-700">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-purple-500/10 rounded text-purple-400">
+                        <FileText size={20} />
+                    </div>
+                    <h2 className="text-lg font-semibold text-purple-300">File Inspector (Debug)</h2>
+                </div>
+                <p className="text-slate-400 text-sm mb-4">
+                    Select <b>one file</b> (e.g., August.xlsx) to see its raw content. This helps debug parsing issues.
+                </p>
+
+                <input
+                    type="file"
+                    onChange={handleFileInspect}
+                    className="block w-full text-sm text-slate-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-purple-50 file:text-purple-700
+                        hover:file:bg-purple-100
+                        cursor-pointer mb-4
+                    "
+                />
+
+                {inspectData && (
+                    <div className="bg-black/50 p-4 rounded overflow-auto border border-slate-700 max-h-96">
+                        <p className="text-xs text-slate-500 mb-2">File: {inspectData.name} | Sheet: {inspectData.sheet}</p>
+                        <table className="w-full text-left text-xs border-collapse font-mono">
+                            <tbody>
+                                {inspectData.rows.map((row, i) => (
+                                    <tr key={i} className="border-b border-slate-800 hover:bg-white/5">
+                                        <td className="p-2 text-slate-500 border-r border-slate-800">{i}</td>
+                                        {row.map((cell, j) => (
+                                            <td key={j} className="p-2 border-r border-slate-800 text-slate-300 whitespace-nowrap">
+                                                {String(cell).substring(0, 50)}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
 
             <div className="grid md:grid-cols-2 gap-8">
                 {/* Card 1: Sales Upload */}

@@ -104,6 +104,41 @@ const AdminUpload = () => {
         }
     };
 
+    // --- 3. DEBUG: CHECK DB STATUS ---
+    const checkDbStatus = async () => {
+        setLoading(true);
+        setStatus({ type: 'info', message: 'Checking database content...' });
+        try {
+            // First check for function, if fails use manual query
+            const { data: rawData, error: rawError } = await supabase
+                .from('transactions')
+                .select('date');
+
+            if (rawError) throw rawError;
+
+            // Aggregate manually
+            const months = {};
+            rawData.forEach(r => {
+                const m = r.date.substring(0, 7); // YYYY-MM
+                months[m] = (months[m] || 0) + 1;
+            });
+
+            const summary = Object.entries(months)
+                .sort()
+                .map(([m, count]) => `${m}: ${count} records`)
+                .join('\n');
+
+            alert(`Database Status (Months in DB):\n${summary || 'No data found'}`);
+            setStatus({ type: 'success', message: 'Database check complete. See popup.' });
+
+        } catch (err) {
+            console.error(err);
+            setStatus({ type: 'error', message: "Failed to check DB: " + err.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="p-8 max-w-4xl mx-auto bg-[#0f172a] min-h-screen text-slate-100">
             <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
@@ -111,11 +146,22 @@ const AdminUpload = () => {
                 Data Ingestion (Admin)
             </h1>
 
+            {/* Check DB Button */}
+            <div className="mb-6 flex gap-4">
+                <button
+                    onClick={checkDbStatus}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors border border-slate-600"
+                >
+                    🔍 Debug: Check Months in DB
+                </button>
+            </div>
+
             {/* Status Panel */}
             {status.message && (
                 <div className={`p-4 rounded-lg mb-8 flex items-center gap-3 ${status.type === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/50' :
-                        status.type === 'success' ? 'bg-green-500/20 text-green-300 border border-green-500/50' :
-                            'bg-blue-500/20 text-blue-300 border border-blue-500/50'
+                    status.type === 'success' ? 'bg-green-500/20 text-green-300 border border-green-500/50' :
+                        'bg-blue-500/20 text-blue-300 border border-blue-500/50'
                     }`}>
                     {status.type === 'error' ? <AlertCircle /> : <CheckCircle />}
                     <span>{status.message}</span>

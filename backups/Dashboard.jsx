@@ -854,7 +854,7 @@ const Dashboard = (props) => {
             </div >
 
             {/* Navigation Tabs */}
-            <div className="custom-scrollbar" style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+            < div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
                 <button
                     onClick={() => setActiveTab('overview')}
                     style={{
@@ -972,7 +972,7 @@ const Dashboard = (props) => {
                                 <Activity size={20} color="#3b82f6" />
                                 Material Flow & Efficiency Analysis
                             </h3>
-                            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
                                 {/* Opening Stock Card (Raw & Processed) */}
                                 <div
                                     style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)', position: 'relative', cursor: 'help' }}
@@ -1130,7 +1130,7 @@ const Dashboard = (props) => {
                             </div>
                         </div>
 
-                        <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
                             <Card title="Total Sales" value={salesRevenue} icon={IndianRupee} color="16, 185, 129" type="sales" />
 
                             {/* Merged Avg Order + Daily Avg Sales */}
@@ -1211,7 +1211,7 @@ const Dashboard = (props) => {
 
             {
                 activeTab === 'expenses' && (
-                    <div className="animate-fade-in responsive-sidebar-layout">
+                    <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                 <h2 style={{ margin: 0 }}>Expense Records</h2>
@@ -1236,7 +1236,7 @@ const Dashboard = (props) => {
                             </div>
 
                             {/* Expense Metrics */}
-                            <div className="responsive-grid-3" style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
                                 <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Recorded (Files)</div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getValueColor(recordedExpenses, 'expense') }}>{formatCurrency(recordedExpenses)}</div>

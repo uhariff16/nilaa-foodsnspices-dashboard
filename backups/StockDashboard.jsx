@@ -70,7 +70,7 @@ const StockCard = ({ title, open, in: inVal, out, closing, unit = 'kg', color = 
                 </div>
             </div>
 
-            <div className="stock-card-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.2fr', gap: '0.75rem', alignItems: 'center', textAlign: 'center' }}>
                 {/* Opening */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Opening</span>
@@ -302,7 +302,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
     return (
         <div className="animate-fade-in">
             {/* Stock Summary Cards (Ginger/Garlic) - Top Section */}
-            <div className="responsive-grid-2" style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
                 <StockSummaryCard
                     title="Ginger Stock"
                     icon={gingerIcon}
@@ -329,13 +329,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             </h2>
 
             <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Raw Materials</h3>
-            <div className="responsive-grid-2" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
                 <StockCard title="Ginger (Raw)" {...stockStats.ginger} color="amber" />
                 <StockCard title="Garlic (Raw)" {...stockStats.garlic} color="purple" />
             </div>
 
             <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Processed Goods</h3>
-            <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '2rem' }}>
                 {/* Peeled Items - Flow naturally with Paste */}
                 <StockCard title="Ginger (Peeled)" {...stockStats.gingerPeeled} color="orange" />
                 <StockCard title="Garlic (Peeled)" {...stockStats.garlicPeeled} color="indigo" />

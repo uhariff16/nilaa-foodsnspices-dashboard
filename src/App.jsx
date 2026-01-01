@@ -9,6 +9,36 @@ import { supabase } from './lib/supabaseClient'; // Import Supabase Client
 // import { parseProductionFile } from './utils/productionParser'; 
 
 
+// Auto-load files from src/data
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null, errorInfo: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        this.setState({ error, errorInfo });
+        console.error("ErrorBoundary caught an error", error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: '2rem', color: 'red', background: '#1a1a1a', height: '100vh' }}>
+                    <h1>Something went wrong.</h1>
+                    <pre>{this.state.error && this.state.error.toString()}</pre>
+                    <pre>{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 function App() {
     // Basic Routing: Check if URL has ?admin
     const isAdmin = window.location.search.includes('admin');
@@ -24,45 +54,19 @@ function App() {
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
 
-    // Auto-load files from src/data
-    class ErrorBoundary extends React.Component {
-        constructor(props) {
-            super(props);
-            this.state = { hasError: false, error: null, errorInfo: null };
-        }
 
-        static getDerivedStateFromError(error) {
-            return { hasError: true };
-        }
-
-        componentDidCatch(error, errorInfo) {
-            this.setState({ error, errorInfo });
-            console.error("ErrorBoundary caught an error", error, errorInfo);
-        }
-
-        render() {
-            if (this.state.hasError) {
-                return (
-                    <div style={{ padding: '2rem', color: 'red', background: '#1a1a1a', height: '100vh' }}>
-                        <h1>Something went wrong.</h1>
-                        <pre>{this.state.error && this.state.error.toString()}</pre>
-                        <pre>{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
-                    </div>
-                );
-            }
-            return this.props.children;
-        }
-    }
 
     const loadData = async () => {
+        console.log("Starting loadData...");
         setLoading(true);
         try {
             console.log("Fetching data from Supabase DB...");
+            const batchSize = 1000; // Ensure batchSize is defined here
 
             // 1. Fetch Transactions (With Pagination Loop)
+            console.log("Fetching transactions...");
             let allTxns = [];
             let tFrom = 0;
-            const batchSize = 1000;
             while (true) {
                 const { data, error } = await supabase
                     .from('transactions')
@@ -79,6 +83,7 @@ function App() {
                 tFrom += batchSize;
             }
             const dbTxns = allTxns;
+            console.log(`Fetched ${dbTxns.length} transactions.`);
 
             // Map DB Schema -> App Legacy Schema
             const mappedTransactions = (dbTxns || []).map(t => ({
@@ -91,8 +96,10 @@ function App() {
             }));
 
             // 2. Fetch Production Logs (With Pagination Loop)
+            console.log("Fetching production logs...");
             let allLogs = [];
             let pFrom = 0;
+            // ... while loop ...
             while (true) {
                 const { data, error } = await supabase
                     .from('production_logs')
@@ -108,9 +115,11 @@ function App() {
                 if (data.length < batchSize) break;
                 pFrom += batchSize;
             }
+            console.log(`Fetched ${allLogs.length} logs.`);
             const dbLogs = allLogs;
 
             // 3. Fetch Customer Stats (With Pagination)
+            console.log("Fetching customer stats...");
             let allCusts = [];
             let cFrom = 0;
             while (true) {
@@ -130,6 +139,7 @@ function App() {
                 }
                 if (error) break;
             }
+            console.log(`Fetched ${allCusts.length} customers.`);
 
             const mappedCustomers = allCusts.map(c => ({
                 id: c.id,
@@ -252,6 +262,11 @@ function App() {
             setIsSyncing(false);
         }
     };
+
+    // Auto-load data on mount
+    useEffect(() => {
+        loadData();
+    }, []);
 
     // Show loading or Dashboard if data exists (either from auto-load or manual upload later)
     // Note: If auto-load finds nothing, we still want to show FileUpload or empty Dashboard?

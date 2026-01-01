@@ -86,7 +86,7 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
     }, [data, manualExpenses]);
 
     return (
-        <div className="grid-cols-4" style={{ marginBottom: '2rem' }}>
+        <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
             <Card title="Total Sales" value={stats.sales} subtext={`${stats.invoiceCount} Invoices`} icon={IndianRupee} color="59, 130, 246" type="sales" />
             <Card title="Total Expenses" value={stats.expenses} icon={Wallet} color="239, 68, 68" type="expense" />
             <Card title="Net Profit" value={stats.netProfit} icon={TrendingUp} color="16, 185, 129" type="profit" />

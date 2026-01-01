@@ -251,9 +251,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             </h3>
 
             {/* Top Stats Grid - Compact Cards */}
-            <div style={{
-                display: 'grid', gridTemplateColumns: `repeat(${materialGroups.length + 2}, 1fr)`, gap: '1rem', marginBottom: '1.5rem'
-            }}>
+            {/* Top Stats Grid - Compact Cards */}
+            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
                 {/* 1. Material Cards */}
                 {materialGroups.map((group, index) => {
                     const { cost, count } = materialStats[group.name] || { cost: 0, count: 0 };
@@ -352,7 +351,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             )}
 
             {/* Charts & Details Grid - 3 Columns */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1.2fr', gap: '1rem' }}>
+            <div className="responsive-grid-3" style={{ gap: '1rem' }}>
 
                 {/* Col 1: Material Distribution (Pie) */}
                 <div style={{
@@ -464,7 +463,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             {/* Variety Analysis Section (New) */}
             {summaryData && summaryData.length > 0 && (
-                <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div className="responsive-grid-2" style={{ marginTop: '1.5rem', gap: '1.5rem' }}>
                     {['Ginger', 'Garlic'].map(mat => {
                         // Filter summary data for this material
                         const matVarieties = summaryData.filter(d => {
@@ -499,7 +498,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                                 <div style={{ padding: '1rem', background: mat === 'Ginger' ? 'rgba(252, 211, 77, 0.1)' : 'rgba(224, 231, 255, 0.1)', borderBottom: '1px solid var(--glass-border)', fontWeight: 700, color: mat === 'Ginger' ? '#FCD34D' : '#E0E7FF', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     {mat} Varieties
                                 </div>
-                                <div style={{ padding: '0.5rem' }}>
+                                <div className="overflow-x-auto" style={{ padding: '0.5rem' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                                         <thead>
                                             <tr style={{ color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>

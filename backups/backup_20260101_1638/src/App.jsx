@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
-import AdminPanel from './components/admin/AdminPanel';
+import AdminUpload from './components/AdminUpload';
 import Login from './components/Login';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
-
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -229,7 +228,7 @@ function App() {
                 <ErrorBoundary>
                     <Routes>
                         <Route path="/login" element={<Navigate to="/" replace />} />
-                        <Route path="/admin" element={<AdminPanel />} />
+                        <Route path="/admin" element={<AdminUpload />} />
                         <Route path="/" element={<DashboardLayout />} />
                     </Routes>
                 </ErrorBoundary>

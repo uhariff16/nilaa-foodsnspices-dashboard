@@ -101,9 +101,7 @@ export const parseProductionFile = (files) => {
                             if (date && mat && weight > 0) {
                                 productionData.stockIn.push({
                                     id: `stk-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
-                                    date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
+                                    date, material: mat, weight, source: sheetName
                                 });
                             }
                         }
@@ -116,9 +114,7 @@ export const parseProductionFile = (files) => {
                             if (date && mat && weight > 0) {
                                 productionData.preProduction.push({
                                     id: `pre-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
-                                    date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
+                                    date, material: mat, weight, source: sheetName
                                 });
                             }
                         }
@@ -131,9 +127,7 @@ export const parseProductionFile = (files) => {
                             if (date && mat && weight > 0) {
                                 productionData.postProduction.push({
                                     id: `post-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
-                                    date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
+                                    date, material: mat, weight, source: sheetName
                                 });
                             }
                         }

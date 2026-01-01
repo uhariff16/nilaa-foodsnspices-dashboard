@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
 import AdminUpload from './components/AdminUpload';
@@ -67,14 +67,16 @@ const DashboardLayout = () => {
     const [debugError, setDebugError] = useState(null);
     const location = useLocation();
 
-    // Check if ?admin param exists (Legacy support or explicit override)
-    // But now we prefer /admin route. We will support both for now.
     const isAdminParam = location.search.includes('admin');
     const { role } = useAuth();
+    const navigate = useNavigate();
 
-    // If user requests admin via URL param but isn't admin role, show error?
-    // Or just let the ProtectedRoute handle the /admin path.
-    // Let's rely on the Route for AdminUpload.
+    // Redirect /?admin to /admin
+    useEffect(() => {
+        if (isAdminParam) {
+            navigate('/admin');
+        }
+    }, [isAdminParam, navigate]);
 
     const loadData = async () => {
         console.log("Starting loadData...");

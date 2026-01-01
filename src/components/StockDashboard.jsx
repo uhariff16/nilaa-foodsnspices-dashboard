@@ -73,57 +73,57 @@ const StockCard = ({ title, open, in: inVal, out, closing, unit = 'kg', color = 
             <div className="stock-card-grid">
                 {/* Opening */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Opening</span>
-                    <span style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>{open.toLocaleString()}</span>
+                    <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', fontWeight: 600 }}>Opening</span>
+                    <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>{open.toLocaleString()}</span>
                 </div>
 
                 {/* In (+ via Proc/Prod) */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.9rem', color: '#10b981', marginBottom: '0.2rem' }}>In</span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#10b981' }}>+{inVal.toLocaleString()}</span>
+                    <span style={{ fontSize: '1rem', color: '#10b981', marginBottom: '0.3rem', fontWeight: 600 }}>In</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#10b981' }}>+{inVal.toLocaleString()}</span>
                 </div>
 
                 {/* Out (- via Usage/Sales) */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.9rem', color: '#ef4444', marginBottom: '0.2rem' }}>Out</span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#ef4444', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                    <span style={{ fontSize: '1rem', color: '#ef4444', marginBottom: '0.3rem', fontWeight: 600 }}>Out</span>
+                    <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ef4444', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
                         -{out.toLocaleString()}
-                        {isEstimated && <span style={{ fontSize: '0.7rem', opacity: 0.9, marginTop: '2px' }}>(Est)</span>}
+                        {isEstimated && <span style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '4px', fontStyle: 'italic' }}>(Est. Sales)</span>}
                     </span>
                 </div>
 
                 {/* Closing */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.75rem', padding: '0.75rem' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Closing</span>
-                    <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{closing.toLocaleString()}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.75rem', padding: '1rem' }}>
+                    <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', fontWeight: 600 }}>Closing</span>
+                    <span style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-primary)' }}>{closing.toLocaleString()}</span>
                 </div>
             </div>
 
-            <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{unit}</span>
+            <div style={{ marginTop: '1rem', paddingTop: '0.5rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center' }}>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Unit: {unit}</span>
             </div>
 
             {/* Shortage Analysis */}
             {nextOpen > 0 && (
-                <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Next Opening</span>
-                        <span style={{ fontWeight: 600, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{nextOpen.toLocaleString()}</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>Next Month Opening</span>
+                        <span style={{ fontWeight: 700, fontSize: '1.4rem', color: 'var(--text-primary)' }}>{nextOpen.toLocaleString()}</span>
                     </div>
 
                     {(() => {
                         const variance = closing - nextOpen;
                         // Tolerance of 0.1 for float issues
-                        if (Math.abs(variance) < 0.1) return <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem' }}>Stocks Matched ✅</span>;
+                        if (Math.abs(variance) < 0.1) return <span style={{ color: '#10b981', fontWeight: 700, fontSize: '1.1rem', padding: '0.5rem 1rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '0.5rem' }}>Stocks Matched ✅</span>;
 
                         const isShortage = variance > 0;
 
                         return (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', background: isShortage ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>
-                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontSize: '0.85rem', fontWeight: 700, marginBottom: '2px' }}>
-                                    {isShortage ? 'Shortage Warning' : 'Surplus'}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', background: isShortage ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', padding: '0.75rem 1rem', borderRadius: '0.75rem' }}>
+                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>
+                                    {isShortage ? 'SHORTAGE' : 'SURPLUS'}
                                 </span>
-                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontWeight: 800, fontSize: '1.3rem' }}>
+                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontWeight: 900, fontSize: '1.8rem' }}>
                                     {Math.abs(variance).toLocaleString(undefined, { maximumFractionDigits: 1 })}
                                 </span>
                             </div>
@@ -272,7 +272,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         // Formula: Sales (Out) = (Open + In) - NextOpen
         const reconcile = (obj, name) => {
             // Only apply to Processed Goods where Sales Qty is often missing
-            if (hasNextMonthData && obj.out === 0 && (obj.open > 0 || obj.in > 0)) {
+            // Relaxed check: logic applies if Out is negligible (< 1kg)
+            if (hasNextMonthData && obj.out < 1 && (obj.open > 0 || obj.in > 0)) {
                 const theoreticalClosing = obj.open + obj.in;
                 // If we have less next month than we theoretically should, the gap is Sales.
                 if (theoreticalClosing > obj.nextOpen) {

@@ -101,6 +101,7 @@ const DashboardLayout = () => {
             const mappedTransactions = allTxns.map(t => ({
                 id: t.id,
                 parsedDate: t.date,
+                createdAt: t.created_at, // Pass timestamp
                 parsedAmount: Number(t.amount),
                 parsedType: t.payment_mode === 'Expense' ? 'Expense' : 'Sales',
                 originalDesc: t.item_name || 'Item',
@@ -136,13 +137,14 @@ const DashboardLayout = () => {
                 name: c.customer_name,
                 revenue: Number(c.revenue),
                 profit: Number(c.profit),
-                parsedDate: c.date
+                parsedDate: c.date,
+                createdAt: c.created_at // Pass timestamp
             }));
 
             // Split logs
             const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
             allLogs.forEach(log => {
-                const entry = { id: log.id, date: log.date, material: log.material, weight: Number(log.weight), source: 'Database' };
+                const entry = { id: log.id, date: log.date, createdAt: log.created_at, material: log.material, weight: Number(log.weight), source: 'Database' };
                 if (log.type === 'stock_in') newProdData.stockIn.push(entry);
                 else if (log.type === 'usage') newProdData.preProduction.push(entry);
                 else if (log.type === 'production') newProdData.postProduction.push(entry);

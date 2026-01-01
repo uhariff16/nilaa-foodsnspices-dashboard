@@ -603,29 +603,35 @@ const Dashboard = (props) => {
         let maxSales = '';
         let maxProd = '';
 
+        // Helper to compare dates/timestamps
+        const updateMax = (currentMax, candidate, candidateTimestamp) => {
+            // Prefer timestamp if available for precision
+            const val = candidateTimestamp || candidate;
+            if (!val) return currentMax;
+            if (!currentMax) return val;
+            return val > currentMax ? val : currentMax;
+        };
+
         // 1. Check Sales/Expenses
         filteredTransactions.forEach(t => {
-            if (t.parsedDate && t.parsedDate > maxSales) {
-                maxSales = t.parsedDate;
-            }
+            maxSales = updateMax(maxSales, t.parsedDate, t.createdAt);
         });
 
         // 2. Check Production (Stock In + Pre + Post)
         if (props.productionData) {
-
             // Define filter prefix based on selection
             let targetPrefix = selectedYear;
             if (selectedMonth !== 'Overall') {
                 const [selMonth, selYear] = selectedMonth.split(' ');
                 const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-                targetPrefix = selYear + '-' + monthMap[selMonth]; // string concat fix
+                targetPrefix = selYear + '-' + monthMap[selMonth];
             }
 
             const checkItems = (items) => {
                 if (!items) return;
                 items.forEach(item => {
                     if (item.date && item.date.startsWith(targetPrefix)) {
-                        if (item.date > maxProd) maxProd = item.date;
+                        maxProd = updateMax(maxProd, item.date, item.createdAt);
                     }
                 });
             };
@@ -640,8 +646,20 @@ const Dashboard = (props) => {
 
     const formatLastUpdated = (dateStr) => {
         if (!dateStr) return 'No Data';
+        // Handle ISO Timestamp (2025-10-25T14:30:00...)
+        if (dateStr.includes('T')) {
+            const dateObj = new Date(dateStr);
+            if (!isNaN(dateObj)) {
+                return dateObj.toLocaleString('en-IN', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', hour12: true
+                });
+            }
+        }
+
+        // Handle YYYY-MM-DD
         const [y, m, d] = dateStr.split('-');
-        return d + '-' + m + '-' + y;
+        return `${d}-${m}-${y}`;
     };
 
     return (

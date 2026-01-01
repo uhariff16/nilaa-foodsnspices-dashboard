@@ -13,6 +13,7 @@ import SalesSummaryTable from './SalesSummaryTable';
 
 import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/logo.png'; // Import logo
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -649,9 +650,20 @@ const Dashboard = (props) => {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem',
                 borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem'
             }}>
+                {/* Debug Error Banner */}
+                {props.debugError && (
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, width: '100%',
+                        background: '#ef4444', color: 'white', padding: '0.5rem',
+                        textAlign: 'center', fontWeight: 'bold', zIndex: 9999
+                    }}>
+                        ⚠️ {props.debugError}
+                    </div>
+                )}
+
                 {/* Left Side: Logo + Title + Report Info */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <img src="/logo.png?v=2" alt="Nilaa Foods" style={{ height: '120px', objectFit: 'contain' }} />
+                    <img src={logo} alt="Nilaa Foods" style={{ height: '120px', objectFit: 'contain' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                         <div>
                             <h1 style={{ fontSize: '1.5rem', margin: 0, lineHeight: 1.2 }}>Nilaa Foods & Spices</h1>

@@ -186,44 +186,9 @@ h3 {
     /* Reduce padding */
   }
 
-  /* Force font scaling */
-  html {
-    font-size: 14px;
-  }
-
-  /* Utilities for shrinking huge texts */
-  h1 {
-    font-size: 1.75rem !important;
-  }
-
-  h2 {
-    font-size: 1.5rem !important;
-  }
-
-  h3 {
-    font-size: 1.25rem !important;
-  }
-
-  /* Adjust Card Padding */
-  .glass-panel {
-    padding: 1rem !important;
-  }
-
-  /* Scroll containers for tables */
-  .overflow-x-auto {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* Hide specific non-critical elements if needed */
-  .hide-mobile {
-    display: none;
-  }
-
-  .mobile-stack {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 1rem !important;
+  /* Force centered alignment for better visuals */
+  .text-center-mobile {
+    text-align: center !important;
   }
 }
 
@@ -243,9 +208,11 @@ h3 {
 /* Stock Card Internal Grid */
 .stock-card-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1.2fr;
-  gap: 0.75rem;
-  align-items: center;
+  grid-template-columns: repeat(4, 1fr);
+  /* Equal columns on desktop */
+  gap: 1rem;
+  align-items: start;
+  /* Align to top */
   text-align: center;
 }
 
@@ -253,6 +220,8 @@ h3 {
   .stock-card-grid {
     grid-template-columns: 1fr 1fr;
     /* 2x2 grid on mobile */
-    gap: 1rem;
+    gap: 1.5rem;
+    /* More gap for clarity */
+    align-items: center;
   }
 }

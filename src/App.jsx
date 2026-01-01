@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
-import AdminUpload from './components/AdminUpload'; // Import Admin Page
-import { supabase } from './lib/supabaseClient'; // Import Supabase Client
+import AdminUpload from './components/AdminUpload';
+import Login from './components/Login';
+import { supabase } from './lib/supabaseClient';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-// Legacy Parsers (Optional - can be removed later)
-// import { parseExcelFile } from './utils/excelParser';
-// import { parseProductionFile } from './utils/productionParser'; 
-
-
-// Auto-load files from src/data
+// Error Boundary Component
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -39,54 +37,66 @@ class ErrorBoundary extends React.Component {
     }
 }
 
-function App() {
-    // Basic Routing: Check if URL has ?admin
-    const isAdmin = window.location.search.includes('admin');
+// Protected Route Wrapper
+const ProtectedRoute = ({ children, adminOnly = false }) => {
+    const { user, role, loading } = useAuth();
+    const location = useLocation();
 
-    if (isAdmin) {
-        return <AdminUpload />;
+    if (loading) {
+        return <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1.2rem' }}>Authenticating...</div>;
     }
 
+    if (!user) {
+        return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (adminOnly && role !== 'admin') {
+        return <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontWeight: 'bold', fontSize: '1.25rem' }}>Access Denied: Admins Only</div>;
+    }
+
+    return children;
+};
+
+// Main App Logic (Dashboard + Data Loading)
+const DashboardLayout = () => {
     const [data, setData] = useState({ transactions: [], items: [], customers: [] });
     const [productionData, setProductionData] = useState({ stockIn: [], preProduction: [], postProduction: [] });
     const [purchaseData, setPurchaseData] = useState([]);
-    const [summaryData, setSummaryData] = useState([]); // New State
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [debugError, setDebugError] = useState(null);
+    const location = useLocation();
 
+    // Check if ?admin param exists (Legacy support or explicit override)
+    // But now we prefer /admin route. We will support both for now.
+    const isAdminParam = location.search.includes('admin');
+    const { role } = useAuth();
 
+    // If user requests admin via URL param but isn't admin role, show error?
+    // Or just let the ProtectedRoute handle the /admin path.
+    // Let's rely on the Route for AdminUpload.
 
     const loadData = async () => {
         console.log("Starting loadData...");
         setLoading(true);
         try {
             console.log("Fetching data from Supabase DB...");
-            const batchSize = 1000; // Ensure batchSize is defined here
+            const batchSize = 1000;
 
-            // 1. Fetch Transactions (With Pagination Loop)
-            console.log("Fetching transactions...");
+            // 1. Fetch Transactions
             let allTxns = [];
             let tFrom = 0;
             while (true) {
-                const { data, error } = await supabase
-                    .from('transactions')
-                    .select('*')
-                    .order('date', { ascending: false })
-                    .range(tFrom, tFrom + batchSize - 1);
-
-                if (error) {
-                    console.error("Error fetching transactions:", error);
-                    throw error;
-                }
+                const { data, error } = await supabase.from('transactions')
+                    .select('*').order('date', { ascending: false }).range(tFrom, tFrom + batchSize - 1);
+                if (error) throw error;
                 allTxns = [...allTxns, ...data];
                 if (data.length < batchSize) break;
                 tFrom += batchSize;
             }
-            const dbTxns = allTxns;
-            console.log(`Fetched ${dbTxns.length} transactions.`);
 
             // Map DB Schema -> App Legacy Schema
-            const mappedTransactions = (dbTxns || []).map(t => ({
+            const mappedTransactions = allTxns.map(t => ({
                 id: t.id,
                 parsedDate: t.date,
                 parsedAmount: Number(t.amount),
@@ -95,51 +105,29 @@ function App() {
                 invoiceNo: t.invoice_no
             }));
 
-            // 2. Fetch Production Logs (With Pagination Loop)
-            console.log("Fetching production logs...");
+            // 2. Fetch Production Logs
             let allLogs = [];
             let pFrom = 0;
-            // ... while loop ...
             while (true) {
-                const { data, error } = await supabase
-                    .from('production_logs')
-                    .select('*')
-                    .order('date', { ascending: true })
-                    .range(pFrom, pFrom + batchSize - 1);
-
-                if (error) {
-                    console.error("Error fetching logs:", error);
-                    throw error;
-                }
+                const { data, error } = await supabase.from('production_logs')
+                    .select('*').order('date', { ascending: true }).range(pFrom, pFrom + batchSize - 1);
+                if (error) throw error;
                 allLogs = [...allLogs, ...data];
                 if (data.length < batchSize) break;
                 pFrom += batchSize;
             }
-            console.log(`Fetched ${allLogs.length} logs.`);
-            const dbLogs = allLogs;
 
-            // 3. Fetch Customer Stats (With Pagination)
-            console.log("Fetching customer stats...");
+            // 3. Fetch Customer Stats
             let allCusts = [];
             let cFrom = 0;
             while (true) {
-                const { data, error } = await supabase
-                    .from('customer_stats')
-                    .select('*')
-                    .order('date', { ascending: true })
-                    .range(cFrom, cFrom + batchSize - 1);
-
-                if (error) {
-                    console.error("Error fetching customers:", error);
-                    // Don't throw, just log, in case table doesn't exist yet
-                } else {
-                    allCusts = [...allCusts, ...data];
-                    if (data.length < batchSize) break;
-                    cFrom += batchSize;
-                }
-                if (error) break;
+                const { data, error } = await supabase.from('customer_stats')
+                    .select('*').order('date', { ascending: true }).range(cFrom, cFrom + batchSize - 1);
+                if (error) { console.error("Error fetching customers:", error); break; }
+                allCusts = [...allCusts, ...data];
+                if (data.length < batchSize) break;
+                cFrom += batchSize;
             }
-            console.log(`Fetched ${allCusts.length} customers.`);
 
             const mappedCustomers = allCusts.map(c => ({
                 id: c.id,
@@ -149,96 +137,49 @@ function App() {
                 parsedDate: c.date
             }));
 
-            // Split into categories
-            const newProdData = {
-                stockIn: [],
-                preProduction: [],
-                postProduction: []
-            };
-
-            (dbLogs || []).forEach(log => {
-                const entry = {
-                    id: log.id,
-                    date: log.date,
-                    material: log.material,
-                    weight: Number(log.weight),
-                    source: 'Database'
-                };
+            // Split logs
+            const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
+            allLogs.forEach(log => {
+                const entry = { id: log.id, date: log.date, material: log.material, weight: Number(log.weight), source: 'Database' };
                 if (log.type === 'stock_in') newProdData.stockIn.push(entry);
                 else if (log.type === 'usage') newProdData.preProduction.push(entry);
                 else if (log.type === 'production') newProdData.postProduction.push(entry);
             });
 
-            // 3. Update State
-            setData(prev => ({
-                ...prev,
-                transactions: mappedTransactions,
-                items: [], // Items still empty unless we derive them
-                customers: mappedCustomers // Populated from DB
-            }));
-
+            // Update State
+            setData(prev => ({ ...prev, transactions: mappedTransactions, customers: mappedCustomers }));
             setProductionData(newProdData);
-
-            // Populate purchaseData from Expense Transactions (Legacy Support)
-            const purchaseFromExpenses = mappedTransactions.filter(t => t.parsedType === 'Expense');
-            setPurchaseData(purchaseFromExpenses);
-
-            console.log(`Loaded ${mappedTransactions.length} transactions and ${dbLogs.length} logs from DB.`);
+            setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense'));
 
         } catch (error) {
             console.error("Supabase Load Error:", error);
-            // alert("Failed to load data from database. Check console details.");
+            setDebugError("Load Error: " + (error.message || JSON.stringify(error)));
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
+        console.log("App Version: 2026-01-01 Force Update V2");
         loadData();
     }, []);
 
     const handleAppendData = (newData) => {
-        setData(prevData => {
-            if (!prevData) return newData;
-
-            const existingTxnIds = new Set(prevData.transactions.map(t => t.id).filter(Boolean));
-            const existingItemIds = new Set(prevData.items.map(i => i.id).filter(Boolean));
-            const existingCustIds = new Set(prevData.customers.map(c => c.id).filter(Boolean));
-
-            const uniqueTxns = (newData.transactions || []).filter(t => !t.id || !existingTxnIds.has(t.id));
-            const uniqueItems = (newData.items || []).filter(i => !i.id || !existingItemIds.has(i.id));
-            const uniqueCusts = (newData.customers || []).filter(c => !c.id || !existingCustIds.has(c.id));
-
-            console.log(`Deduped: Skipped ${newData.transactions.length - uniqueTxns.length} duplicate transactions.`);
-
-            return {
-                transactions: [...prevData.transactions, ...uniqueTxns],
-                items: [...prevData.items, ...uniqueItems],
-                customers: [...prevData.customers, ...uniqueCusts],
-            };
-        });
+        // ... (Keep existing logic if needed, but DB is primary now)
+        // For visual append only
+        setData(prev => ({
+            ...prev,
+            transactions: [...prev.transactions, ...(newData.transactions || [])],
+            customers: [...prev.customers, ...(newData.customers || [])]
+        }));
     };
 
     const handleProductionData = (pData) => {
-        // Simple dedupe for production based on composite key (Date + Material + Weight + Source)
-        // Since we didn't add IDs to production parser yet, we use content hashing
-        const createHash = (item) => `${item.date || ''}-${item.material || item.item || ''}-${item.weight || item.qty || ''}`;
-
-        setProductionData(prev => {
-            const existingStockIn = new Set(prev.stockIn.map(createHash));
-            const existingPre = new Set(prev.preProduction.map(createHash));
-            const existingPost = new Set(prev.postProduction.map(createHash));
-
-            const newStockIn = pData.stockIn.filter(i => !existingStockIn.has(createHash(i)));
-            const newPre = pData.preProduction.filter(i => !existingPre.has(createHash(i)));
-            const newPost = pData.postProduction.filter(i => !existingPost.has(createHash(i)));
-
-            return {
-                stockIn: [...prev.stockIn, ...newStockIn],
-                preProduction: [...prev.preProduction, ...newPre],
-                postProduction: [...prev.postProduction, ...newPost]
-            };
-        });
+        setProductionData(prev => ({
+            stockIn: [...prev.stockIn, ...pData.stockIn],
+            preProduction: [...prev.preProduction, ...pData.preProduction],
+            postProduction: [...prev.postProduction, ...pData.postProduction]
+        }));
     };
 
     const handleSync = async () => {
@@ -247,84 +188,48 @@ function App() {
             const res = await fetch('/api/sync');
             const result = await res.json();
             if (result.success) {
-                console.log(`Sync successful. Files updated: ${result.count}`);
                 alert(`Sync Complete! ${result.count} files updated.`);
-                // Reload data after sync
                 await loadData();
             } else {
-                console.error("Sync failed:", result.message);
                 alert(`Sync Failed: ${result.message}`);
             }
         } catch (error) {
-            console.error("Error calling sync API:", error);
-            alert("Error calling sync API. Make sure the dev server is running.");
+            console.error(error);
+            alert("Error calling sync API.");
         } finally {
             setIsSyncing(false);
         }
     };
 
-    // Auto-load data on mount
-    useEffect(() => {
-        console.log("App Version: 2026-01-01 Force Update V2");
-        loadData();
-    }, []);
-
-    // Show loading or Dashboard if data exists (either from auto-load or manual upload later)
-    // Note: If auto-load finds nothing, we still want to show FileUpload or empty Dashboard?
-    // Current logic: !data shows FileUpload. "data" is initialized with empty arrays, so we need to check if it's "populated".
-    // Actually, the original code initialized data with { ...: [] }, so '!data' check on line 30 was likely checking if it was null? 
-    // Wait, line 6: useState({ ... }). Truthy.
-    // Line 30: {!data ? ...}. Since data is essentially always truthy object, it might have been flawed or I misread.
-    // Let's assume we want to show Dashboard if we have ANY data, or FileUpload if empty?
-    // Actually, the user might want to start fresh.
-    // Let's keep the existing structure but maybe hide FileUpload if we found something?
-    // Original code: `const [data, setData] = useState({ ... })`. `!data` is false. So it ALWAYS showed Dashboard?
-    // Ah, wait. checking previous `view_file` of App.jsx:
-    // `const [data, setData] = useState({ transactions: [], ... });`
-    // `{!data ? ... : ...}`
-    // Since `data` is an object, `!data` is false. So it immediately rendered `Dashboard`.
-    // The `FileUpload` component was likely never shown unless `setData(null)` was called?
-    // Or maybe originally it was `useState(null)`.
-    // Let's look at `App.jsx` again from step 542.
-    // Line 6: `const [data, setData] = useState({ transactions: [], ... });`
-    // Line 30: `{!data ? (`
-    // Yes, this defaults to showing the Dashboard immediately with empty data.
-    // So my changes just populate that data.
-
     return (
-        <div className="container">
-            <ErrorBoundary>
-                {/* Use a simple check: if loading, show a loader? Or just render. */}
-                {/* If we want to show FileUpload initially if NO data is found, we can check lengths. */}
+        <Dashboard
+            data={data}
+            productionData={productionData}
+            onReset={() => { }} // No-op for now as we pull from DB
+            onRefresh={loadData}
+            onAppendData={handleAppendData}
+            onProductionData={handleProductionData}
+            purchaseData={purchaseData}
+            onSync={handleSync}
+            isSyncing={isSyncing}
+            debugError={debugError}
+        />
+    );
+};
 
-                {(!data.transactions.length && !productionData.stockIn.length && !loading) ? (
-                    /* Only show FileUpload if NOT loading AND effectively empty? 
-                       Actually, Dashboard has "Add Files" buttons too. 
-                       Let's stick to the original behavior (always showing Dashboard) 
-                       unless the user specifically implemented a landing page.
-                       However, looking at the code, it seems it MIGHT have been intended to be null initially?
-                       But the code I read had explicit empty arrays.
-                       I will preserve the structure. */
-                    <FileUpload onDataLoaded={setData} onProductionLoaded={setProductionData} />
-                ) : (
-                    <Dashboard
-                        data={data}
-                        productionData={productionData}
-                        onReset={() => {
-                            setData({ transactions: [], items: [], customers: [] });
-                            setProductionData({ stockIn: [], preProduction: [], postProduction: [] });
-                            setPurchaseData([]);
-                        }}
-                        onRefresh={loadData}
-                        onAppendData={handleAppendData}
-                        onProductionData={handleProductionData}
-                        purchaseData={purchaseData}
-                        onSync={handleSync}
-                        isSyncing={isSyncing}
-                    />
-                )}
-            </ErrorBoundary>
-        </div>
+function App() {
+    return (
+        <AuthProvider>
+            <Router>
+                <ErrorBoundary>
+                    <Routes>
+                        <Route path="/login" element={<Navigate to="/" replace />} />
+                        <Route path="/admin" element={<AdminUpload />} />
+                        <Route path="/" element={<DashboardLayout />} />
+                    </Routes>
+                </ErrorBoundary>
+            </Router>
+        </AuthProvider>
     );
 }
 

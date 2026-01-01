@@ -325,7 +325,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
             {/* Main Stock Analysis Section */}
             <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                Stock Analysis
+                Stock Analysis (Live)
             </h2>
 
             <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Raw Materials</h3>

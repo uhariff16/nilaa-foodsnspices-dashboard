@@ -11,7 +11,8 @@ import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -47,6 +48,7 @@ const getValueColor = (value, type) => {
 
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
+    const { logout } = useAuth();
     // Persist active tab to restore after refresh
     const [activeTab, setActiveTab] = useState(() => {
         const saved = localStorage.getItem('dashboard_active_tab');
@@ -649,7 +651,7 @@ const Dashboard = (props) => {
             }}>
                 {/* Left Side: Logo + Title + Report Info */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <img src="/logo.png" alt="Nilaa Foods" style={{ height: '120px', objectFit: 'contain' }} />
+                    <img src="/logo.png?v=2" alt="Nilaa Foods" style={{ height: '120px', objectFit: 'contain' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                         <div>
                             <h1 style={{ fontSize: '1.5rem', margin: 0, lineHeight: 1.2 }}>Nilaa Foods & Spices</h1>
@@ -802,6 +804,9 @@ const Dashboard = (props) => {
                     </button>
                     <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={onReset}>
                         <RefreshCw size={18} style={{ marginRight: '0.5rem' }} /> Reset
+                    </button>
+                    <button className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', boxShadow: 'none' }} onClick={logout}>
+                        <LogOut size={18} style={{ marginRight: '0.5rem' }} /> Logout
                     </button>
                 </div>
             </header >

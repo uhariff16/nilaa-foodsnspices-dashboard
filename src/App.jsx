@@ -265,6 +265,7 @@ function App() {
 
     // Auto-load data on mount
     useEffect(() => {
+        console.log("App Version: 2026-01-01 Force Update V2");
         loadData();
     }, []);
 

@@ -7,6 +7,7 @@ export const parseExcelFile = (files) => {
             items: [],
             customers: []
         };
+        const debugLog = [];
 
         try {
             // Helper to read a single file
@@ -29,19 +30,12 @@ export const parseExcelFile = (files) => {
 
                 // If already Excel serial number
                 if (typeof dateVal === 'number') {
-                    // Sanity check: data before 2000 is likely noise/index numbers
                     if (dateVal < 36526) return null;
-
                     const dateObj = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
                     return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : null;
                 }
 
                 let dateStr = String(dateVal).trim();
-
-
-
-                // Handle DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY, DD MM YYYY, DD_MM_YYYY
-                // Delimiters: - / . space _
                 const dmyRegex = /^(\d{1,2})[-/.\s_](\d{1,2})[-/.\s_](\d{2,4})$/;
                 const match = dateStr.match(dmyRegex);
 
@@ -53,7 +47,6 @@ export const parseExcelFile = (files) => {
                     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
                 }
 
-                // Handle DD-MMM-YY (e.g., 01-Nov-25, 01 Nov 2025)
                 if (/^\d{1,2}[-/.\s_][a-zA-Z]{3}[-/.\s_]\d{2,4}$/.test(dateStr)) {
                     const parts = dateStr.split(/[-/.\s_]+/);
                     const d = parts[0];
@@ -66,36 +59,27 @@ export const parseExcelFile = (files) => {
                     if (m) return `${yStr}-${m}-${d.padStart(2, '0')}`;
                 }
 
-                // Basic ISO fallback
                 const attempt = new Date(dateStr);
                 if (!isNaN(attempt)) {
                     return attempt.toISOString().split('T')[0];
                 }
-
                 return null;
             };
 
             for (const file of files) {
+                debugLog.push(`Processing file: ${file.name}`);
                 const workbook = await readFile(file);
 
                 // --- PASS 1: DATE DISCOVERY ---
-                // Goal: Find the best "Master Date" for this file by looking at:
-                // 1. Filename
-                // 2. ANY sheet that might contain a date
-
                 let masterFileDate = null;
-
-                // 1. Check Filename
                 const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
                 const fileNameClean = nameWithoutExt.replace(/[^a-zA-Z0-9]/g, ' ').toLowerCase();
                 const monthMap = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12', january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' };
 
-                // Regex 1: DD MM YYYY
                 let match = fileNameClean.match(/(\d{1,2}\s+\d{1,2}\s+\d{4})/);
                 if (match) {
                     masterFileDate = normalizeDate(match[0]);
                 } else {
-                    // Regex 2: Month Year or Year Month
                     const words = fileNameClean.split(/\s+/).filter(w => w.length > 0);
                     for (let i = 0; i < words.length - 1; i++) {
                         const w = words[i];
@@ -114,6 +98,7 @@ export const parseExcelFile = (files) => {
                         }
                     }
                 }
+                debugLog.push(`Detected Filename Date: ${masterFileDate}`);
 
                 // 2. Check Sheets (Pass 1)
                 if (!masterFileDate) {
@@ -122,79 +107,23 @@ export const parseExcelFile = (files) => {
                         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                         if (!jsonData || jsonData.length === 0) continue;
 
-                        // Scan first 100 rows for Date headers or Date lines in report
                         const rowsToScan = jsonData.slice(0, 100);
-
                         rowsToScan.forEach(row => {
                             if (masterFileDate) return;
-
                             const cellVal = (String(row[0] || '') + " " + String(row[1] || '')).toLowerCase();
-
-                            // Specific check for "Date :" pattern which is common in Tally/ERP reports
-                            // e.g. "Date : 1-Nov-2025" or "Date: 01-11-2025"
                             if (cellVal.includes('date') || cellVal.includes('period') || cellVal.includes('month')) {
                                 let match = cellVal.match(/(\d{1,2}[-/\s][a-zA-Z]+[-/\s]\d{2,4})/);
                                 if (match) {
                                     masterFileDate = normalizeDate(match[0]);
                                 } else {
-                                    // Check for "Date : DD-MM-YYYY" specifically
                                     let dateColonMatch = cellVal.match(/date\s*[:|-]\s*(\d{1,2}[-/\s\.]\w+[-/\s\.]\d{2,4})/i);
-                                    if (dateColonMatch) {
-                                        masterFileDate = normalizeDate(dateColonMatch[1]);
-                                    } else {
-                                        // Text Search Algorithm
-                                        const cleanCell = cellVal.replace(/[^a-z0-9\s]/g, ' ');
-                                        const words = cleanCell.split(/\s+/);
-                                        for (let i = 0; i < words.length - 1; i++) {
-                                            const w = words[i];
-                                            const next = words[i + 1];
-                                            if (monthMap[w] && /^\d{2,4}$/.test(next)) {
-                                                let year = next;
-                                                if (year.length === 2) year = '20' + year;
-                                                masterFileDate = `${year}-${monthMap[w]}-01`;
-                                                break;
-                                            }
-                                            if (/^\d{2,4}$/.test(w) && monthMap[next]) {
-                                                let year = w;
-                                                if (year.length === 2) year = '20' + year;
-                                                masterFileDate = `${year}-${monthMap[next]}-01`;
-                                                break;
-                                            }
-                                        }
-                                    }
+                                    if (dateColonMatch) masterFileDate = normalizeDate(dateColonMatch[1]);
                                 }
                             }
                         });
-
-                        // Check Sheet Name
-                        if (!masterFileDate) {
-                            const sheetNameClean = sheetName.replace(/[^a-zA-Z0-9]/g, ' ').toLowerCase();
-                            let match = sheetNameClean.match(/(\d{1,2}\s+\d{1,2}\s+\d{4})/);
-                            if (match) {
-                                masterFileDate = normalizeDate(match[0]);
-                            } else {
-                                const words = sheetNameClean.split(/\s+/).filter(w => w.length > 0);
-                                for (let i = 0; i < words.length - 1; i++) {
-                                    const w = words[i];
-                                    const next = words[i + 1];
-                                    if (monthMap[w] && /^\d{2,4}$/.test(next)) {
-                                        let year = next;
-                                        if (year.length === 2) year = '20' + year;
-                                        masterFileDate = `${year}-${monthMap[w]}-01`;
-                                        break;
-                                    }
-                                    if (/^\d{2,4}$/.test(w) && monthMap[next]) {
-                                        let year = w;
-                                        if (year.length === 2) year = '20' + year;
-                                        masterFileDate = `${year}-${monthMap[next]}-01`;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (masterFileDate) break; // Found a date, stop scanning sheets
+                        if (masterFileDate) break;
                     }
+                    debugLog.push(`Detected Sheet Date: ${masterFileDate}`);
                 }
 
                 // --- PASS 2: DATA EXTRACTION ---
@@ -204,77 +133,32 @@ export const parseExcelFile = (files) => {
 
                     if (!jsonData || jsonData.length === 0) return;
 
-                    // Detect File Type
                     const firstRows = jsonData.slice(0, 5).map(row => JSON.stringify(row).toLowerCase());
                     const contentString = firstRows.join(' ');
                     const headerRow = jsonData[0];
 
-                    if (!headerRow) return;
+                    if (!headerRow) {
+                        debugLog.push(`Skipping sheet ${sheetName}: No header row found.`);
+                        return;
+                    }
 
-                    // 1. Determine Date for this specific sheet
-                    // Priority: Sheet Specific -> Master File Date
                     let sheetSpecificDate = null;
-
-                    // (Reuse local detection logic just in case a sheet OVERRIDES the master date)
                     jsonData.slice(0, 5).forEach(row => {
                         const cellVal = (String(row[0] || '') + " " + String(row[1] || '')).toLowerCase();
                         if (cellVal.includes('date') || cellVal.includes('period') || cellVal.includes('month')) {
                             let match = cellVal.match(/(\d{1,2}[-/\s][a-zA-Z]+[-/\s]\d{2,4})/);
                             if (match) sheetSpecificDate = normalizeDate(match[0]);
-                            else {
-                                const cleanCell = cellVal.replace(/[^a-z0-9\s]/g, ' ');
-                                const words = cleanCell.split(/\s+/);
-                                for (let i = 0; i < words.length - 1; i++) {
-                                    const w = words[i];
-                                    const next = words[i + 1];
-                                    if (monthMap[w] && /^\d{2,4}$/.test(next)) {
-                                        let year = next;
-                                        if (year.length === 2) year = '20' + year;
-                                        sheetSpecificDate = `${year}-${monthMap[w]}-01`;
-                                        break;
-                                    }
-                                    if (/^\d{2,4}$/.test(w) && monthMap[next]) {
-                                        let year = w;
-                                        if (year.length === 2) year = '20' + year;
-                                        sheetSpecificDate = `${year}-${monthMap[next]}-01`;
-                                        break;
-                                    }
-                                }
-                            }
                         }
                     });
 
-                    // If still no sheet specific date, check sheet name
-                    if (!sheetSpecificDate) {
-                        const sheetNameClean = sheetName.replace(/[^a-zA-Z0-9]/g, ' ').toLowerCase();
-                        let match = sheetNameClean.match(/(\d{1,2}\s+\d{1,2}\s+\d{4})/);
-                        if (match) sheetSpecificDate = normalizeDate(match[0]);
-                        else {
-                            const words = sheetNameClean.split(/\s+/).filter(w => w.length > 0);
-                            for (let i = 0; i < words.length - 1; i++) {
-                                const w = words[i];
-                                const next = words[i + 1];
-                                if (monthMap[w] && /^\d{2,4}$/.test(next)) {
-                                    let year = next;
-                                    if (year.length === 2) year = '20' + year;
-                                    sheetSpecificDate = `${year}-${monthMap[w]}-01`;
-                                    break;
-                                }
-                                if (/^\d{2,4}$/.test(w) && monthMap[next]) {
-                                    let year = w;
-                                    if (year.length === 2) year = '20' + year;
-                                    sheetSpecificDate = `${year}-${monthMap[next]}-01`;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
                     // FINAL DECISION FOR THIS SHEET
                     const effectiveDate = sheetSpecificDate || masterFileDate;
+                    debugLog.push(`Sheet: ${sheetName}. EffectiveDate: ${effectiveDate}. Content: ${contentString.substring(0, 50)}...`);
 
                     // --- TYPE 1: ITEMWISE PROFIT ---
                     if (contentString.includes('item name') && contentString.includes('qty. sold')) {
+                        debugLog.push("Matched Type 1 (Itemwise Profit)");
+                        // ... existing Type 1 logic ...
                         const itemIdx = headerRow.findIndex(h => /item name/i.test(h));
                         const qtyIdx = headerRow.findIndex(h => /qty/i.test(h));
                         const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));
@@ -300,8 +184,9 @@ export const parseExcelFile = (files) => {
                         }
                     }
                     // --- TYPE 2: CUSTOMERWISE PROFIT ---
-                    // Relaxed check: Look for "Customer" AND ("Profit" OR "Margin")
                     else if (contentString.includes('customer') && (contentString.includes('profit') || contentString.includes('margin'))) {
+                        debugLog.push("Matched Type 2 (Customerwise Profit)");
+                        // ... existing Type 2 logic ...
                         const nameIdx = headerRow.findIndex(h => /customer name/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
                         const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));
@@ -325,88 +210,110 @@ export const parseExcelFile = (files) => {
                         }
                     }
                     // --- TYPE 3: SALES SUMMARY (Invoicewise) ---
-                    else if (contentString.includes('particulars') && contentString.includes('amount')) {
-                        let currentDate = null;
-                        let currentInvoiceNo = null;
+                    else if ((contentString.includes('particulars') || contentString.includes('description')) && contentString.includes('amount')) {
+                        debugLog.push("Matched Type 3 (Sales Summary)");
+                        let headerRowIdx = -1;
+                        let amountColIdx = -1;
+                        let partColIdx = -1;
+                        let qtyColIdx = -1;
+                        let dateColIdx = -1;
 
-                        // Dynamic Column Detection
-                        // Scan first 10 rows to find the "Amount" column index
-                        let amountColIdx = 7; // Default fallback
-
-                        for (let r = 0; r < Math.min(jsonData.length, 15); r++) {
-                            const rowStr = JSON.stringify(jsonData[r] || []).toLowerCase();
+                        for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
+                            const row = jsonData[i] || [];
+                            const rowStr = JSON.stringify(row).toLowerCase();
                             if (rowStr.includes('amount')) {
-                                const foundIdx = jsonData[r].findIndex(cell => String(cell).toLowerCase().includes('amount'));
-                                if (foundIdx !== -1) {
-                                    amountColIdx = foundIdx;
-                                    break;
-                                }
+                                headerRowIdx = i;
+                                row.forEach((cell, idx) => {
+                                    const str = String(cell).toLowerCase();
+                                    if (str.includes('amount')) amountColIdx = idx;
+                                    if (str.includes('particulars') || str.includes('description')) partColIdx = idx;
+                                    if (str.includes('quantity') || str.includes('qty')) qtyColIdx = idx;
+                                    if (str.includes('date')) dateColIdx = idx;
+                                });
+                                break;
                             }
                         }
 
-                        jsonData.forEach((row, index) => {
+                        if (headerRowIdx === -1) headerRowIdx = 0;
+                        if (amountColIdx === -1) amountColIdx = 7;
+                        if (partColIdx === -1) partColIdx = 1;
+
+                        debugLog.push(`Headers: Row=${headerRowIdx}, Particulars=${partColIdx}, Amount=${amountColIdx}, Qty=${qtyColIdx}`);
+
+                        let currentDate = null;
+                        let currentInvoiceNo = null;
+                        let extractedCount = 0;
+
+                        jsonData.slice(headerRowIdx + 1).forEach((row, index) => {
                             if (!row || row.length === 0) return;
-                            const particulars = String(row[1] || '');
 
-                            // Check for Header row (e.g. "INV-1165 Date : 01-Dec-25 Client : ...")
-                            // Robust regex to capture INV-XXXX and Date
-                            if (particulars.includes('INV-') || particulars.includes('Date :')) {
-                                // Extract Invoice No
-                                const invMatch = particulars.match(/(INV-[\w-]+)/i);
-                                if (invMatch) currentInvoiceNo = invMatch[1];
+                            const colParticulars = String(row[partColIdx] || '');
+                            const valStr = (colParticulars + " " + String(row[0] || '')).toLowerCase();
 
-                                // Extract Date
-                                const dateMatch = particulars.match(/Date\s*:\s*([\d-]+-[a-zA-Z]+-[\d]+)/);
-                                if (dateMatch) {
-                                    currentDate = normalizeDate(dateMatch[1]);
-                                }
+                            if (valStr.includes('inv') || valStr.includes('date')) {
+                                const invMatch = valStr.match(/(inv-[\w-]+)/i);
+                                if (invMatch) currentInvoiceNo = invMatch[1].toUpperCase();
+
+                                const dateMatch = valStr.match(/date\s*[:|-]\s*([\d-]+-[a-z]+-[\d]+)/i);
+                                if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
+                                if (!row[amountColIdx]) return;
                             }
 
-                            // Check for Transaction row
-                            // Ensure we have a date (either row specific or file level)
-                            if ((currentDate || effectiveDate) && row[amountColIdx] !== undefined) {
-                                const desc = particulars.toLowerCase();
-                                if (desc.includes('total') || desc.includes('sub total') || desc.includes('round off') || desc === '') return;
+                            if (row[amountColIdx] !== undefined) {
+                                const desc = colParticulars.toLowerCase();
+                                if (desc.includes('total') || desc === '') return;
 
                                 const amount = parseFloat(String(row[amountColIdx]).replace(/,/g, ''));
+
                                 if (!isNaN(amount) && amount > 0) {
-                                    const tDate = currentDate || effectiveDate;
-                                    mergedData.transactions.push({
-                                        id: `txn-${tDate}-${amount}-${row[1]}-${index}`, // Unique ID
-                                        parsedDate: tDate,
-                                        parsedAmount: amount,
-                                        parsedType: 'Sales',
-                                        originalDesc: row[1] || 'Item',
-                                        invoiceNo: currentInvoiceNo // Attach captured Invoice No
-                                    });
+                                    let finalDate = currentDate || effectiveDate;
+                                    if (dateColIdx !== -1 && row[dateColIdx]) finalDate = normalizeDate(row[dateColIdx]);
+
+                                    let qty = 1;
+                                    if (qtyColIdx !== -1 && row[qtyColIdx]) qty = parseFloat(String(row[qtyColIdx]).replace(/,/g, '')) || 1;
+
+                                    if (finalDate) {
+                                        mergedData.transactions.push({
+                                            id: `txn-${finalDate}-${amount}-${index}`,
+                                            parsedDate: finalDate,
+                                            parsedAmount: amount,
+                                            parsedQty: qty,
+                                            parsedType: 'Sales',
+                                            originalDesc: colParticulars || 'Item',
+                                            invoiceNo: currentInvoiceNo || `INV-MISSING-${index}`
+                                        });
+                                        extractedCount++;
+                                    } else {
+                                        if (extractedCount === 0) debugLog.push(`Type 3: Row skipped due to missing date. Row: ${valStr}`);
+                                    }
                                 }
                             }
                         });
+                        debugLog.push(`Type 3: Extracted ${extractedCount} transactions.`);
                     }
                     // --- TYPE 4: PURCHASES ---
                     else if (contentString.includes('supplier') && (contentString.includes('total amount') || contentString.includes('total'))) {
+                        debugLog.push("Matched Type 4 (Purchases)");
+                        // ... existing Type 4 logic ...
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /total amount/i.test(h));
                         const supplierIdx = headerRow.findIndex(h => /supplier/i.test(h));
-                        // Try to find Item/Product/Material column (Expanded Regex)
                         const itemIdx = headerRow.findIndex(h => /item|product|material|particulars|description/i.test(h));
 
                         if (dateIdx !== -1 && amountIdx !== -1) {
                             jsonData.slice(1).forEach((row, index) => {
-                                if (!row || !row[dateIdx]) return;
+                                if (!row) return;
+
                                 const supplier = row[supplierIdx] ? String(row[supplierIdx]).toLowerCase() : '';
-                                const dateStr = String(row[dateIdx]).toLowerCase();
-                                if (supplier.includes('total') || supplier === '' || dateStr.includes('total')) return;
+                                if (supplier.includes('total') || supplier === '') return;
 
                                 const amount = parseFloat(String(row[amountIdx]).replace(/,/g, ''));
                                 if (!isNaN(amount) && amount > 0) {
-                                    const pDate = normalizeDate(row[dateIdx]);
+                                    const pDate = (row[dateIdx] ? normalizeDate(row[dateIdx]) : null) || masterFileDate;
+                                    if (!pDate) return;
 
-                                    // Construct rich description: "Item Name - Supplier Name"
                                     let desc = row[supplierIdx] || 'Purchase';
-                                    if (itemIdx !== -1 && row[itemIdx]) {
-                                        desc = `${row[itemIdx]} - ${desc}`;
-                                    }
+                                    if (itemIdx !== -1 && row[itemIdx]) desc = `${row[itemIdx]} - ${desc}`;
 
                                     mergedData.transactions.push({
                                         id: `pur-${pDate}-${amount}-${supplier}-${index}`, // Unique ID
@@ -419,8 +326,10 @@ export const parseExcelFile = (files) => {
                             });
                         }
                     }
-                    // --- TYPE 5: POS EXPENSES REPORT (e.g. Expenses_01_11_2025...) ---
+                    // --- TYPE 5: POS EXPENSES REPORT ---
                     else if (contentString.includes('paid to') && contentString.includes('paid by') && contentString.includes('amount')) {
+                        debugLog.push("Matched Type 5 (Expenses)");
+                        // ... existing Type 5 logic ...
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
                         const typeIdx = headerRow.findIndex(h => /type/i.test(h));
@@ -429,8 +338,6 @@ export const parseExcelFile = (files) => {
                         if (dateIdx !== -1 && amountIdx !== -1) {
                             jsonData.slice(1).forEach((row, index) => {
                                 if (!row) return;
-
-                                // Skip total rows if any
                                 const dateStr = String(row[dateIdx] || '').toLowerCase();
                                 if (dateStr.includes('total')) return;
 
@@ -449,22 +356,21 @@ export const parseExcelFile = (files) => {
                             });
                         }
                     }
+                    else {
+                        debugLog.push(`NO MATCH (Skipped). Content: ${contentString.substring(0, 50)}...`);
+                    }
 
                 }); // end sheets loop
 
-                // --- PASS 3: BACKFILL UNDATED ITEMS/CUSTOMERS ---
-                // If Item/Customer sheets had no date, but Transactions did, use the Transaction Date.
-
+                // ... PASS 3 (Backfill) ...
                 // 1. Find the most common date/month in transactions
                 const dateCounts = {};
                 mergedData.transactions.forEach(t => {
                     if (t.parsedDate) {
-                        // Group by Month (YYYY-MM)
                         const monthKey = t.parsedDate.substring(0, 7) + '-01'; // 2025-11-01
                         dateCounts[monthKey] = (dateCounts[monthKey] || 0) + 1;
                     }
                 });
-
                 let inferredDate = null;
                 let maxCount = 0;
                 Object.entries(dateCounts).forEach(([date, count]) => {
@@ -473,8 +379,6 @@ export const parseExcelFile = (files) => {
                         inferredDate = date;
                     }
                 });
-
-                // 2. Apply Inferred Date to undated items/customers
                 if (inferredDate) {
                     mergedData.items.forEach(item => {
                         if (!item.parsedDate) item.parsedDate = inferredDate;
@@ -485,7 +389,7 @@ export const parseExcelFile = (files) => {
                 }
             } // end for files
 
-            resolve(mergedData);
+            resolve({ ...mergedData, debugLog }); // Include Logs
 
         } catch (error) {
             reject(error);

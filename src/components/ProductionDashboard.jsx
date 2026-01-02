@@ -143,34 +143,18 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
     }, [data, selectedMonth, selectedYear]);
 
     // --- Production Logic: Flow (Selected Month Only) ---
-    stockIn.forEach(item => {
-        // We only track flow specific metrics here if needed, 
-        // but currently stockIn balance (flow) isn't used for KPI, only Global Balance.
-        // Keeping loop if we want "Purchased This Month" later.
-    });
-
-    preProd.forEach(item => {
-        const mat = normalizeStr(item.material);
-        if (mat.includes('ginger')) {
-            gingerOut += item.weight;
-            gingerUsageList.push(item);
-        }
-        if (mat.includes('garlic')) {
-            garlicOut += item.weight;
-            garlicUsageList.push(item);
-        }
-    });
-
-    // Sort usage lists
-    gingerUsageList.sort((a, b) => b.date.localeCompare(a.date));
-    garlicUsageList.sort((a, b) => b.date.localeCompare(a.date));
+    // --- Production Input Logic ---
+    // User Request: Pre Production(excel) = Production Input(dashboard)
+    // We simply sum the filtered preProd array.
+    const totalPreProd = preProd.reduce((sum, item) => sum + item.weight, 0);
+    const sortedPreProd = [...preProd].sort((a, b) => b.date.localeCompare(a.date));
 
     // Helper to identify Opening Stock - MADE MORE ROBUST FOR DEBUGGING
     const isOS = (item) => {
         if (!item || !item.material) return false;
         // Fix: Convert to string safely before trim to prevent crash on numbers
         const matUpper = String(item.material).trim().toUpperCase();
-        if (matUpper.includes('PASTE')) return false;
+        if (matUpper.includes('PASTE') || matUpper.includes('PEELED')) return false;
 
         // Broader checks for Opening Stock
         const isOpening =
@@ -186,6 +170,9 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
     // If it already exists, this might shadow it, but if it's 'var' or function it might be fine.
     // Safest is to use a local name if we aren't sure.
 
+
+    // Helper: Normalize String (Renamed to avoid conflict)
+    const localNormalizeStr = (str) => String(str || '').toLowerCase().trim();
 
     // Calculate Monthly Ledger for Stock (Sequential)
     const monthlyStockLedger = useMemo(() => {
@@ -221,43 +208,40 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
             const osItems = inItemsAll.filter(isOS);
             const purchaseItems = inItemsAll.filter(i => !isOS(i));
 
-            // Explicit Opening
+            // Explicit Opening (Sum of OS rows for this month)
             const explicitGingerOS = osItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
             const explicitGarlicOS = osItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
-            const hasGingerOS = osItems.some(i => normalizeStr(i.material).includes('ginger') && !normalizeStr(i.material).includes('garlic'));
-            const hasGarlicOS = osItems.some(i => normalizeStr(i.material).includes('garlic') && !normalizeStr(i.material).includes('ginger'));
-
             // Purchases (In)
             const gingerIn = purchaseItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
             const garlicIn = purchaseItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
             // Usage (Out)
             const gingerOut = outItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
             const garlicOut = outItems.reduce((acc, i) => {
-                const norm = normalizeStr(i.material);
+                const norm = localNormalizeStr(i.material);
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
             // Calculate Opening for THIS month
-            // If explicit OS exists, use it. Else use running balance.
-            const gingerOpening = hasGingerOS ? explicitGingerOS : runningGinger;
-            const garlicOpening = hasGarlicOS ? explicitGarlicOS : runningGarlic;
+            // Logic Fix: Use Explicit OS (File Truth) if available. Else use Running Balance (Continuity).
+            const gingerOpening = explicitGingerOS > 0 ? explicitGingerOS : runningGinger;
+            const garlicOpening = explicitGarlicOS > 0 ? explicitGarlicOS : runningGarlic;
 
             // Calculate Closing
             const gingerClosing = gingerOpening + gingerIn - gingerOut;
@@ -273,8 +257,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
             };
         });
 
-        // Also add 'Overall' key for latest closing
-        // Overall should typically represent the CURRENT STOCK (Latest Closing)
+        // 'Overall' key for latest closing
         ledger['Overall'] = {
             ginger: { closing: runningGinger },
             garlic: { closing: runningGarlic }
@@ -356,7 +339,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
         }
     }
 
-    const totalPreProd = gingerOut + garlicOut; // Monthly Flow for Efficiency Calculation
     const efficiency = totalPreProd > 0 ? ((totalOutput / totalPreProd) * 100).toFixed(1) : 0;
 
     // Sort logs by date desc
@@ -437,65 +419,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
         </div>
     );
 
-    // Special Split Table for Production Input
-    const SplitInputTable = () => (
-        <div style={{
-            background: 'var(--glass-highlight)',
-            border: '1px solid var(--glass-border)',
-            borderRadius: '1rem',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            minHeight: '400px'
-        }}>
-            <div style={{
-                padding: '1rem',
-                background: 'var(--glass-highlight)',
-                borderBottom: '1px solid var(--glass-border)',
-                fontWeight: 600,
-                color: '#fbbf24',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-            }}>
-                <span>Production Input (Split)</span>
-                <span style={{ fontSize: '0.75rem', background: 'var(--glass-border)', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', color: 'var(--text-primary)' }}>
-                    {gingerUsageList.length + garlicUsageList.length} Records
-                </span>
-            </div>
 
-            <div style={{ overflowY: 'auto', flex: 1, paddingBottom: '0.5rem' }} className="custom-scrollbar">
-                {/* Ginger Section */}
-                <div style={{ padding: '0.75rem', background: 'var(--glass-highlight)', borderBottom: '1px solid var(--glass-border)', color: '#fbbf24', fontWeight: 600, fontSize: '0.875rem' }}>
-                    Ginger Used ({gingerOut.toFixed(0)} kg)
-                </div>
-                {gingerUsageList.map((item, i) => (
-                    <div key={`g-${i}`} style={{
-                        display: 'grid', gridTemplateColumns: '90px 1fr 70px', gap: '0.5rem', padding: '0.5rem 0.75rem',
-                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem'
-                    }}>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatDateFull(item.date)}</div>
-                        <div style={{ color: 'var(--text-primary)' }}>{item.material}</div>
-                        <div style={{ textAlign: 'right', color: '#fbbf24' }}>{item.weight.toFixed(1)}</div>
-                    </div>
-                ))}
-
-                {/* Garlic Section */}
-                <div style={{ padding: '0.75rem', background: 'var(--glass-highlight)', borderBottom: '1px solid var(--glass-border)', color: '#fbbf24', fontWeight: 600, fontSize: '0.875rem', marginTop: '1rem' }}>
-                    Garlic Used ({garlicOut.toFixed(0)} kg)
-                </div>
-                {garlicUsageList.map((item, i) => (
-                    <div key={`ga-${i}`} style={{
-                        display: 'grid', gridTemplateColumns: '90px 1fr 70px', gap: '0.5rem', padding: '0.5rem 0.75rem',
-                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem'
-                    }}>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatDateFull(item.date)}</div>
-                        <div style={{ color: 'var(--text-primary)' }}>{item.material}</div>
-                        <div style={{ textAlign: 'right', color: '#fbbf24' }}>{item.weight.toFixed(1)}</div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
 
     // Calculate Output Breakdown
     const outputBreakdown = useMemo(() => {
@@ -593,14 +517,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                     title="Production Input"
                     value={
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#fbbf24', fontWeight: 500 }}>
-                                <span>Ginger:</span>
-                                <span>{gingerOut.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#fbbf24', fontWeight: 500 }}>
-                                <span>Garlic:</span>
-                                <span>{garlicOut.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                            </div>
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
@@ -651,8 +567,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', height: '600px'
             }}>
                 <DataTable title="Stock In Log" count={sortedStockIn.length} color="#60a5fa" items={sortedStockIn} />
-                {/* Replaced standard Input Table with Split Table */}
-                <SplitInputTable />
+                <DataTable title="Production Input" count={sortedPreProd.length} color="#fbbf24" items={sortedPreProd} />
                 <DataTable title="Finished Output" count={sortedPostProd.length} color="#34d399" items={sortedPostProd} />
             </div>
 
@@ -660,5 +575,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
         </div>
     );
 };
+
+
 
 export default ProductionDashboard;

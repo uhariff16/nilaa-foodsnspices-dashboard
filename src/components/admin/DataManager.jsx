@@ -158,8 +158,8 @@ const DataManager = () => {
                     <button
                         onClick={() => setSelectedTable('transactions')}
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${selectedTable === 'transactions'
-                                ? 'bg-[#2563eb] text-white shadow-md'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-[#2563eb] text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <DollarSign size={14} />
@@ -168,8 +168,8 @@ const DataManager = () => {
                     <button
                         onClick={() => setSelectedTable('production_logs')}
                         className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${selectedTable === 'production_logs'
-                                ? 'bg-[#2563eb] text-white shadow-md'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-[#2563eb] text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <Package size={14} />
@@ -299,8 +299,8 @@ const DataManager = () => {
                                                 <>
                                                     <td className="p-4">
                                                         <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${row.payment_mode === 'Expense'
-                                                                ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                                             }`}>
                                                             {row.payment_mode}
                                                         </span>
@@ -317,9 +317,9 @@ const DataManager = () => {
                                                 <>
                                                     <td className="p-4">
                                                         <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${row.type === 'stock_in' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                                row.type === 'usage' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                                            row.type === 'usage' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                                                             }`}>
-                                                            {row.type.replace('_', ' ')}
+                                                            {(row.type || 'N/A').replace('_', ' ')}
                                                         </span>
                                                     </td>
                                                     <td className="p-4 text-slate-200 font-medium">{row.material}</td>

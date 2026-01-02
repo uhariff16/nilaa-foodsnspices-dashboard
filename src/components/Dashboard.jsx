@@ -543,32 +543,40 @@ const Dashboard = (props) => {
         let processedOpenStockKG = 0;
         let openStockDetails = [];
 
+        // New: Aggregation Maps
+        const procurementMap = {};
+        const productionMap = {};
+
         // 1. Procurement (Stock In)
         if (props.productionData?.stockIn) {
             let targetPrefix = selectedYear;
             if (selectedMonth !== 'Overall') {
                 const [selMonth, selYear] = selectedMonth.split(' ');
                 const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-                targetPrefix = selYear + '-' + monthMap[selMonth]; // string concat fix
+                targetPrefix = selYear + '-' + monthMap[selMonth];
             }
 
             props.productionData.stockIn.forEach(item => {
                 if (item.date && item.date.startsWith(targetPrefix)) {
                     const itemName = (item.material || item.item || '').trim().toUpperCase();
+                    const weight = parseFloat(item.weight || 0);
+
                     // Check if it is Opening Stock
                     if (itemName.startsWith('OS') || itemName.includes('OPENING') || itemName.includes('B/F')) {
-                        // Classify as Processed or Raw
-                        const weight = parseFloat(item.weight || 0);
                         if (itemName.includes('PASTE') || itemName.includes('PEELED')) {
                             processedOpenStockKG += weight;
-                            openStockDetails.push({ name: itemName, weight, type: 'Processed' });
                         } else {
                             rawOpenStockKG += weight;
-                            openStockDetails.push({ name: itemName, weight, type: 'Raw' });
                         }
+                        // Clean up OS name for display
+                        const cleanName = itemName.replace(/OS\s*[:|-]?\s*/i, '').trim();
+                        openStockDetails.push({ name: cleanName, weight, type: itemName.includes('PASTE') ? 'Processed' : 'Raw' });
                     } else {
                         // Regular Procurement
-                        procKG += parseFloat(item.weight || 0);
+                        procKG += weight;
+                        // Aggregate for details
+                        if (!procurementMap[itemName]) procurementMap[itemName] = 0;
+                        procurementMap[itemName] += weight;
                     }
                 }
             });
@@ -576,7 +584,12 @@ const Dashboard = (props) => {
             // 2. Production (Output)
             props.productionData.postProduction.forEach(item => {
                 if (item.date && item.date.startsWith(targetPrefix)) {
-                    prodKG += parseFloat(item.weight || 0);
+                    const weight = parseFloat(item.weight || 0);
+                    prodKG += weight;
+
+                    const matName = (item.material || 'Production').trim();
+                    if (!productionMap[matName]) productionMap[matName] = 0;
+                    productionMap[matName] += weight;
                 }
             });
         }
@@ -586,16 +599,22 @@ const Dashboard = (props) => {
             salesQty += parseFloat(item.qty || 0);
         });
 
+        // Helper to convert map to sorted array
+        const toSortedArray = (map) => {
+            return Object.entries(map)
+                .map(([name, weight]) => ({ name, weight }))
+                .sort((a, b) => b.weight - a.weight);
+        };
+
         return {
             procurement: procKG,
             production: prodKG,
             sales: salesQty,
             rawOpeningStock: rawOpenStockKG,
             processedOpeningStock: processedOpenStockKG,
-            openingStockDetails: openStockDetails.sort((a, b) => {
-                if (a.type !== b.type) return a.type === 'Raw' ? -1 : 1; // Raw first
-                return b.weight - a.weight; // Then by weight descending
-            })
+            openingStockDetails: openStockDetails.sort((a, b) => b.weight - a.weight),
+            procurementDetails: toSortedArray(procurementMap),
+            productionDetails: toSortedArray(productionMap)
         };
     }, [props.productionData, filteredItems, selectedMonth, selectedYear]);
 
@@ -1074,7 +1093,60 @@ const Dashboard = (props) => {
                                 </div>
 
                                 {/* Procurement Card */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)' }}>
+                                <div
+                                    style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)', position: 'relative', cursor: 'help' }}
+                                    onMouseEnter={() => setHoveredCard('procurement')}
+                                    onMouseLeave={() => setHoveredCard(null)}
+                                >
+                                    {/* Hover Tooltip - Styled exactly like Opening Stock */}
+                                    {hoveredCard === 'procurement' && materialStats.procurementDetails && materialStats.procurementDetails.length > 0 && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: '0',
+                                            width: '100%',
+                                            background: 'var(--bg-secondary)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.75rem',
+                                            zIndex: 1000,
+                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
+                                            marginTop: '0.5rem',
+                                            fontSize: '0.75rem'
+                                        }}>
+                                            <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.25rem' }}>Detailed Breakdown</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '200px', overflowY: 'auto' }}>
+                                                {materialStats.procurementDetails.slice(0, 8).map((item, idx) => (
+                                                    <div key={idx} style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '12px 1fr auto',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem',
+                                                        padding: '0.25rem 0'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '8px',
+                                                            height: '8px',
+                                                            borderRadius: '50%',
+                                                            background: '#f59e0b' // Amber for Procurement
+                                                        }} />
+                                                        <span style={{ color: 'var(--text-primary)', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {item.name}
+                                                        </span>
+                                                        <span style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>
+                                                            {item.weight.toLocaleString()} <span style={{ fontSize: '0.85em', color: 'var(--text-secondary)' }}>kg</span>
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                {materialStats.procurementDetails.length > 8 && (
+                                                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                                        + {materialStats.procurementDetails.length - 8} others
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Total Procurement</p>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f59e0b' }}>
                                         {materialStats.procurement.toLocaleString()} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>kg</span>
@@ -1083,7 +1155,60 @@ const Dashboard = (props) => {
                                 </div>
 
                                 {/* Production Card (Includes Processed OS) */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)' }}>
+                                <div
+                                    style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)', position: 'relative', cursor: 'help' }}
+                                    onMouseEnter={() => setHoveredCard('production')}
+                                    onMouseLeave={() => setHoveredCard(null)}
+                                >
+                                    {/* Hover Tooltip - Styled exactly like Opening Stock */}
+                                    {hoveredCard === 'production' && materialStats.productionDetails && materialStats.productionDetails.length > 0 && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: '0',
+                                            width: '100%',
+                                            background: 'var(--bg-secondary)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.75rem',
+                                            zIndex: 1000,
+                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
+                                            marginTop: '0.5rem',
+                                            fontSize: '0.75rem'
+                                        }}>
+                                            <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.25rem' }}>Detailed Breakdown</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '200px', overflowY: 'auto' }}>
+                                                {materialStats.productionDetails.slice(0, 8).map((item, idx) => (
+                                                    <div key={idx} style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '12px 1fr auto',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem',
+                                                        padding: '0.25rem 0'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '8px',
+                                                            height: '8px',
+                                                            borderRadius: '50%',
+                                                            background: '#3b82f6' // Blue for Production
+                                                        }} />
+                                                        <span style={{ color: 'var(--text-primary)', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {item.name}
+                                                        </span>
+                                                        <span style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>
+                                                            {item.weight.toLocaleString()} <span style={{ fontSize: '0.85em', color: 'var(--text-secondary)' }}>kg</span>
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                {materialStats.productionDetails.length > 8 && (
+                                                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                                        + {materialStats.productionDetails.length - 8} others
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Total Production</p>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#3b82f6' }}>
                                         {(materialStats.production + materialStats.processedOpeningStock).toLocaleString()} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>kg</span>
@@ -1094,7 +1219,7 @@ const Dashboard = (props) => {
                                 </div>
 
                                 {/* Sales Volume Card */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)' }}>
+                                <div className="group relative" style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)' }}>
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Sales Volume</p>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#10b981' }}>
                                         {materialStats.sales.toLocaleString()} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>qty/kg</span>

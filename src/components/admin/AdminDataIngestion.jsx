@@ -237,7 +237,7 @@ const AdminDataIngestion = () => {
         }
     };
 
-    // --- Folder Upload (Direct Execution) ---
+    // --- Folder Upload (Smart Batch Execution) ---
     const handleFolderUpload = async (e, type) => {
         const files = Array.from(e.target.files);
         if (!files || files.length === 0) return;
@@ -245,10 +245,7 @@ const AdminDataIngestion = () => {
         setLoading(true);
         setStatus({ type: 'idle', message: 'Scanning directory...' });
 
-        let successCount = 0;
-        let failCount = 0;
-        let errors = [];
-
+        // Filter valid Excel files
         const excelFiles = files.filter(f =>
             (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) && !f.name.startsWith('~$')
         );
@@ -259,31 +256,119 @@ const AdminDataIngestion = () => {
             return;
         }
 
-        for (const file of excelFiles) {
-            try {
-                if (type === 'production') {
-                    const data = await parseProductionFile([file]);
-                    let inserted = 0;
-                    if (data.stockIn.length) { await supabase.from('production_logs').insert(data.stockIn.map(d => ({ ...d, type: 'stock_in' }))); inserted++; }
-                    if (data.preProduction.length) { await supabase.from('production_logs').insert(data.preProduction.map(d => ({ ...d, type: 'usage' }))); inserted++; }
-                    if (data.postProduction.length) { await supabase.from('production_logs').insert(data.postProduction.map(d => ({ ...d, type: 'production' }))); inserted++; }
+        setStatus({ type: 'idle', message: `Processing ${excelFiles.length} files...` });
 
-                    if (inserted > 0) successCount++;
-                    else throw new Error("No data parsed");
+        try {
+            if (type === 'production') {
+                // 1. Parse ALL files at once (Parser supports multi-file)
+                const data = await parseProductionFile(excelFiles);
+
+                if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
+                    throw new Error("No valid production logs found in any file.");
                 }
-            } catch (err) {
-                failCount++;
-                errors.push(`${file.name}: ${err.message}`);
-            }
-        }
 
-        setLoading(false);
-        checkDbStatus();
-        if (prodFolderRef.current) prodFolderRef.current.value = "";
-        setStatus({
-            type: failCount === 0 ? 'success' : 'error',
-            message: `Batch Complete. Success: ${successCount}, Failed: ${failCount}`
-        });
+                // 2. STRATEGY: Content-Based Deduplication (Smart Sync - Batch)
+                // Calculate Global Date Range
+                const allDates = [
+                    ...data.stockIn.map(d => d.date),
+                    ...data.preProduction.map(d => d.date),
+                    ...data.postProduction.map(d => d.date)
+                ].filter(d => d).sort();
+
+                if (allDates.length === 0) throw new Error("No dates found in batch data.");
+                const minDate = allDates[0];
+                const maxDate = allDates[allDates.length - 1];
+
+                // 3. Fetch Existing Records for the ENTIRE Range
+                const { data: existingLogs, error: fetchError } = await supabase
+                    .from('production_logs')
+                    .select('date, material, weight, type')
+                    .gte('date', minDate)
+                    .lte('date', maxDate);
+
+                if (fetchError) throw new Error("Dedup Check Error: " + fetchError.message);
+
+                // 4. Create Signatures
+                const createSig = (d) => `${d.date}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                const existingSet = new Set(existingLogs.map(createSig));
+
+                // 5. Filter New Data
+                const filterNew = (items, type) => {
+                    return items
+                        .map(i => ({ ...i, type }))
+                        .filter(i => {
+                            const sig = createSig(i);
+                            return !existingSet.has(sig);
+                        })
+                        .map(({ id, source_sheet, source_file, ...rest }) => rest);
+                };
+
+                const newStockIn = filterNew(data.stockIn, 'stock_in');
+                const newPreProd = filterNew(data.preProduction, 'usage');
+                const newPostProd = filterNew(data.postProduction, 'production');
+
+                const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
+
+                if (totalNew === 0) {
+                    setStatus({ type: 'success', message: `Batch Skipped: All ${allDates.length} records in these ${excelFiles.length} files already exist.` });
+                    setLoading(false);
+                    return;
+                }
+
+                // 6. Bulk Insert
+                // Note: If dataset is HUGE, supabase might reject. But for < 1000 rows it's fine.
+                // If larger, we might need chunking. Assuming reasonable size for now.
+                if (newStockIn.length) {
+                    const { error } = await supabase.from('production_logs').insert(newStockIn);
+                    if (error) throw error;
+                }
+                if (newPreProd.length) {
+                    const { error } = await supabase.from('production_logs').insert(newPreProd);
+                    if (error) throw error;
+                }
+                if (newPostProd.length) {
+                    const { error } = await supabase.from('production_logs').insert(newPostProd);
+                    if (error) throw error;
+                }
+
+                setStatus({
+                    type: 'success',
+                    message: `Batch Sync Complete. Added ${totalNew} new records from ${excelFiles.length} files.`
+                });
+
+            } else if (type === 'sales') {
+                // Batch Process Sales
+                const result = await parseExcelFile(excelFiles);
+                const data = result.transactions || [];
+
+                if (data.length === 0) throw new Error("No valid transactions found in batch.");
+
+                const formattedData = data.map(record => ({
+                    date: record.parsedDate,
+                    amount: record.parsedAmount,
+                    payment_mode: record.parsedType,
+                    item_name: record.originalDesc,
+                    invoice_no: record.invoiceNo,
+                    quantity: record.parsedQty || 1
+                })).filter(r => r.date && r.amount && r.item_name);
+
+                if (formattedData.length === 0) throw new Error("No valid records found after filtering.");
+
+                const { error } = await supabase.from('transactions').insert(formattedData);
+                if (error) throw error;
+
+                setStatus({ type: 'success', message: `Batch Upload Complete. Uploaded ${formattedData.length} transactions from ${excelFiles.length} files.` });
+            }
+
+            checkDbStatus();
+            if (prodFolderRef.current) prodFolderRef.current.value = "";
+
+        } catch (err) {
+            console.error("Batch Upload Error:", err);
+            setStatus({ type: 'error', message: "Batch Failed: " + err.message });
+        } finally {
+            setLoading(false);
+        }
     };
 
     // --- Watcher Logic (Unchanged) ---

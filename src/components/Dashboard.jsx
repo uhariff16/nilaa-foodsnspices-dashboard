@@ -1409,6 +1409,18 @@ const Dashboard = (props) => {
                                         <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.8 }}> /kg</span>
                                     </div>
                                 </div>
+                                <div style={{ background: 'linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05))', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(167, 139, 250, 0.2)' }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                        Rec. Selling Price <span style={{ fontSize: '0.6rem', opacity: 0.7 }}>(30% Margin)</span>
+                                    </div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#a78bfa' }}>
+                                        {materialStats.production > 0
+                                            ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format((materialStats.totalProductionCost / materialStats.production) * 1.30)
+                                            : '₹0.00'
+                                        }
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.8 }}> /kg</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

@@ -15,10 +15,13 @@ const Login = () => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
+
         try {
             await login(email, password);
+            // navigate is handled by AuthContext listener, but we can double tap it here for speed
             navigate('/');
         } catch (err) {
+            console.error("Login failed:", err);
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -83,6 +86,7 @@ const Login = () => {
                         {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Sign In"}
                         {!isLoading && <Play className="w-4 h-4 fill-current" />}
                     </button>
+
                 </form>
 
                 <div className="mt-6 text-center text-xs text-slate-500">

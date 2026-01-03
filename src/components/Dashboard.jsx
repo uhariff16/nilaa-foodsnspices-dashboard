@@ -897,6 +897,15 @@ const Dashboard = (props) => {
                     <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={onReset}>
                         <RefreshCw size={18} style={{ marginRight: '0.5rem' }} /> Reset
                     </button>
+                    {props.isAdmin && (
+                        <button
+                            className="btn-primary"
+                            style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#3b82f6', boxShadow: 'none' }}
+                            onClick={() => window.location.href = '/admin'}
+                        >
+                            <Settings size={18} style={{ marginRight: '0.5rem' }} /> Admin
+                        </button>
+                    )}
                     <button className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', boxShadow: 'none' }} onClick={logout}>
                         <LogOut size={18} style={{ marginRight: '0.5rem' }} /> Logout
                     </button>

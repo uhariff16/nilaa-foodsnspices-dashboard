@@ -219,6 +219,7 @@ const DashboardLayout = () => {
             onSync={handleSync}
             isSyncing={isSyncing}
             debugError={debugError}
+            isAdmin={role === 'admin'}
         />
     );
 };
@@ -230,9 +231,23 @@ const App = () => {
             <Router>
                 <ErrorBoundary>
                     <Routes>
-                        <Route path="/login" element={<Navigate to="/" replace />} />
-                        <Route path="/admin" element={<AdminPanel />} />
-                        <Route path="/" element={<DashboardLayout />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route
+                            path="/admin"
+                            element={
+                                <ProtectedRoute adminOnly={true}>
+                                    <AdminPanel />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/"
+                            element={
+                                <ProtectedRoute>
+                                    <DashboardLayout />
+                                </ProtectedRoute>
+                            }
+                        />
                     </Routes>
                 </ErrorBoundary>
             </Router>

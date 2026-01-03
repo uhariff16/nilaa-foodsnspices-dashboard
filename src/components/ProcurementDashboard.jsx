@@ -109,12 +109,27 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             return !isOS;
         });
 
-        // Group by Material Name
+        // Group by Material Name from Stock In
         const groups = {};
         procurementItems.forEach(item => {
             let name = String(item.material || 'Unknown').trim();
             name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
             groups[name] = (groups[name] || 0) + item.weight;
+        });
+
+        // NEW: Ensure items from Purchases are also represented (even if 0 weight)
+        // This ensures the Card appears even if only Financial data exists (User Case: Missing Card)
+        filteredPurchases.forEach(p => {
+            const desc = (p.originalDesc || p.supplier || '').toLowerCase();
+            let name = null;
+            if (desc.includes('ginger') || desc.includes('jayakodi')) name = 'Ginger';
+            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk')) name = 'Garlic';
+
+            if (name) {
+                // Initialize with 0 weight if not present. 
+                // We do NOT add weight here because Purchase weight is unreliable/not parsed.
+                if (!groups[name]) groups[name] = 0;
+            }
         });
 
         const total = Object.values(groups).reduce((a, b) => a + b, 0);

@@ -106,7 +106,8 @@ const DashboardLayout = () => {
                 parsedAmount: Number(t.amount),
                 parsedType: t.payment_mode === 'Expense' ? 'Expense' : 'Sales',
                 originalDesc: t.item_name || 'Item',
-                invoiceNo: t.invoice_no
+                invoiceNo: t.invoice_no,
+                parsedQty: Number(t.quantity || 1)
             }));
 
             // 2. Fetch Production Logs
@@ -222,7 +223,8 @@ const DashboardLayout = () => {
     );
 };
 
-function App() {
+const App = () => {
+    console.log("App Component Reloaded - Debug Check");
     return (
         <AuthProvider>
             <Router>

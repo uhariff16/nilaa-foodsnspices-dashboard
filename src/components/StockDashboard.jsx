@@ -219,7 +219,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             const weight = parseFloat(item.weight || 0);
 
             // Is Opening Stock?
-            const isOS = name.startsWith('OS') || name.includes('OPENING') || name.includes('B/F');
+            const isOS = name.startsWith('OS') || name.startsWith('O.S') || name.includes('OPENING') || name.includes('B/F');
 
             // Current Month Activity
             if (isMatch(item.date)) {
@@ -256,14 +256,21 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
         // 5. Process Sales (Paste Out)
         (salesData || []).forEach(item => {
-            if (item.parsedDate && item.parsedDate.startsWith(targetPrefix)) {
-                const name = (item.name || '').toUpperCase();
-                classifyAndAdd(name, parseFloat(item.qty || 0), 'out');
-            }
+            // Note: salesData is now pre-filtered/aggregated by Dashboard.jsx (filteredItems)
+            // So we don't check date here, we just sum up what we got.
+            const name = (item.name || '').toUpperCase();
+            classifyAndAdd(name, parseFloat(item.qty || 0), 'out');
         });
 
         // Detect if we have data for the next month (to enable reconciliation)
         const hasNextMonthData = productionData?.stockIn?.some(item => isNextMonthMatch(item.date));
+
+        // DEBUG LOGGING
+        // console.log('DEBUG: Stock Dashboard Calc', {
+        //    selectedMonth, targetPrefix, nextMonthPrefix, hasNextMonthData,
+        //    salesDataLen: salesData?.length,
+        //    sampleSales: salesData?.slice(0, 3)
+        // });
 
         const close = (obj) => obj.open + obj.in - obj.out;
 
@@ -271,6 +278,10 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         // assume the difference is IMPLICIT SALES defined by the user ("Deduct shortage from sales").
         // Formula: Sales (Out) = (Open + In) - NextOpen
         const reconcile = (obj, name) => {
+            // console.log(`DEBUG: Reconcile check for ${name}`, {
+            //    out: obj.out, open: obj.open, in: obj.in, nextOpen: obj.nextOpen, hasNextMonthData
+            // });
+
             // Only apply to Processed Goods where Sales Qty is often missing
             // Relaxed check: logic applies if Out is negligible (< 1kg)
             if (hasNextMonthData && obj.out < 1 && (obj.open > 0 || obj.in > 0)) {
@@ -287,7 +298,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             return { ...obj, closing: close(obj) };
         };
 
-        return {
+        const ledgers = {
             ginger: { ...ginger, closing: close(ginger) },
             garlic: { ...garlic, closing: close(garlic) },
             // Reconcile Processed items as per user request
@@ -297,6 +308,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             gingerPaste: reconcile(gingerPaste, 'Ginger Paste'),
             garlicPaste: reconcile(garlicPaste, 'Garlic Paste')
         };
+        // console.log('DEBUG: Final Ledgers', ledgers);
+        return ledgers;
 
     }, [productionData, salesData, selectedMonth, selectedYear]);
 

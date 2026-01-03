@@ -441,7 +441,7 @@ const Dashboard = (props) => {
                 fallbackMap[name].revenue += (t.parsedAmount || 0);
                 fallbackMap[name].count += 1;
                 // Estimate Qty as count if unknown? Or just 1. Using 1 per tx as basic proxy.
-                fallbackMap[name].qty += 1;
+                fallbackMap[name].qty += (t.parsedQty || 1);
             });
             result = Object.values(fallbackMap);
         }
@@ -543,11 +543,16 @@ const Dashboard = (props) => {
         let processedOpenStockKG = 0;
         let openStockDetails = [];
 
+
         // New: Aggregation Maps
         const procurementMap = {};
         const productionMap = {};
 
         // 1. Procurement (Stock In)
+        let totalMaterialCost = 0;
+        let totalLabourCost = 0;
+        let totalOverheadCost = 0;
+
         if (props.productionData?.stockIn) {
             let targetPrefix = selectedYear;
             if (selectedMonth !== 'Overall') {
@@ -595,9 +600,42 @@ const Dashboard = (props) => {
         }
 
         // 3. Sales Qty (from filteredItems which is already filtered by date)
+        const salesDetails = [];
         filteredItems.forEach(item => {
-            salesQty += parseFloat(item.qty || 0);
+            const qty = parseFloat(item.qty || 0);
+            if (qty > 0) {
+                salesQty += qty;
+                salesDetails.push({ name: item.name, weight: qty });
+            }
+
         });
+
+        // Cost Calculation (Iterate over filteredTransactions to get Expenses)
+        filteredTransactions.forEach(item => {
+            if (item.parsedType === 'Expense') {
+                const amount = parseFloat(item.parsedAmount || 0);
+                const nameUpper = (item.originalDesc || item.name || '').toUpperCase();
+
+                // 1. Material Cost (Whitelist)
+                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+                const isMaterial = materialKeywords.some(keyword => nameUpper.includes(keyword));
+
+                // 2. Direct Labour (Keywords)
+                const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
+                const isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
+
+                if (isMaterial) {
+                    totalMaterialCost += amount;
+                } else if (isLabour) {
+                    totalLabourCost += amount;
+                } else {
+                    // 3. Overhead (Everything else)
+                    totalOverheadCost += amount;
+                }
+            }
+        });
+
+        // Helper to convert map to sorted array
 
         // Helper to convert map to sorted array
         const toSortedArray = (map) => {
@@ -613,8 +651,13 @@ const Dashboard = (props) => {
             rawOpeningStock: rawOpenStockKG,
             processedOpeningStock: processedOpenStockKG,
             openingStockDetails: openStockDetails.sort((a, b) => b.weight - a.weight),
+            materialCost: totalMaterialCost,
+            labourCost: totalLabourCost,
+            overheadCost: totalOverheadCost,
+            totalProductionCost: totalMaterialCost + totalLabourCost + totalOverheadCost,
             procurementDetails: toSortedArray(procurementMap),
-            productionDetails: toSortedArray(productionMap)
+            productionDetails: toSortedArray(productionMap),
+            salesDetails: salesDetails.sort((a, b) => b.weight - a.weight)
         };
     }, [props.productionData, filteredItems, selectedMonth, selectedYear]);
 
@@ -1219,7 +1262,67 @@ const Dashboard = (props) => {
                                 </div>
 
                                 {/* Sales Volume Card */}
-                                <div className="group relative" style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)' }}>
+                                <div
+                                    className="group relative"
+                                    style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-highlight)', position: 'relative', cursor: 'help' }}
+                                    onMouseEnter={() => setHoveredCard('sales')}
+                                    onMouseLeave={() => setHoveredCard(null)}
+                                >
+                                    {/* Hover Tooltip */}
+                                    {hoveredCard === 'sales' && materialStats.salesDetails && materialStats.salesDetails.length > 0 && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: '0',
+                                            width: '100%',
+                                            background: 'var(--bg-secondary)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.75rem',
+                                            zIndex: 1000,
+                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
+                                            marginTop: '0.5rem',
+                                            fontSize: '0.75rem'
+                                        }}>
+                                            <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.25rem' }}>Sales Breakdown (Live)</p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '200px', overflowY: 'auto' }}>
+                                                {materialStats.salesDetails.slice(0, 8).map((item, idx) => {
+                                                    const nameUpper = (item.name || '').toUpperCase();
+                                                    const isProcessed = nameUpper.includes('PASTE') || nameUpper.includes('PEELED');
+                                                    const dotColor = isProcessed ? '#f472b6' : '#22d3ee';
+                                                    console.log(`SalesItem: ${item.name} | Processed: ${isProcessed} | Color: ${dotColor}`);
+                                                    return (
+                                                        <div key={idx} style={{
+                                                            display: 'grid',
+                                                            gridTemplateColumns: '12px 1fr auto',
+                                                            alignItems: 'center',
+                                                            gap: '0.5rem',
+                                                            padding: '0.25rem 0'
+                                                        }}>
+                                                            <div style={{
+                                                                width: '8px',
+                                                                height: '8px',
+                                                                borderRadius: '50%',
+                                                                background: dotColor
+                                                            }} />
+                                                            <span style={{ color: 'var(--text-primary)', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {item.name}
+                                                            </span>
+                                                            <span style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>
+                                                                {item.weight.toLocaleString()} <span style={{ fontSize: '0.85em', color: 'var(--text-secondary)' }}>qty</span>
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {materialStats.salesDetails.length > 8 && (
+                                                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                                        + {materialStats.salesDetails.length - 8} others
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Sales Volume</p>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#10b981' }}>
                                         {materialStats.sales.toLocaleString()} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>qty/kg</span>
@@ -1245,6 +1348,68 @@ const Dashboard = (props) => {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Cost Analysis Card */}
+                        <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {/* DEBUG SECTION */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <DollarSign size={18} color="#f59e0b" />
+                                        Production Cost Analysis
+                                    </h3>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                        Ginger Wastage: <span style={{ color: '#f87171', fontWeight: 600 }}>10%</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                        Garlic Wastage: <span style={{ color: '#f87171', fontWeight: 600 }}>20%</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: 600, background: 'rgba(52, 211, 153, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
+                                        Yield: {materialStats.procurement > 0 ? ((materialStats.production / materialStats.procurement) * 100).toFixed(1) + '%' : '-'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Key Metrics Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Material Cost</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f59e0b' }}>
+                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.materialCost)}
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Direct Labour</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f472b6' }}>
+                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.labourCost)}
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Overhead</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#a78bfa' }}>
+                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.overheadCost)}
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <div style={{ fontSize: '0.7rem', color: 'white' }}>Total Mfg Cost</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>
+                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.totalProductionCost)}
+                                    </div>
+                                </div>
+                                <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05))', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#4ade80' }}>Cost Per KG</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#4ade80' }}>
+                                        {materialStats.production > 0
+                                            ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(materialStats.totalProductionCost / materialStats.production)
+                                            : '₹0.00'
+                                        }
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.8 }}> /kg</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <Charts
@@ -1360,6 +1525,86 @@ const Dashboard = (props) => {
                                     />
                                 );
                             })()}
+                        </div>
+
+                        {/* New: Item Wise Sales Summary Card */}
+                        <div className="glass-panel" style={{
+                            background: 'var(--glass-highlight)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: '1rem',
+                            overflow: 'hidden',
+                            display: 'flex', flexDirection: 'column',
+                            height: '400px', // Fixed height for scrolling
+                            marginBottom: '2rem'
+                        }}>
+                            <div style={{
+                                padding: '1rem',
+                                background: 'var(--bg-primary)',
+                                borderBottom: '1px solid var(--glass-border)',
+                                fontWeight: 600,
+                                color: 'var(--text-primary)',
+                                display: 'flex', justifyContent: 'space-between'
+                            }}>
+                                <span>Sales Summary (Item Wise)</span>
+                                <span style={{ fontSize: '0.75rem', background: 'var(--glass-border)', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', color: 'var(--text-secondary)' }}>
+                                    {Object.keys(salesTransactions.reduce((acc, t) => {
+                                        const k = t.name || 'Unknown';
+                                        acc[k] = 1;
+                                        return acc;
+                                    }, {})).length} Items
+                                </span>
+                            </div>
+                            <div style={{
+                                display: 'grid', gridTemplateColumns: '1fr 80px 100px 120px', padding: '0.75rem',
+                                borderBottom: '1px solid var(--glass-border)',
+                                fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase'
+                            }}>
+                                <div>Item Name</div>
+                                <div style={{ textAlign: 'center' }}>Count</div>
+                                <div style={{ textAlign: 'right' }}>Qty</div>
+                                <div style={{ textAlign: 'right' }}>Revenue</div>
+                            </div>
+                            <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
+                                {(() => {
+                                    // Inline Aggregation Logic
+                                    const summary = {};
+                                    salesTransactions.forEach(t => {
+                                        const key = t.name || 'Unknown';
+                                        if (!summary[key]) {
+                                            summary[key] = { name: key, qty: 0, amount: 0, count: 0 };
+                                        }
+                                        summary[key].qty += (t.qty || 0);
+                                        summary[key].amount += (t.parsedAmount || 0);
+                                        summary[key].count += 1;
+                                    });
+                                    const sortedItems = Object.values(summary).sort((a, b) => b.qty - a.qty);
+
+                                    if (sortedItems.length === 0) {
+                                        return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No sales data found.</div>;
+                                    }
+
+                                    return sortedItems.map((item, i) => (
+                                        <div key={i} style={{
+                                            display: 'grid', gridTemplateColumns: '1fr 80px 100px 120px', padding: '0.75rem',
+                                            borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                            background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                                        }}>
+                                            <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
+                                                {item.name}
+                                            </div>
+                                            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                                {item.count}
+                                            </div>
+                                            <div style={{ textAlign: 'right', color: '#34d399', fontWeight: 500 }}>
+                                                {item.qty.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
+                                            </div>
+                                            <div style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
+                                                {formatCurrency(item.amount)}
+                                            </div>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
                         </div>
                         <SalesSummaryTable
                             transactions={salesTransactions}
@@ -1559,7 +1804,7 @@ const Dashboard = (props) => {
 
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
             {activeTab === 'customers' && <CustomerAnalysis data={filteredCustomers} />}
-            {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={data.items} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
+            {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {
                 activeTab === 'procurement' && (

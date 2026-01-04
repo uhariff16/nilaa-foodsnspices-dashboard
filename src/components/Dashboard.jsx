@@ -11,8 +11,9 @@ import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -53,9 +54,11 @@ const Dashboard = (props) => {
     // Persist active tab to restore after refresh
     const [activeTab, setActiveTab] = useState(() => {
         const saved = localStorage.getItem('dashboard_active_tab');
-        const allowed = ['overview', 'sales', 'expenses', 'items', 'customers', 'production', 'procurement'];
+        const allowed = ['overview', 'sales', 'expenses', 'items', 'customers', 'production', 'procurement', 'stock', 'simulator'];
         return allowed.includes(saved) ? saved : 'overview';
     });
+
+
 
     // Theme State
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -740,6 +743,86 @@ const Dashboard = (props) => {
         };
     }, [props.productionData, filteredItems, selectedMonth, selectedYear]);
 
+    // [NEW] Previous Month Stats for Simulator Defaults
+    // [NEW] Previous Month Stats for Simulator Defaults
+    const previousMonthStats = React.useMemo(() => {
+        let referenceMonth = selectedMonth;
+
+        // Handling "Overall" or unselected state: Default to the latest available month
+        if (!referenceMonth || referenceMonth === 'Overall') {
+            // availableMonths is sorted [Overall, Jan 2024, Feb 2024...]. Take the last one.
+            if (availableMonths && availableMonths.length > 1) {
+                referenceMonth = availableMonths[availableMonths.length - 1];
+            } else {
+                return null; // No data available at all
+            }
+        }
+
+        const [curMonth, curYear] = referenceMonth.split(' ');
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let mIndex = monthNames.indexOf(curMonth);
+
+        // Safety check
+        if (mIndex === -1) return null;
+
+        let prevMIndex = mIndex - 1;
+        let prevYear = parseInt(curYear);
+
+        if (prevMIndex < 0) {
+            prevMIndex = 11;
+            prevYear -= 1;
+        }
+        const prevMonthStr = `${monthNames[prevMIndex]} ${prevYear}`;
+
+        // Target Prefix for Production Data (YYYY-MM)
+        const prevMonthNum = String(prevMIndex + 1).padStart(2, '0');
+        const targetPrefix = `${prevYear}-${prevMonthNum}`;
+
+        // 1. Calculate Output for Previous Month
+        let prevOutput = 0;
+        if (props.productionData?.postProduction) {
+            props.productionData.postProduction.forEach(item => {
+                if (item.date && item.date.startsWith(targetPrefix)) {
+                    prevOutput += parseFloat(item.weight || 0);
+                }
+            });
+        }
+
+        // 2. Calculate Expenses for Previous Month
+        let prevLabour = 0;
+        let prevOverhead = 0;
+
+        if (data.transactions) {
+            data.transactions.forEach(t => {
+                if (t.parsedDate && t.parsedDate.startsWith(targetPrefix)) {
+                    const type = t.parsedType;
+                    if (type === 'Expense') {
+                        const amount = parseFloat(t.parsedAmount || 0);
+                        const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
+
+                        const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
+                        const isLabour = labourKeywords.some(k => nameUpper.includes(k));
+
+                        const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+                        const isMaterial = materialKeywords.some(k => nameUpper.includes(k));
+
+                        if (isLabour) prevLabour += amount;
+                        else if (!isMaterial) prevOverhead += amount;
+                    }
+                }
+            });
+        }
+
+        return {
+            month: prevMonthStr,
+            output: prevOutput,
+            labourTotal: prevLabour,
+            overheadTotal: prevOverhead,
+            labourPerKg: prevOutput > 0 ? prevLabour / prevOutput : 0,
+            overheadPerKg: prevOutput > 0 ? prevOverhead / prevOutput : 0
+        };
+    }, [selectedMonth, data.transactions, props.productionData, availableMonths]);
+
     const lastUpdatedInfo = React.useMemo(() => {
         let maxSales = '';
         let maxProd = '';
@@ -1137,6 +1220,21 @@ const Dashboard = (props) => {
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         <ShoppingCart size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
                         Procurement
+                    </div>
+                </button>
+                {/* [NEW] Simulator Tab */}
+                <button
+                    onClick={() => setActiveTab('simulator')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.5rem 0',
+                        color: activeTab === 'simulator' ? '#3b82f6' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'simulator' ? '2px solid #3b82f6' : '2px solid transparent',
+                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'simulator' ? 600 : 400
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <Calculator size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Simulator
                     </div>
                 </button>
             </div >
@@ -1918,6 +2016,14 @@ const Dashboard = (props) => {
                     />
                 )
             }
+
+            {/* [NEW] Simulator Tab Content */}
+            {activeTab === 'simulator' && (
+                <CostSimulator
+                    previousMonthStats={previousMonthStats}
+                    selectedMonth={selectedMonth}
+                />
+            )}
 
         </div >
     );

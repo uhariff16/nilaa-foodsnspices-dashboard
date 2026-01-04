@@ -431,6 +431,16 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
         return Object.entries(breakdown).sort((a, b) => b[1] - a[1]); // Sort by weight desc
     }, [postProd]);
 
+    // Calculate Input Breakdown
+    const inputBreakdown = useMemo(() => {
+        const breakdown = {};
+        preProd.forEach(item => {
+            const name = item.material || 'Unknown Material';
+            breakdown[name] = (breakdown[name] || 0) + item.weight;
+        });
+        return Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+    }, [preProd]);
+
     if (stockIn.length === 0 && postProd.length === 0) {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '16rem', color: 'var(--text-secondary)' }}>
@@ -517,6 +527,12 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                     title="Production Input"
                     value={
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
+                            {inputBreakdown.map(([name, weight]) => (
+                                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#f59e0b', fontWeight: 500 }}>
+                                    <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</span>
+                                    <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                </div>
+                            ))}
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'

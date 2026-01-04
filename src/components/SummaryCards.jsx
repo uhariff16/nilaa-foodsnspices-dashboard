@@ -39,16 +39,22 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
 
 const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
     const stats = useMemo(() => {
+        let summarySales = 0;
+        let summaryProfit = 0;
         let sales = 0;
         let expenses = 0;
-        const invoiceSet = new Set(); // To track unique invoices
-        let legacyInvoiceCount = 0;   // Fallback for items without invoiceNo
+        const invoiceSet = new Set(); // [FIX] Re-initialize missing variable
+        let legacyInvoiceCount = 0;   // [FIX] Re-initialize missing variable
 
         data.forEach(item => {
             const type = String(item.parsedType || item.Type || '').toLowerCase();
             const amt = parseFloat(item.parsedAmount || item.Amount || 0);
 
-            if (type.includes('sale') || type.includes('income') || type.includes('revenue')) {
+            if (type === 'profitsummary') {
+                summarySales += amt;
+                summaryProfit += (item.profit || item.parsedProfit || 0);
+            }
+            else if (type.includes('sale') || type.includes('income') || type.includes('revenue')) {
                 sales += amt;
                 if (item.invoiceNo) {
                     invoiceSet.add(item.invoiceNo);
@@ -69,17 +75,24 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
             }
         });
 
-        // Add Manual Expenses
+        // Add Manual Expenses (Only if not using Summary Override? No, manual expenses might still apply)
         expenses += (parseFloat(manualExpenses.salary) || 0);
         expenses += (parseFloat(manualExpenses.daily) || 0);
 
-        const netProfit = sales - expenses;
+        let netProfit = sales - expenses;
+        // [FIX] Override with Summary PROFIT only.
+        // User Logic: Total Sales should be from INVOICES (calculated above in 'sales' var).
+        // Total Profit should be from PROFIT FILE (summaryProfit).
+        // Expenses need to be derived to balance: Sales - Expenses = Profit  =>  Expenses = Sales - Profit.
+        if (summarySales > 0) {
+            // [FIX] User Request: Net Profit MUST be (Sales - Expenses).
+            // We no longer override it with the file's profit.
+            // netProfit = summaryProfit; 
+        }
+
         const margin = sales > 0 ? (netProfit / sales) * 100 : 0;
 
-        // Total Invoices = Unique Invoice Nos + (orphan lines if any)
-        // Note: Ideally all modern parser lines have InvoiceNo. 
-        // If we have mixed data, simple addition might double count if one line has ID and other doesn't for same bill? 
-        // But orphan lines usually mean legacy data. We'll sum them.
+        // Total Invoices
         const invoiceCount = invoiceSet.size + legacyInvoiceCount;
 
         return { sales, expenses, netProfit, margin, invoiceCount };

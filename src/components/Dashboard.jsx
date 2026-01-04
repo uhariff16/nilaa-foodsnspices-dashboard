@@ -393,6 +393,49 @@ const Dashboard = (props) => {
         }
     };
 
+    // 3. Process Customers (Dynamic Aggregation from Transactions)
+    const aggregatedCustomers = React.useMemo(() => {
+        const custMap = {};
+
+        // Aggregate from Filtered Transactions
+        filteredTransactions.forEach(t => {
+            if (t.parsedType === 'Sales' && t.customerName) {
+                // Determine Customer Name (clean it up)
+                const name = t.customerName.trim();
+                // Skip generic counters if needed, but for now capture all
+                if (!custMap[name]) {
+                    custMap[name] = { name: name, revenue: 0, profit: 0, count: 0 };
+                }
+                custMap[name].revenue += t.parsedAmount;
+                // [NEW] Accumulate Profit if available in DB
+                custMap[name].profit += (t.profit || 0);
+                custMap[name].count++;
+            }
+        });
+
+        // Convert Map to Array
+        let dynamicCustomers = Object.values(custMap);
+
+        // Fallback: If no dynamic names found (old data?), try to use the legacy customers array if populated
+        if (dynamicCustomers.length === 0 && data.customers && data.customers.length > 0) {
+            return data.customers.filter(c => {
+                if (!c.parsedDate) return false;
+                if (!c.parsedDate.startsWith(selectedYear)) return false;
+                // Simple matching for month
+                if (selectedMonth === 'Overall') return true;
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const [y, m, d] = c.parsedDate.split('-');
+                // Parsing depends on format, but assuming DB standard YYYY-MM-DD
+                if (!m) return false;
+                const my = `${monthNames[parseInt(m) - 1]} ${y}`;
+                return my === selectedMonth;
+            });
+        }
+
+        return dynamicCustomers.sort((a, b) => b.revenue - a.revenue);
+
+    }, [filteredTransactions, data.customers, selectedMonth, selectedYear]);
+
     // 3. Filter Items and Customers
     const filteredItems = React.useMemo(() => {
         let itemsToFilter = data.items || [];
@@ -611,8 +654,25 @@ const Dashboard = (props) => {
         });
 
         // Cost Calculation (Iterate over filteredTransactions to get Expenses)
+        // Cost Calculation (Iterate over filteredTransactions to get Expenses)
+        let totalSummaryProfit = 0;
+        let totalInvoiceSales = 0;
+        let granularMaterial = 0;
+        let granularLabour = 0;
+        let granularOverhead = 0;
+        let hasSummary = false;
+
         filteredTransactions.forEach(item => {
-            if (item.parsedType === 'Expense') {
+            const type = item.parsedType;
+            if (type === 'ProfitSummary') {
+                hasSummary = true;
+                totalSummaryProfit += parseFloat(item.profit || item.parsedProfit || 0);
+            }
+            else if (['Sales', 'Sales Summary'].includes(type) || (type && String(type).toLowerCase().includes('sale') && type !== 'ProfitSummary')) {
+                // Accumulate Invoice Sales for Consistency Calculation
+                totalInvoiceSales += parseFloat(item.parsedAmount || 0);
+            }
+            else if (type === 'Expense') {
                 const amount = parseFloat(item.parsedAmount || 0);
                 const nameUpper = (item.originalDesc || item.name || '').toUpperCase();
 
@@ -625,15 +685,34 @@ const Dashboard = (props) => {
                 const isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
 
                 if (isMaterial) {
-                    totalMaterialCost += amount;
+                    granularMaterial += amount;
                 } else if (isLabour) {
-                    totalLabourCost += amount;
+                    granularLabour += amount;
                 } else {
                     // 3. Overhead (Everything else)
-                    totalOverheadCost += amount;
+                    granularOverhead += amount;
                 }
             }
         });
+
+        // [FIX] Priority Logic: If Summary COGS exists, it represents the TRUE Total Cost.
+        // We assume Granular Labour/Overhead are explicit and correct, so the remainder of COGS is Material.
+
+        // [FIX] Priority Logic: Align with Overview Tab.
+        // Total Cost = Total Invoice Sales (from Type 3) - Total Profit (from Type 2).
+
+        let finalMaterialCost = granularMaterial;
+        let finalLabourCost = granularLabour;
+        let finalOverheadCost = granularOverhead;
+        let finalTotalCost = granularMaterial + granularLabour + granularOverhead;
+
+        // [FIX] Priority Logic: Removed Derived Cost. 
+        // User wants Total Cost to match the "Expenses" tab (Actual Summed Expenses).
+        // Therefore, we trust granularMaterial + granularLabour + granularOverhead.
+
+        // Note: If Profit Summary provides COGS, we are IGNORING it in favor of Granular Expenses as per user request.
+        // Unless we want to ADD it? But user said "Expense Tab is Correct" (2.48L). 
+        // Expense Tab contains Purchases (Material) + Expenses. So Sum is correct.
 
         // Helper to convert map to sorted array
 
@@ -1824,8 +1903,9 @@ const Dashboard = (props) => {
             }
 
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
-            {activeTab === 'customers' && <CustomerAnalysis data={filteredCustomers} />}
-            {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
+            {activeTab === 'customers' && (
+                <CustomerAnalysis data={aggregatedCustomers} />
+            )}{activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {
                 activeTab === 'procurement' && (

@@ -158,7 +158,6 @@ export const parseExcelFile = (files) => {
                     // --- TYPE 1: ITEMWISE PROFIT ---
                     if (contentString.includes('item name') && contentString.includes('qty. sold')) {
                         debugLog.push("Matched Type 1 (Itemwise Profit)");
-                        // ... existing Type 1 logic ...
                         const itemIdx = headerRow.findIndex(h => /item name/i.test(h));
                         const qtyIdx = headerRow.findIndex(h => /qty/i.test(h));
                         const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));
@@ -186,7 +185,6 @@ export const parseExcelFile = (files) => {
                     // --- TYPE 2: CUSTOMERWISE PROFIT ---
                     else if (contentString.includes('customer') && (contentString.includes('profit') || contentString.includes('margin'))) {
                         debugLog.push("Matched Type 2 (Customerwise Profit)");
-                        // ... existing Type 2 logic ...
                         const nameIdx = headerRow.findIndex(h => /customer name/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
                         const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));
@@ -196,14 +194,22 @@ export const parseExcelFile = (files) => {
                             jsonData.slice(1).forEach((row, rIdx) => {
                                 if (!row) return;
                                 const name = row[nameIdx];
-                                if (name) {
+                                if (name && String(name).toLowerCase() !== 'total') {
                                     const parsedDate = (dateIdx !== -1 ? normalizeDate(row[dateIdx]) : null) || effectiveDate;
-                                    mergedData.customers.push({
-                                        id: `cust-${name}-${parsedDate}-${rIdx}-${sheetName}`, // Unique ID
-                                        name: name,
-                                        revenue: parseFloat(String(row[amountIdx] || 0).replace(/,/g, '')),
-                                        profit: parseFloat(String(row[profitIdx] || 0).replace(/,/g, '')),
-                                        parsedDate: parsedDate
+                                    const amount = parseFloat(String(row[amountIdx] || 0).replace(/,/g, ''));
+                                    const profit = parseFloat(String(row[profitIdx] || 0).replace(/,/g, ''));
+
+                                    // Push to TRANSACTIONS so it gets saved to DB
+                                    mergedData.transactions.push({
+                                        id: `cust-${name}-${parsedDate}-${rIdx}-${sheetName}`,
+                                        parsedDate: parsedDate,
+                                        parsedAmount: amount,
+                                        parsedProfit: profit,
+                                        parsedType: 'ProfitSummary', // [CHANGED] Specific type to avoid double counting
+                                        parsedQty: 1,
+                                        originalDesc: 'Customer Monthly Summary',
+                                        customerName: String(name).trim().toUpperCase(),
+                                        invoiceNo: `SUMMARY-${parsedDate}-${rIdx}`
                                     });
                                 }
                             });
@@ -238,27 +244,64 @@ export const parseExcelFile = (files) => {
                         if (amountColIdx === -1) amountColIdx = 7;
                         if (partColIdx === -1) partColIdx = 1;
 
-                        debugLog.push(`Headers: Row=${headerRowIdx}, Particulars=${partColIdx}, Amount=${amountColIdx}, Qty=${qtyColIdx}`);
+                        // [NEW] Find Customer Column - Enhanced Detection
+                        let custColIdx = -1;
+                        headerRow.forEach((cell, idx) => {
+                            const str = String(cell).toLowerCase().trim();
+                            if (str.includes('party') || str.includes('customer') || str.includes('billed to') || str.includes('ledger') || str.includes('buyer') || str === 'name') {
+                                custColIdx = idx;
+                            }
+                        });
+
+
+                        debugLog.push(`Headers: Row=${headerRowIdx}, Particulars=${partColIdx}, Amount=${amountColIdx}, Qty=${qtyColIdx}, Customer=${custColIdx}`);
 
                         let currentDate = null;
                         let currentInvoiceNo = null;
+                        let currentCustomer = null;
+                        let currentInvDate = null;
                         let extractedCount = 0;
 
                         jsonData.slice(headerRowIdx + 1).forEach((row, index) => {
                             if (!row || row.length === 0) return;
 
-                            const colParticulars = String(row[partColIdx] || '');
-                            const valStr = (colParticulars + " " + String(row[0] || '')).toLowerCase();
+                            const colParticulars = String(row[partColIdx] || '').trim();
 
-                            if (valStr.includes('inv') || valStr.includes('date')) {
-                                const invMatch = valStr.match(/(inv-[\w-]+)/i);
-                                if (invMatch) currentInvoiceNo = invMatch[1].toUpperCase();
+                            // Debug: Log first few rows
+                            if (index < 5) debugLog.push(`Row ${index}: val="${colParticulars}"`);
 
-                                const dateMatch = valStr.match(/date\s*[:|-]\s*([\d-]+-[a-z]+-[\d]+)/i);
-                                if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
-                                if (!row[amountColIdx]) return;
+                            const valStr = colParticulars.toLowerCase();
+
+                            // 1. Detect Header Row: "INV-1165 ... Client : HOTEL BISMI"
+                            if (/^inv-/i.test(valStr)) {
+                                debugLog.push(`Found Header Row: ${valStr}`);
+
+                                // Extract Client Name
+                                const clientMatch = valStr.match(/(?:client|party|customer)\s*[:.-]\s*(.+)$/i);
+                                if (clientMatch) {
+                                    currentCustomer = clientMatch[1].trim();
+                                    if (currentCustomer.match(/date\s*:/i)) {
+                                        currentCustomer = currentCustomer.split(/date\s*:/i)[0].trim();
+                                    }
+                                    debugLog.push(`Captured Customer: ${currentCustomer}`);
+                                }
+
+                                // Extract Date "Date : 01-Dec-25"
+                                const dateMatch = valStr.match(/date\s*[:.-]\s*([\w-]+)/i);
+                                if (dateMatch) {
+                                    currentInvDate = normalizeDate(dateMatch[1]);
+                                    debugLog.push(`Captured Date: ${dateMatch[1]} -> ${currentInvDate}`);
+                                }
+
+                                // Extract Invoice No
+                                const invMatch = valStr.match(/(inv-\d+)/i);
+                                if (invMatch) {
+                                    currentInvoiceNo = invMatch[1];
+                                }
+                                return;
                             }
 
+                            // 2. Process Item Row
                             if (row[amountColIdx] !== undefined) {
                                 const desc = colParticulars.toLowerCase();
                                 if (desc.includes('total') || desc === '') return;
@@ -266,7 +309,7 @@ export const parseExcelFile = (files) => {
                                 const amount = parseFloat(String(row[amountColIdx]).replace(/,/g, ''));
 
                                 if (!isNaN(amount) && amount > 0) {
-                                    let finalDate = currentDate || effectiveDate;
+                                    let finalDate = currentInvDate || currentDate || effectiveDate;
                                     if (dateColIdx !== -1 && row[dateColIdx]) finalDate = normalizeDate(row[dateColIdx]);
 
                                     let qty = 1;
@@ -275,12 +318,14 @@ export const parseExcelFile = (files) => {
                                     if (finalDate) {
                                         mergedData.transactions.push({
                                             id: `txn-${finalDate}-${amount}-${index}`,
-                                            parsedDate: finalDate,
-                                            parsedAmount: amount,
-                                            parsedQty: qty,
-                                            parsedType: 'Sales',
-                                            originalDesc: colParticulars || 'Item',
-                                            invoiceNo: currentInvoiceNo || `INV-MISSING-${index}`
+                                            parsedDate: finalDate, // DB Column: date
+                                            parsedAmount: amount, // DB Column: amount
+                                            parsedQty: qty, // DB Column: quantity
+                                            parsedType: 'Sales', // DB Column: payment_mode
+                                            originalDesc: colParticulars || 'Item', // DB Column: item_name
+                                            // Priority: 1. Stateful Customer (Header), 2. Column Customer
+                                            customerName: currentCustomer || ((custColIdx !== -1 && row[custColIdx]) ? String(row[custColIdx]).trim() : null),
+                                            invoiceNo: currentInvoiceNo || `INV-MISSING-${index}` // DB Column: invoice_no
                                         });
                                         extractedCount++;
                                     } else {
@@ -294,7 +339,6 @@ export const parseExcelFile = (files) => {
                     // --- TYPE 4: PURCHASES ---
                     else if (contentString.includes('supplier') && (contentString.includes('total amount') || contentString.includes('total'))) {
                         debugLog.push("Matched Type 4 (Purchases)");
-                        // ... existing Type 4 logic ...
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /total amount/i.test(h));
                         const supplierIdx = headerRow.findIndex(h => /supplier/i.test(h));
@@ -329,7 +373,6 @@ export const parseExcelFile = (files) => {
                     // --- TYPE 5: POS EXPENSES REPORT ---
                     else if (contentString.includes('paid to') && contentString.includes('paid by') && contentString.includes('amount')) {
                         debugLog.push("Matched Type 5 (Expenses)");
-                        // ... existing Type 5 logic ...
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
                         const typeIdx = headerRow.findIndex(h => /type/i.test(h));
@@ -362,7 +405,7 @@ export const parseExcelFile = (files) => {
 
                 }); // end sheets loop
 
-                // ... PASS 3 (Backfill) ...
+                // --- PASS 3 (Backfill) ---
                 // 1. Find the most common date/month in transactions
                 const dateCounts = {};
                 mergedData.transactions.forEach(t => {

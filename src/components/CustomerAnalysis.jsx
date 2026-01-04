@@ -31,7 +31,7 @@ const CustomerAnalysis = ({ data }) => {
                             }}>
                                 {i + 1}
                             </div>
-                            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{customer.name}</h3>
+                            <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>{customer.name}</h3>
                             <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Top Customer</p>
 
                             <div style={{ display: 'flex', gap: '2rem' }}>
@@ -43,8 +43,8 @@ const CustomerAnalysis = ({ data }) => {
                                 </div>
                                 <div>
                                     <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>Profit</p>
-                                    <p style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#10b981' }}>
-                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(customer.profit)}
+                                    <p style={{ fontWeight: 'bold', fontSize: '1.1rem', color: customer.profit > 0 ? '#10b981' : 'var(--text-secondary)' }}>
+                                        {customer.profit ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(customer.profit) : '-'}
                                     </p>
                                 </div>
                             </div>
@@ -76,15 +76,15 @@ const CustomerAnalysis = ({ data }) => {
                             ) : (
                                 sortedCustomers.map((c, idx) => (
                                     <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1rem', fontWeight: 500 }}>{c.name}</td>
+                                        <td style={{ padding: '1rem', fontWeight: 500, textTransform: 'uppercase' }}>{c.name}</td>
                                         <td style={{ textAlign: 'right', padding: '1rem' }}>
                                             {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.revenue)}
                                         </td>
-                                        <td style={{ textAlign: 'right', padding: '1rem', color: c.profit < 0 ? '#ef4444' : '#10b981' }}>
-                                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.profit)}
+                                        <td style={{ textAlign: 'right', padding: '1rem', color: c.profit < 0 ? '#ef4444' : (c.profit > 0 ? '#10b981' : 'var(--text-secondary)') }}>
+                                            {c.profit ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.profit) : '-'}
                                         </td>
                                         <td style={{ textAlign: 'right', padding: '1rem' }}>
-                                            {((c.profit / c.revenue) * 100).toFixed(1)}%
+                                            {c.profit && c.revenue ? ((c.profit / c.revenue) * 100).toFixed(1) + '%' : '-'}
                                         </td>
                                     </tr>
                                 ))

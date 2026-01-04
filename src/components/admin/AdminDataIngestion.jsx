@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { parseExcelFile } from '../../utils/excelParser';
 import { parseProductionFile } from '../../utils/productionParser';
-import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X, Users } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AdminDataIngestion = () => {
@@ -39,12 +39,13 @@ const AdminDataIngestion = () => {
         setStatus({ type: 'idle', message: '' });
         try {
             const { count: txCount, error: txError } = await supabase.from('transactions').select('*', { count: 'exact', head: true });
+            const { count: custCount, error: cError } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).not('customer_name', 'is', null);
             const { count: plCount, error: plError } = await supabase.from('production_logs').select('*', { count: 'exact', head: true });
 
             if (txError) throw txError;
             if (plError) throw plError;
 
-            setDbReport({ transactions: txCount, production: plCount });
+            setDbReport({ transactions: txCount, production: plCount, customers: custCount || 0 });
             setStatus({ type: 'success', message: "Database connection healthy." });
         } catch (error) {
             console.error(error);
@@ -71,7 +72,7 @@ const AdminDataIngestion = () => {
     const [testReport, setTestReport] = useState(null);
 
     const analyzeFile = async () => {
-        const file = productionFile;
+        const file = salesFile || productionFile; // Support both
         if (!file) return;
 
         setLoading(true);
@@ -86,19 +87,39 @@ const AdminDataIngestion = () => {
                 const worksheet = workbook.Sheets[sheetName];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
-                // Run actual parser to get logs
-                const parserResult = await parseProductionFile([file]); // Use existing logic
+                let parserResult;
+                let counts = {};
+
+                if (salesFile) {
+                    const res = await parseExcelFile([file]);
+                    parserResult = res;
+                    // [DEBUG] Log Total Parsed Amount to verify File Content vs Parser Logic
+                    const totalParsedAmount = parserResult.transactions.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
+                    console.log(`[DEBUG] Parsed File: ${file.name}`);
+                    console.log(`[DEBUG] Total Parsed Amount: ${totalParsedAmount}`);
+                    console.log(`[DEBUG] Transaction Count: ${parserResult.transactions.length}`);
+                    // alert(`Debug: Parsed Total Amount = ${totalParsedAmount}`); // Optional: easier for user to see? No, console is safer.
+                    counts = {
+                        transactions: res.transactions.length,
+                        customers: res.customers.length,
+                        items: res.items.length
+                    };
+                } else {
+                    const res = await parseProductionFile([file]);
+                    parserResult = res;
+                    counts = {
+                        stockIn: res.stockIn.length,
+                        preProd: res.preProduction.length,
+                        postProd: res.postProduction.length
+                    };
+                }
 
                 setTestReport({
                     fileName: file.name,
                     sheetName: sheetName,
-                    previewRows: jsonData.slice(0, 10), // Top 10 rows raw
-                    parserDebug: parserResult.debugLog,
-                    parsedCounts: {
-                        stockIn: parserResult.stockIn.length,
-                        preProd: parserResult.preProduction.length,
-                        postProd: parserResult.postProduction.length
-                    }
+                    previewRows: jsonData.slice(0, 15), // Top 15 rows raw
+                    parserDebug: parserResult.debugLog || ["No debug log returned"],
+                    parsedCounts: counts
                 });
                 setStatus({ type: 'success', message: 'Analysis Complete. Check Debug Report below.' });
                 setLoading(false);
@@ -126,6 +147,10 @@ const AdminDataIngestion = () => {
                 const result = await parseExcelFile([file]);
                 data = result.transactions || [];
 
+                // [DEBUG FIX] Alert the user with the exact amount found
+                const totalParsed = data.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
+                alert(`Parser Verification:\nFound ${data.length} transactions.\nTotal Sales Amount: ${totalParsed.toFixed(2)}\n\nIf this matches your file, the upload is correct.`);
+
                 if (!data || data.length === 0) throw new Error("No valid transactions found in file.");
 
                 // Map to DB Schema
@@ -135,8 +160,10 @@ const AdminDataIngestion = () => {
                     amount: record.parsedAmount,
                     payment_mode: record.parsedType, // 'Sales' or 'Expense'
                     item_name: record.originalDesc,
+                    customer_name: record.customerName,
                     invoice_no: record.invoiceNo,
-                    quantity: record.parsedQty || 1 // Use parsed Qty or Default to 1
+                    quantity: record.parsedQty || 1,
+                    profit: record.parsedProfit || 0 // [NEW] Map Profit
                 })).filter(r => r.date && r.amount && r.item_name); // Filter out invalid rows
 
                 if (formattedData.length === 0) {
@@ -462,6 +489,18 @@ const AdminDataIngestion = () => {
                             <FileText className="text-blue-500" size={24} />
                         </div>
                     </div>
+
+                    <div className="bg-[#0f1219] p-6 rounded-xl border border-white/5 flex items-center justify-between group hover:border-purple-500/30 transition-colors">
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Customer Records</p>
+                            <p className="text-3xl font-bold text-white">{dbReport.customers.toLocaleString()}</p>
+                            <p className="text-[10px] text-slate-600">Transactions with Customer Name</p>
+                        </div>
+                        <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                            <Users className="text-purple-500" size={24} />
+                        </div>
+                    </div>
+
                     <div className="bg-[#0f1219] p-6 rounded-xl border border-white/5 flex items-center justify-between group hover:border-emerald-500/30 transition-colors">
                         <div>
                             <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Production Logs</p>
@@ -511,6 +550,17 @@ const AdminDataIngestion = () => {
                                     {loading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
                                     Upload
                                 </button>
+                                {/* Debug Button for Sales */}
+                                {salesFile && (
+                                    <button
+                                        onClick={analyzeFile}
+                                        disabled={loading}
+                                        className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-white/5 transition-colors"
+                                        title="Troubleshoot File structure"
+                                    >
+                                        <CloudLightning size={16} />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ) : (

@@ -98,14 +98,36 @@ const DashboardLayout = () => {
                 tFrom += batchSize;
             }
 
+            // Deduplication Logic
+            const uniqueTxnsMap = new Map();
+            allTxns.forEach(t => {
+                // [FIX] Deduplication Strategy
+                // Previous error: Deduplicating by 'invoice_no' alone collapsed multi-item invoices into 1 row.
+                // We must use the unique ID (deterministic from Parser: date-amount-index) to preserve all rows.
+                let key = t.id;
+
+                // Fallback for legacy records without ID (should be rare)
+                if (!key) {
+                    key = `${t.invoice_no}-${t.item_name}-${t.amount}-${t.date}`;
+                }
+
+                if (!uniqueTxnsMap.has(key)) {
+                    uniqueTxnsMap.set(key, t);
+                }
+            });
+            const uniqueTxns = Array.from(uniqueTxnsMap.values());
+
             // Map DB Schema -> App Legacy Schema
-            const mappedTransactions = allTxns.map(t => ({
+            const mappedTransactions = uniqueTxns.map(t => ({
                 id: t.id,
                 parsedDate: t.date,
                 createdAt: t.created_at, // Pass timestamp
                 parsedAmount: Number(t.amount),
-                parsedType: t.payment_mode === 'Expense' ? 'Expense' : 'Sales',
+                parsedType: t.payment_mode, // [FIX] Trust DB value (includes 'ProfitSummary')
                 originalDesc: t.item_name || 'Item',
+                name: t.item_name, // [FIX] Map name for Dashboard
+                profit: Number(t.profit || 0), // [FIX] Map Profit
+                customerName: t.customer_name,
                 invoiceNo: t.invoice_no,
                 parsedQty: Number(t.quantity || 1)
             }));

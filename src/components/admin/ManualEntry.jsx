@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Layers, DollarSign, Package, Save, CheckCircle, AlertCircle, RefreshCw, Calendar, FileText, Tag, TrendingUp, Archive } from 'lucide-react';
+import { Layers, DollarSign, Package, Save, CheckCircle, AlertCircle, RefreshCw, Calendar, FileText, Tag, TrendingUp, Archive, PlusCircle } from 'lucide-react';
 
 const ManualEntry = () => {
     const [entryType, setEntryType] = useState('transaction'); // 'transaction' | 'production'
@@ -71,128 +71,122 @@ const ManualEntry = () => {
     };
 
     return (
-        <div className="p-8 space-y-8 bg-[#1a1f2e] min-h-[calc(100vh-140px)] rounded-2xl">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-white/5 pb-6">
-                <div>
-                    <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
-                        <PlusCircle className="text-amber-500" size={28} />
-                        Manual Entry
-                    </h2>
-                    <p className="text-slate-400 text-sm">Create single transaction or production records manually.</p>
-                </div>
+        <div className="admin-wrapper" style={{ minHeight: '600px' }}>
+            <div className="admin-header" style={{ maxWidth: '48rem', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
 
-                {/* Tab Navigation - Dashboard Style */}
-                <div className="flex bg-[#0f1219] p-1 rounded-lg border border-white/5">
-                    <button
-                        onClick={() => setEntryType('transaction')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${entryType === 'transaction'
-                                ? 'bg-indigo-600 text-white shadow-md'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        <DollarSign size={14} />
-                        Financial
-                    </button>
-                    <button
-                        onClick={() => setEntryType('production')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${entryType === 'production'
-                                ? 'bg-orange-600 text-white shadow-md'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        <Package size={14} />
-                        Production
-                    </button>
+                    <div>
+                        <h2 className="admin-title">
+                            <PlusCircle color="#f59e0b" size={28} />
+                            Manual Entry
+                        </h2>
+                        <p className="admin-subtitle">Create single transaction or production records manually.</p>
+                    </div>
+
+                    {/* Tab Navigation */}
+                    <div className="btn-toggle-group" style={{ marginTop: '0.5rem' }}>
+                        <button
+                            onClick={() => setEntryType('transaction')}
+                            className={`btn-toggle ${entryType === 'transaction' ? 'active blue' : ''}`}
+                        >
+                            <DollarSign size={16} />
+                            Financial
+                        </button>
+                        <button
+                            onClick={() => setEntryType('production')}
+                            className={`btn-toggle ${entryType === 'production' ? 'active emerald' : ''}`}
+                        >
+                            <Package size={16} />
+                            Production
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* Entry Form */}
-            <div className={`max-w-3xl mx-auto rounded-xl border border-white/5 p-8 transition-all duration-300 ${entryType === 'transaction' ? 'bg-indigo-500/5 hover:border-indigo-500/20' : 'bg-orange-500/5 hover:border-orange-500/20'
-                }`}>
+            <div style={{ maxWidth: '48rem', width: '100%', margin: '0 auto', background: entryType === 'transaction' ? 'rgba(99, 102, 241, 0.05)' : 'rgba(249, 115, 22, 0.05)', border: entryType === 'transaction' ? '1px solid rgba(99, 102, 241, 0.2)' : '1px solid rgba(249, 115, 22, 0.2)', borderRadius: '0.75rem', padding: '2rem', transition: 'all 0.3s ease' }}>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     {entryType === 'transaction' ? (
-                        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                            <h3 className="text-sm font-bold text-indigo-400 uppercase tracking-widest mb-6 border-b border-white/5 pb-2">
+                        <div className="animate-fade-in">
+                            <h3 style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
                                 Transaction Details
                             </h3>
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Transaction Date</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Transaction Date</label>
                                     <input type="date" required value={txnForm.date} onChange={e => setTxnForm({ ...txnForm, date: e.target.value })}
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-indigo-500 transition-all font-mono text-sm" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Type</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Type</label>
                                     <select value={txnForm.type} onChange={e => setTxnForm({ ...txnForm, type: e.target.value })}
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer">
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', cursor: 'pointer' }}>
                                         <option value="Sales">Sales Income (+)</option>
                                         <option value="Expense">Business Expense (-)</option>
                                     </select>
                                 </div>
                             </div>
-                            <div className="mt-6">
-                                <label className="block text-xs font-semibold text-slate-400 mb-2">Description / Item Name</label>
+                            <div style={{ marginTop: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Description / Item Name</label>
                                 <input type="text" required value={txnForm.item_name} onChange={e => setTxnForm({ ...txnForm, item_name: e.target.value })} placeholder="e.g. Ginger Paste 1kg"
-                                    className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-indigo-500 transition-all placeholder-slate-600 text-sm" />
+                                    style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontSize: '0.875rem' }} />
                             </div>
-                            <div className="grid md:grid-cols-2 gap-6 mt-6">
+                            <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Amount (₹)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Amount (₹)</label>
                                     <input type="number" required value={txnForm.amount} onChange={e => setTxnForm({ ...txnForm, amount: e.target.value })} placeholder="0.00"
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-indigo-500 transition-all font-mono text-lg font-bold text-right" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '1.125rem', fontWeight: 'bold', textAlign: 'right' }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Invoice No. (Optional)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Invoice No. (Optional)</label>
                                     <input type="text" value={txnForm.invoice_no} onChange={e => setTxnForm({ ...txnForm, invoice_no: e.target.value })} placeholder="#INV-001"
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-indigo-500 transition-all font-mono text-sm" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                            <h3 className="text-sm font-bold text-orange-400 uppercase tracking-widest mb-6 border-b border-white/5 pb-2">
+                        <div className="animate-fade-in">
+                            <h3 style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#fb923c', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
                                 Production Log
                             </h3>
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Log Date</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Log Date</label>
                                     <input type="date" required value={prodForm.date} onChange={e => setProdForm({ ...prodForm, date: e.target.value })}
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-orange-500 transition-all font-mono text-sm" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Activity Type</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Activity Type</label>
                                     <select value={prodForm.type} onChange={e => setProdForm({ ...prodForm, type: e.target.value })}
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-orange-500 transition-all appearance-none cursor-pointer">
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', cursor: 'pointer' }}>
                                         <option value="stock_in">Stock In (Purchase)</option>
                                         <option value="usage">Usage (Consumed)</option>
                                         <option value="production">Production Output</option>
                                     </select>
                                 </div>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-6 mt-6">
+                            <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Material / Product</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Material / Product</label>
                                     <input type="text" required value={prodForm.material} onChange={e => setProdForm({ ...prodForm, material: e.target.value })} placeholder="e.g. Raw Ginger"
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-orange-500 transition-all placeholder-slate-600 text-sm" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 mb-2">Weight (KG)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Weight (KG)</label>
                                     <input type="number" step="0.01" required value={prodForm.weight} onChange={e => setProdForm({ ...prodForm, weight: e.target.value })} placeholder="0.00"
-                                        className="w-full bg-[#0f1219] border border-white/10 rounded-lg py-2.5 px-3 text-white focus:outline-none focus:border-orange-500 transition-all font-mono text-lg font-bold text-right" />
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '1.125rem', fontWeight: 'bold', textAlign: 'right' }} />
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    <div className="pt-6 border-t border-white/10 flex justify-end">
+                    <div style={{ paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'flex-end' }}>
                         <button
                             type="submit"
                             disabled={loading}
-                            className={`px-8 py-3 rounded-lg font-bold text-sm text-white shadow-lg transition-all duration-300 transform active:scale-[0.98] flex items-center justify-center gap-2 ${entryType === 'transaction'
-                                    ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
-                                    : 'bg-orange-600 hover:bg-orange-500 shadow-orange-500/20'
-                                }`}
+                            className={entryType === 'transaction' ? 'btn-action btn-sales' : 'btn-action btn-prod'}
+                            style={{ paddingLeft: '2rem', paddingRight: '2rem' }}
                         >
                             {loading ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
                             Save Record
@@ -203,21 +197,13 @@ const ManualEntry = () => {
 
             {/* Status Toast */}
             {status.message && (
-                <div className={`p-4 rounded-lg flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500 border ${status.type === 'error'
-                        ? 'bg-red-500/10 text-red-300 border-red-500/20'
-                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                    }`}>
+                <div style={{ marginTop: '2rem', padding: '1rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: status.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', background: status.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: status.type === 'error' ? '#fca5a5' : '#6ee7b7' }} className="animate-fade-in">
                     {status.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
-                    <span className="font-semibold">{status.message}</span>
+                    <span style={{ fontWeight: 600 }}>{status.message}</span>
                 </div>
             )}
         </div>
     );
 };
-
-// Helper Icon for imports
-const PlusCircle = ({ size, className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-);
 
 export default ManualEntry;

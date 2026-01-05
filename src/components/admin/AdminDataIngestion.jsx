@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { parseExcelFile } from '../../utils/excelParser';
 import { parseProductionFile } from '../../utils/productionParser';
-import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X, Users } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X, Users, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AdminDataIngestion = () => {
@@ -11,29 +11,24 @@ const AdminDataIngestion = () => {
     const [dbReport, setDbReport] = useState(null);
     const [uploadMode, setUploadMode] = useState('file'); // 'file' | 'folder'
 
-    // File States
     const [salesFile, setSalesFile] = useState(null);
     const [productionFile, setProductionFile] = useState(null);
 
-    // Watcher State
     const [isWatching, setIsWatching] = useState(false);
     const [watcherHandle, setWatcherHandle] = useState(null);
     const [watchLogs, setWatchLogs] = useState([]);
 
-    // Refs
     const salesFileRef = useRef(null);
     const prodFileRef = useRef(null);
     const prodFolderRef = useRef(null);
     const watcherIntervalRef = useRef(null);
 
-    // Clean up watcher on unmount
     useEffect(() => {
         return () => {
             if (watcherIntervalRef.current) clearInterval(watcherIntervalRef.current);
         };
     }, []);
 
-    // DB Check Logic
     const checkDbStatus = async () => {
         setLoading(true);
         setStatus({ type: 'idle', message: '' });
@@ -55,24 +50,20 @@ const AdminDataIngestion = () => {
         }
     };
 
-    // --- File Selection Handlers ---
     const handleFileSelect = (e, type) => {
         const file = e.target.files[0];
         if (!file) return;
 
         if (type === 'sales') setSalesFile(file);
         if (type === 'production') setProductionFile(file);
-
-        // Reset input so same file can be selected again if needed
         e.target.value = null;
         setStatus({ type: 'idle', message: '' });
     };
 
-    // --- Test / Debug Mode ---
     const [testReport, setTestReport] = useState(null);
 
     const analyzeFile = async () => {
-        const file = salesFile || productionFile; // Support both
+        const file = salesFile || productionFile;
         if (!file) return;
 
         setLoading(true);
@@ -83,7 +74,7 @@ const AdminDataIngestion = () => {
             reader.onload = async (e) => {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0]; // Analyze first sheet
+                const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
@@ -93,31 +84,17 @@ const AdminDataIngestion = () => {
                 if (salesFile) {
                     const res = await parseExcelFile([file]);
                     parserResult = res;
-                    // [DEBUG] Log Total Parsed Amount to verify File Content vs Parser Logic
-                    const totalParsedAmount = parserResult.transactions.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
-                    console.log(`[DEBUG] Parsed File: ${file.name}`);
-                    console.log(`[DEBUG] Total Parsed Amount: ${totalParsedAmount}`);
-                    console.log(`[DEBUG] Transaction Count: ${parserResult.transactions.length}`);
-                    // alert(`Debug: Parsed Total Amount = ${totalParsedAmount}`); // Optional: easier for user to see? No, console is safer.
-                    counts = {
-                        transactions: res.transactions.length,
-                        customers: res.customers.length,
-                        items: res.items.length
-                    };
+                    counts = { transactions: res.transactions.length, customers: res.customers.length, items: res.items.length };
                 } else {
                     const res = await parseProductionFile([file]);
                     parserResult = res;
-                    counts = {
-                        stockIn: res.stockIn.length,
-                        preProd: res.preProduction.length,
-                        postProd: res.postProduction.length
-                    };
+                    counts = { stockIn: res.stockIn.length, preProd: res.preProduction.length, postProd: res.postProduction.length };
                 }
 
                 setTestReport({
                     fileName: file.name,
                     sheetName: sheetName,
-                    previewRows: jsonData.slice(0, 15), // Top 15 rows raw
+                    previewRows: jsonData.slice(0, 15),
                     parserDebug: parserResult.debugLog || ["No debug log returned"],
                     parsedCounts: counts
                 });
@@ -132,7 +109,6 @@ const AdminDataIngestion = () => {
     };
 
 
-    // --- Upload Execution Handlers ---
     const executeUpload = async (type) => {
         const file = type === 'sales' ? salesFile : productionFile;
         if (!file) return;
@@ -143,28 +119,23 @@ const AdminDataIngestion = () => {
         try {
             let data = [];
             if (type === 'sales') {
-                // Returns object { transactions: [], items: [], customers: [] }
                 const result = await parseExcelFile([file]);
                 data = result.transactions || [];
-
-                // [DEBUG FIX] Alert the user with the exact amount found
                 const totalParsed = data.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
                 alert(`Parser Verification:\nFound ${data.length} transactions.\nTotal Sales Amount: ${totalParsed.toFixed(2)}\n\nIf this matches your file, the upload is correct.`);
 
                 if (!data || data.length === 0) throw new Error("No valid transactions found in file.");
 
-                // Map to DB Schema
-                // Map to DB Schema
                 const formattedData = data.map(record => ({
                     date: record.parsedDate,
                     amount: record.parsedAmount,
-                    payment_mode: record.parsedType, // 'Sales' or 'Expense'
+                    payment_mode: record.parsedType,
                     item_name: record.originalDesc,
                     customer_name: record.customerName,
                     invoice_no: record.invoiceNo,
                     quantity: record.parsedQty || 1,
-                    profit: record.parsedProfit || 0 // [NEW] Map Profit
-                })).filter(r => r.date && r.amount && r.item_name); // Filter out invalid rows
+                    profit: record.parsedProfit || 0
+                })).filter(r => r.date && r.amount && r.item_name);
 
                 if (formattedData.length === 0) {
                     const debugInfo = result.debugLog ? result.debugLog.join('\n') : 'No debug info available.';
@@ -174,7 +145,6 @@ const AdminDataIngestion = () => {
                 const { error } = await supabase.from('transactions').insert(formattedData);
                 if (error) throw error;
 
-                // [NEW] Save Customer Profit Data
                 const customerData = result.customers || [];
                 if (customerData.length > 0) {
                     const mappedCustomers = customerData.map(c => ({
@@ -183,43 +153,25 @@ const AdminDataIngestion = () => {
                         profit: c.profit,
                         date: c.parsedDate
                     }));
-
-                    // Insert into customer_stats (allow duplicates or handle them? For simplicity, we just insert for now as unique constraints might not be set up strictly yet, or we assume file granularity)
-                    // Better to delete existing for this month/file logic if possible, but standard append is safer for now unless we have IDs.
-                    // Actually, let's just insert.
                     const { error: custError } = await supabase.from('customer_stats').insert(mappedCustomers);
                     if (custError) {
                         console.error("Customer Stats Insert Error:", custError);
-                        // Don't fail the whole upload, but log it.
                         alert("Warning: Transactions saved, but Customer Profit data failed to save: " + custError.message);
                     }
                 }
             } else if (type === 'production') {
                 data = await parseProductionFile([file]);
-
-                // Debug Check: If Pre-Production is empty, trigger error to show logs (since user reported this specific issue)
                 if (data.preProduction.length === 0) {
                     const debugInfo = data.debugLog ? data.debugLog.join('\n') : 'No debug info';
                     throw new Error(`DEBUG MODE: Stock-in found (${data.stockIn.length}), but Pre-Production is empty.\n\nDebug Info:\n${debugInfo}`);
                 }
-
                 if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) throw new Error("No valid production logs found.");
 
-                if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) throw new Error("No valid production logs found.");
-
-                // STRATEGY: Content-Based Deduplication (Smart Sync)
-                // 1. Calculate Date Range of the new data
-                const allDates = [
-                    ...data.stockIn.map(d => d.date),
-                    ...data.preProduction.map(d => d.date),
-                    ...data.postProduction.map(d => d.date)
-                ].filter(d => d).sort();
-
+                const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
                 if (allDates.length === 0) throw new Error("No dates found in data.");
                 const minDate = allDates[0];
                 const maxDate = allDates[allDates.length - 1];
 
-                // 2. Fetch Existing Records in this Range
                 const { data: existingLogs, error: fetchError } = await supabase
                     .from('production_logs')
                     .select('date, material, weight, type')
@@ -228,34 +180,30 @@ const AdminDataIngestion = () => {
 
                 if (fetchError) throw new Error("Dedup Check Error: " + fetchError.message);
 
-                // 3. Create Signatures for Existing Records
                 const createSig = (d) => `${d.date}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
                 const existingSet = new Set(existingLogs.map(createSig));
 
-                // 4. Filter New Data
                 const filterNew = (items, type) => {
                     return items
-                        .map(i => ({ ...i, type })) // Add type first
+                        .map(i => ({ ...i, type }))
                         .filter(i => {
                             const sig = createSig(i);
                             return !existingSet.has(sig);
                         })
-                        .map(({ id, source_sheet, ...rest }) => rest); // Clean for insert
+                        .map(({ id, source_sheet, ...rest }) => rest);
                 };
 
                 const newStockIn = filterNew(data.stockIn, 'stock_in');
                 const newPreProd = filterNew(data.preProduction, 'usage');
                 const newPostProd = filterNew(data.postProduction, 'production');
-
                 const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
 
                 if (totalNew === 0) {
                     setStatus({ type: 'success', message: `Upload Skipped: All ${allDates.length} records already exist.` });
                     setLoading(false);
-                    return; // Exit early
+                    return;
                 }
 
-                // 5. Insert Only New Records
                 if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
                 if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
                 if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
@@ -265,16 +213,13 @@ const AdminDataIngestion = () => {
                     successMsg += ` (Stock-In: ${newStockIn.length}, Pre-Prod: ${newPreProd.length}, Post-Prod: ${newPostProd.length})`;
                 }
                 setStatus({ type: 'success', message: successMsg });
+            }
 
-            } // End production block
-
-            // Shared Success Cleanup
             if (type === 'sales') {
                 setSalesFile(null);
                 setStatus({ type: 'success', message: `Successfully uploaded ${file.name}` });
             }
             if (type === 'production') setProductionFile(null);
-
             checkDbStatus();
 
         } catch (error) {
@@ -285,49 +230,33 @@ const AdminDataIngestion = () => {
         }
     };
 
-    // --- Folder Upload (Smart Batch Execution) ---
+
     const handleFolderUpload = async (e, type) => {
         const files = Array.from(e.target.files);
         if (!files || files.length === 0) return;
-
         setLoading(true);
         setStatus({ type: 'idle', message: 'Scanning directory...' });
 
-        // Filter valid Excel files
-        const excelFiles = files.filter(f =>
-            (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) && !f.name.startsWith('~$')
-        );
-
+        const excelFiles = files.filter(f => (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) && !f.name.startsWith('~$'));
         if (excelFiles.length === 0) {
             setStatus({ type: 'error', message: "No Excel files found in selected folder." });
             setLoading(false);
             return;
         }
-
         setStatus({ type: 'idle', message: `Processing ${excelFiles.length} files...` });
 
         try {
             if (type === 'production') {
-                // 1. Parse ALL files at once (Parser supports multi-file)
                 const data = await parseProductionFile(excelFiles);
-
                 if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
                     throw new Error("No valid production logs found in any file.");
                 }
 
-                // 2. STRATEGY: Content-Based Deduplication (Smart Sync - Batch)
-                // Calculate Global Date Range
-                const allDates = [
-                    ...data.stockIn.map(d => d.date),
-                    ...data.preProduction.map(d => d.date),
-                    ...data.postProduction.map(d => d.date)
-                ].filter(d => d).sort();
-
+                const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
                 if (allDates.length === 0) throw new Error("No dates found in batch data.");
                 const minDate = allDates[0];
                 const maxDate = allDates[allDates.length - 1];
 
-                // 3. Fetch Existing Records for the ENTIRE Range
                 const { data: existingLogs, error: fetchError } = await supabase
                     .from('production_logs')
                     .select('date, material, weight, type')
@@ -336,11 +265,9 @@ const AdminDataIngestion = () => {
 
                 if (fetchError) throw new Error("Dedup Check Error: " + fetchError.message);
 
-                // 4. Create Signatures
                 const createSig = (d) => `${d.date}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
                 const existingSet = new Set(existingLogs.map(createSig));
 
-                // 5. Filter New Data
                 const filterNew = (items, type) => {
                     return items
                         .map(i => ({ ...i, type }))
@@ -354,7 +281,6 @@ const AdminDataIngestion = () => {
                 const newStockIn = filterNew(data.stockIn, 'stock_in');
                 const newPreProd = filterNew(data.preProduction, 'usage');
                 const newPostProd = filterNew(data.postProduction, 'production');
-
                 const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
 
                 if (totalNew === 0) {
@@ -363,21 +289,9 @@ const AdminDataIngestion = () => {
                     return;
                 }
 
-                // 6. Bulk Insert
-                // Note: If dataset is HUGE, supabase might reject. But for < 1000 rows it's fine.
-                // If larger, we might need chunking. Assuming reasonable size for now.
-                if (newStockIn.length) {
-                    const { error } = await supabase.from('production_logs').insert(newStockIn);
-                    if (error) throw error;
-                }
-                if (newPreProd.length) {
-                    const { error } = await supabase.from('production_logs').insert(newPreProd);
-                    if (error) throw error;
-                }
-                if (newPostProd.length) {
-                    const { error } = await supabase.from('production_logs').insert(newPostProd);
-                    if (error) throw error;
-                }
+                if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
+                if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
+                if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
 
                 setStatus({
                     type: 'success',
@@ -385,12 +299,9 @@ const AdminDataIngestion = () => {
                 });
 
             } else if (type === 'sales') {
-                // Batch Process Sales
                 const result = await parseExcelFile(excelFiles);
                 const data = result.transactions || [];
-
                 if (data.length === 0) throw new Error("No valid transactions found in batch.");
-
                 const formattedData = data.map(record => ({
                     date: record.parsedDate,
                     amount: record.parsedAmount,
@@ -401,16 +312,12 @@ const AdminDataIngestion = () => {
                 })).filter(r => r.date && r.amount && r.item_name);
 
                 if (formattedData.length === 0) throw new Error("No valid records found after filtering.");
-
                 const { error } = await supabase.from('transactions').insert(formattedData);
                 if (error) throw error;
-
                 setStatus({ type: 'success', message: `Batch Upload Complete. Uploaded ${formattedData.length} transactions from ${excelFiles.length} files.` });
             }
-
             checkDbStatus();
             if (prodFolderRef.current) prodFolderRef.current.value = "";
-
         } catch (err) {
             console.error("Batch Upload Error:", err);
             setStatus({ type: 'error', message: "Batch Failed: " + err.message });
@@ -419,7 +326,6 @@ const AdminDataIngestion = () => {
         }
     };
 
-    // --- Watcher Logic (Unchanged) ---
     const startWatcher = async () => {
         try {
             const handle = await window.showDirectoryPicker();
@@ -471,200 +377,160 @@ const AdminDataIngestion = () => {
     };
 
     return (
-        <div className="p-8 space-y-8 bg-[#1a1f2e] min-h-[calc(100vh-140px)] rounded-2xl">
+        <div className="admin-wrapper">
+
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-8">
-                <div>
-                    <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
-                        <Database className="text-blue-500" size={28} />
-                        Data Ingestion
-                    </h2>
-                    <p className="text-slate-400 text-sm">Upload bulk data from Excel files for analysis.</p>
+            <div className="admin-header">
+                <div className="flex-center" style={{ marginBottom: '1rem' }}>
+                    <div style={{ padding: '0.75rem', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', display: 'inline-flex' }}>
+                        <Database color="#3b82f6" size={32} />
+                    </div>
                 </div>
+                <h2 className="admin-title">Data Ingestion</h2>
+                <p className="admin-subtitle">Upload sales records and production logs to populate your dashboard.</p>
 
                 {/* Global Controls */}
-                <div className="flex gap-3">
-                    <div className="flex bg-[#0f1219] p-1 rounded-lg border border-white/5 mr-4">
-                        <button onClick={() => setUploadMode('file')} disabled={isWatching} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'file' ? 'bg-[#2563eb] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                            <File size={14} /> Single File
+                <div className="flex-center" style={{ marginTop: '1.5rem' }}>
+                    <div className="btn-toggle-group">
+                        <button onClick={() => setUploadMode('file')} disabled={isWatching} className={`btn-toggle ${uploadMode === 'file' ? 'active blue' : ''}`}>
+                            <File size={16} /> Single File
                         </button>
-                        <button onClick={() => setUploadMode('folder')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-2 ${uploadMode === 'folder' ? 'bg-[#2563eb] text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                            <FolderInput size={14} /> Folder Mode
+                        <button onClick={() => setUploadMode('folder')} className={`btn-toggle ${uploadMode === 'folder' ? 'active blue' : ''}`}>
+                            <FolderInput size={16} /> Folder Mode
                         </button>
                     </div>
-                    <button onClick={checkDbStatus} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-[#252b3b] hover:bg-[#2d3345] text-slate-300 rounded-lg transition-all border border-white/5 text-sm font-medium">
-                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                    </button>
                 </div>
             </div>
 
             {/* Status Cards */}
             {dbReport && (
-                <div className="grid grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-4">
-                    <div className="bg-[#0f1219] p-6 rounded-xl border border-white/5 flex items-center justify-between group hover:border-blue-500/30 transition-colors">
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Total Transactions</p>
-                            <p className="text-3xl font-bold text-white">{dbReport.transactions.toLocaleString()}</p>
-                        </div>
-                        <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                            <FileText className="text-blue-500" size={24} />
-                        </div>
+                <div className="stat-grid animate-fade-in">
+                    <div className="stat-card">
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.transactions.toLocaleString()}</p>
+                        <p style={{ fontSize: '0.75rem', color: '#93c5fd', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Transactions</p>
                     </div>
 
-                    <div className="bg-[#0f1219] p-6 rounded-xl border border-white/5 flex items-center justify-between group hover:border-purple-500/30 transition-colors">
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Customer Records</p>
-                            <p className="text-3xl font-bold text-white">{dbReport.customers.toLocaleString()}</p>
-                            <p className="text-[10px] text-slate-600">Transactions with Customer Name</p>
-                        </div>
-                        <div className="w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                            <Users className="text-purple-500" size={24} />
-                        </div>
+                    <div className="stat-card">
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.customers.toLocaleString()}</p>
+                        <p style={{ fontSize: '0.75rem', color: '#d8b4fe', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Customers</p>
                     </div>
 
-                    <div className="bg-[#0f1219] p-6 rounded-xl border border-white/5 flex items-center justify-between group hover:border-emerald-500/30 transition-colors">
-                        <div>
-                            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Production Logs</p>
-                            <p className="text-3xl font-bold text-white">{dbReport.production.toLocaleString()}</p>
-                        </div>
-                        <div className="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
-                            <Layers className="text-emerald-500" size={24} />
-                        </div>
+                    <div className="stat-card">
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.production.toLocaleString()}</p>
+                        <p style={{ fontSize: '0.75rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Production Logs</p>
                     </div>
                 </div>
             )}
 
             {/* Upload Areas */}
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="admin-grid">
 
                 {/* Sales Upload */}
-                <div className={`bg-[#0f1219] rounded-xl p-8 border border-white/5 hover:border-blue-500/50 transition-all group flex flex-col items-center justify-center text-center space-y-4 ${isWatching ? 'opacity-30 pointer-events-none' : ''}`}>
-                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform duration-300">
-                        {uploadMode === 'file' ? <CloudLightning className="text-blue-500" size={32} /> : <FolderInput className="text-blue-500" size={32} />}
+                <div className={`upload-card sales group ${isWatching ? 'style={{ opacity: 0.3, pointerEvents: "none", filter: "grayscale(1)" }}' : ''}`}>
+                    <div className="upload-icon-box icon-sales">
+                        {uploadMode === 'file' ? <CloudLightning size={32} /> : <FolderInput size={32} />}
                     </div>
+
                     <div>
-                        <h3 className="text-lg font-bold text-white">Sales & Expenses</h3>
-                        <p className="text-xs text-slate-500 mt-2 max-w-[250px] mx-auto leading-relaxed">Manual Upload Only</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Sales & Expenses</h3>
+                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
                     </div>
 
                     {uploadMode === 'file' ? (
-                        <div className="w-full flex flex-col items-center gap-3">
-                            {salesFile ? (
-                                <div className="w-full max-w-xs bg-slate-800 rounded-lg p-3 flex items-center justify-between border border-blue-500/30">
-                                    <span className="text-xs text-slate-300 truncate max-w-[180px]">{salesFile.name}</span>
-                                    <button onClick={() => setSalesFile(null)} className="text-slate-500 hover:text-white"><X size={14} /></button>
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                            {salesFile && (
+                                <div style={{ padding: '0.5rem 1rem', background: 'rgba(30, 58, 138, 0.3)', color: '#bfdbfe', fontSize: '0.75rem', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="animate-fade-in">
+                                    <FileSpreadsheet size={12} /> {salesFile.name}
+                                    <button onClick={() => setSalesFile(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
-                            ) : null}
+                            )}
 
-                            <div className="flex gap-2">
-                                <label className="cursor-pointer">
-                                    <input type="file" ref={salesFileRef} accept=".xlsx, .xls" onChange={(e) => handleFileSelect(e, 'sales')} disabled={loading} className="hidden" />
-                                    <div className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                                        <FileSpreadsheet size={16} /> {salesFile ? 'Change File' : 'Select File'}
-                                    </div>
+                            <div className="file-input-wrapper">
+                                <label className="file-label">
+                                    <input type="file" ref={salesFileRef} accept=".xlsx, .xls" onChange={(e) => handleFileSelect(e, 'sales')} disabled={loading} className="hidden-input" />
+                                    {salesFile ? 'Replace File' : 'Select File'}
                                 </label>
                                 <button
                                     onClick={() => executeUpload('sales')}
                                     disabled={!salesFile || loading}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2"
+                                    className="btn-action btn-sales"
                                 >
                                     {loading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
                                     Upload
                                 </button>
-                                {/* Debug Button for Sales */}
-                                {salesFile && (
-                                    <button
-                                        onClick={analyzeFile}
-                                        disabled={loading}
-                                        className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-white/5 transition-colors"
-                                        title="Troubleshoot File structure"
-                                    >
-                                        <CloudLightning size={16} />
-                                    </button>
-                                )}
                             </div>
                         </div>
                     ) : (
-                        <label className="mt-4 cursor-pointer">
-                            <input type="file" webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'sales')} disabled={loading} className="hidden" />
-                            <div className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2">
-                                <FolderInput size={16} /> Select & Upload Folder
+                        /* Folder Mode Sales */
+                        <label style={{ marginTop: '1rem', width: '100%', maxWidth: '200px', cursor: 'pointer' }}>
+                            <input type="file" webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'sales')} disabled={loading} style={{ display: 'none' }} />
+                            <div className="btn-action btn-sales" style={{ justifyContent: 'center', width: '100%' }}>
+                                <FolderInput size={18} /> Upload Folder
                             </div>
                         </label>
                     )}
                 </div>
 
                 {/* Production Upload */}
-                <div className={`bg-[#0f1219] rounded-xl p-8 border hover:border-emerald-500/50 transition-all group flex flex-col items-center justify-start text-center space-y-4 relative overflow-hidden ${isWatching ? 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.1)]' : 'border-white/5'}`}>
+                <div className={`upload-card production group ${isWatching ? 'watching' : ''}`} style={isWatching ? { borderColor: 'rgba(16, 185, 129, 0.5)', boxShadow: '0 0 40px rgba(16,185,129,0.1)' } : {}}>
+                    {/* Live Indicator */}
                     {isWatching && (
-                        <div className="absolute top-2 right-2 flex items-center gap-2 animate-pulse">
-                            <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span></span>
-                            <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Live</span>
+                        <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ position: 'relative', display: 'flex', height: '0.75rem', width: '0.75rem' }}>
+                                <span style={{ animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite', position: 'absolute', height: '100%', width: '100%', borderRadius: '50%', background: '#34d399', opacity: 0.75 }}></span>
+                                <span style={{ position: 'relative', display: 'inline-flex', borderRadius: '50%', height: '0.75rem', width: '0.75rem', background: '#10b981' }}></span>
+                            </span>
+                            <span style={{ fontSize: '0.625rem', color: '#34d399', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live Sync</span>
                         </div>
                     )}
-                    <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform duration-300">
-                        {uploadMode === 'file' ? <FileSpreadsheet className="text-emerald-500" size={32} /> : <Radio className="text-emerald-500" size={32} />}
+
+                    <div className="upload-icon-box icon-prod">
+                        {uploadMode === 'file' ? <FileSpreadsheet size={32} /> : <Radio size={32} />}
                     </div>
+
                     <div>
-                        <h3 className="text-lg font-bold text-white">Production Logs {uploadMode === 'folder' && '(Auto-Sync)'}</h3>
-                        <p className="text-xs text-slate-500 mt-2 max-w-[250px] mx-auto leading-relaxed">
-                            {uploadMode === 'file' ? 'Upload stock ledger manually.' : 'Select a folder. Use "Auto-Sync" to watch for new files automatically.'}
-                        </p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Production Logs</h3>
+                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Stock In · Usage · Production Output</p>
                     </div>
 
                     {uploadMode === 'file' ? (
-                        <div className="w-full flex flex-col items-center gap-3">
-                            {productionFile ? (
-                                <div className="w-full max-w-xs bg-slate-800 rounded-lg p-3 flex items-center justify-between border border-emerald-500/30">
-                                    <span className="text-xs text-slate-300 truncate max-w-[180px]">{productionFile.name}</span>
-                                    <button onClick={() => setProductionFile(null)} className="text-slate-500 hover:text-white"><X size={14} /></button>
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                            {productionFile && (
+                                <div style={{ padding: '0.5rem 1rem', background: 'rgba(6, 78, 59, 0.3)', color: '#a7f3d0', fontSize: '0.75rem', borderRadius: '9999px', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="animate-fade-in">
+                                    <FileSpreadsheet size={12} /> {productionFile.name}
+                                    <button onClick={() => setProductionFile(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
-                            ) : null}
+                            )}
 
-                            <div className="flex gap-2">
-                                <label className="cursor-pointer">
-                                    <input type="file" ref={prodFileRef} accept=".xlsx, .xls" onChange={(e) => handleFileSelect(e, 'production')} disabled={loading} className="hidden" />
-                                    <div className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                                        <FileSpreadsheet size={16} /> {productionFile ? 'Change File' : 'Select File'}
-                                    </div>
+                            <div className="file-input-wrapper">
+                                <label className="file-label">
+                                    <input type="file" ref={prodFileRef} accept=".xlsx, .xls" onChange={(e) => handleFileSelect(e, 'production')} disabled={loading} className="hidden-input" />
+                                    {productionFile ? 'Replace File' : 'Select File'}
                                 </label>
                                 <button
                                     onClick={() => executeUpload('production')}
                                     disabled={!productionFile || loading}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2"
+                                    className="btn-action btn-prod"
                                 >
                                     {loading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
                                     Upload
                                 </button>
-                                {/* Debug Button */}
-                                {productionFile && (
-                                    <button
-                                        onClick={analyzeFile}
-                                        disabled={loading}
-                                        className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg border border-white/5 transition-colors"
-                                        title="Troubleshoot File structure"
-                                    >
-                                        <CloudLightning size={16} />
-                                    </button>
-                                )}
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-3 w-full max-w-[200px] mt-4">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '200px', marginTop: '1rem' }}>
                             {!isWatching ? (
                                 <>
-                                    <label className="cursor-pointer w-full">
-                                        <input type="file" ref={prodFolderRef} webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'production')} disabled={loading} className="hidden" />
-                                        <div className="px-6 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-600/50 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 w-full">
-                                            <FolderInput size={16} /> Scan Once
-                                        </div>
+                                    <label className="file-label" style={{ justifyContent: 'center' }}>
+                                        <input type="file" ref={prodFolderRef} webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'production')} disabled={loading} className="hidden-input" />
+                                        <FolderInput size={16} /> Scan Once
                                     </label>
-                                    <button onClick={startWatcher} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 w-full">
+                                    <button onClick={startWatcher} className="btn-action btn-prod" style={{ justifyContent: 'center' }}>
                                         <PlayCircle size={16} /> Start Auto-Sync
                                     </button>
                                 </>
                             ) : (
-                                <button onClick={stopWatcher} className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-red-900/20 transition-all flex items-center justify-center gap-2 w-full animate-in zoom-in duration-300">
+                                <button onClick={stopWatcher} className="btn-action" style={{ background: '#ef4444', justifyContent: 'center' }}>
                                     <StopCircle size={16} /> Stop Watching
                                 </button>
                             )}
@@ -675,13 +541,13 @@ const AdminDataIngestion = () => {
 
             {/* Watcher Logs */}
             {isWatching && (
-                <div className="bg-black/40 rounded-xl border border-emerald-500/20 p-4 animate-in fade-in slide-in-from-bottom-4">
-                    <h4 className="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <Radio size={12} className="animate-pulse" /> Live Watcher Logs
+                <div style={{ marginTop: '2rem', width: '100%', maxWidth: '56rem', background: 'rgba(0,0,0,0.4)', borderRadius: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '1rem', backdropFilter: 'blur(4px)' }} className="animate-fade-in">
+                    <h4 style={{ color: '#34d399', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Radio size={12} /> Live Watcher Logs
                     </h4>
-                    <div className="h-32 overflow-y-auto font-mono text-[10px] text-slate-400 space-y-1 custom-scrollbar">
+                    <div className="custom-scrollbar" style={{ height: '8rem', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.625rem', color: '#94a3b8' }}>
                         {watchLogs.map((log, i) => (
-                            <div key={i} className="border-b border-white/5 pb-1">{log}</div>
+                            <div key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>{log}</div>
                         ))}
                     </div>
                 </div>
@@ -689,42 +555,42 @@ const AdminDataIngestion = () => {
 
             {/* Status Toast */}
             {status.message && !isWatching && (
-                <div className={`p-4 rounded-lg flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 border ${status.type === 'error' ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'}`}>
-                    {status.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
-                    <span className="font-medium text-sm">{status.message}</span>
+                <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '1rem', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', zIndex: 50, backdropFilter: 'blur(12px)', border: status.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', background: status.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: status.type === 'error' ? '#fca5a5' : '#6ee7b7' }} className="animate-fade-in">
+                    {status.type === 'error' ? <AlertCircle size={24} /> : <CheckCircle size={24} />}
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{status.message}</span>
                 </div>
             )}
 
             {/* DEBUG REPORT UI */}
             {testReport && (
-                <div className="mt-8 p-6 bg-slate-900 rounded-xl border border-blue-500/30 font-mono text-xs text-slate-300 overflow-hidden">
-                    <h3 className="text-lg font-bold text-white mb-4 border-b border-white/10 pb-2">📂 Diagnostic Report: {testReport.fileName}</h3>
+                <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#0f172a', borderRadius: '0.75rem', border: '1px solid rgba(59, 130, 246, 0.3)', fontFamily: 'monospace', fontSize: '0.75rem', color: '#cbd5e1', overflow: 'hidden', width: '100%', maxWidth: '56rem' }}>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>📂 Diagnostic Report: {testReport.fileName}</h3>
 
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                        <div className="bg-black/50 p-3 rounded border border-white/10">
-                            <span className="block text-slate-500 mb-1">Stock In</span>
-                            <span className="text-xl text-white font-bold">{testReport.parsedCounts.stockIn}</span>
+                    <div className="stat-grid" style={{ marginBottom: '1.5rem', gridTemplateColumns: '1fr 1fr 1fr' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Stock In</span>
+                            <span style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold' }}>{testReport.parsedCounts.stockIn}</span>
                         </div>
-                        <div className="bg-black/50 p-3 rounded border border-white/10">
-                            <span className="block text-slate-500 mb-1">Pre-Prod</span>
-                            <span className={`text-xl font-bold ${testReport.parsedCounts.preProd === 0 ? 'text-red-500' : 'text-white'}`}>{testReport.parsedCounts.preProd}</span>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Pre-Prod</span>
+                            <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: testReport.parsedCounts.preProd === 0 ? '#ef4444' : 'white' }}>{testReport.parsedCounts.preProd}</span>
                         </div>
-                        <div className="bg-black/50 p-3 rounded border border-white/10">
-                            <span className="block text-slate-500 mb-1">Post-Prod</span>
-                            <span className="text-xl text-white font-bold">{testReport.parsedCounts.postProd}</span>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Post-Prod</span>
+                            <span style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold' }}>{testReport.parsedCounts.postProd}</span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 h-[400px]">
-                        <div className="flex flex-col h-full">
-                            <h4 className="font-bold text-blue-400 mb-2">1. Raw Excel Data (Top 10 Rows)</h4>
-                            <div className="flex-1 bg-black p-4 rounded overflow-auto border border-white/10 whitespace-pre">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', height: '400px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <h4 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '0.5rem' }}>1. Raw Excel Data (Top 10 Rows)</h4>
+                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'pre' }}>
                                 {JSON.stringify(testReport.previewRows, null, 2)}
                             </div>
                         </div>
-                        <div className="flex flex-col h-full">
-                            <h4 className="font-bold text-emerald-400 mb-2">2. Parser Logs</h4>
-                            <div className="flex-1 bg-black p-4 rounded overflow-auto border border-white/10 whitespace-pre text-emerald-500/80">
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <h4 style={{ fontWeight: 'bold', color: '#34d399', marginBottom: '0.5rem' }}>2. Parser Logs</h4>
+                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'pre', color: 'rgba(16, 185, 129, 0.8)' }}>
                                 {testReport.parserDebug.join('\n')}
                             </div>
                         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Search, Filter, Edit2, Trash2, ChevronLeft, ChevronRight, X, Save, AlertCircle, CheckCircle, Database, Calendar, DollarSign, Package } from 'lucide-react';
+import { Search, Filter, Edit2, Trash2, ChevronLeft, ChevronRight, X, Save, AlertCircle, CheckCircle, Database, Calendar, DollarSign, Package, RefreshCw } from 'lucide-react';
 
 const DataManager = () => {
     const [selectedTable, setSelectedTable] = useState('transactions'); // 'transactions' | 'production_logs'
@@ -149,191 +149,198 @@ const DataManager = () => {
     };
 
     return (
-        <div className="p-8 space-y-6 bg-[#1a1f2e] min-h-[calc(100vh-140px)] rounded-2xl flex flex-col">
+        <div className="admin-wrapper" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', minHeight: '600px' }}>
             {/* Header & Controls */}
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end mb-4 gap-6">
+            <div style={{ padding: '0 0 1.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div className="btn-toggle-group">
+                        <button
+                            onClick={() => setSelectedTable('transactions')}
+                            className={`btn-toggle ${selectedTable === 'transactions' ? 'active blue' : ''}`}
+                        >
+                            <DollarSign size={16} />
+                            Transactions
+                        </button>
+                        <button
+                            onClick={() => setSelectedTable('production_logs')}
+                            className={`btn-toggle ${selectedTable === 'production_logs' ? 'active emerald' : ''}`}
+                        >
+                            <Package size={16} />
+                            Production Logs
+                        </button>
+                    </div>
 
-                {/* Tab Navigation - Dashboard Style */}
-                <div className="flex bg-[#0f1219] p-1 rounded-lg border border-white/5">
-                    <button
-                        onClick={() => setSelectedTable('transactions')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${selectedTable === 'transactions'
-                            ? 'bg-[#2563eb] text-white shadow-md'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        <DollarSign size={14} />
-                        Transactions
-                    </button>
-                    <button
-                        onClick={() => setSelectedTable('production_logs')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${selectedTable === 'production_logs'
-                            ? 'bg-[#2563eb] text-white shadow-md'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        <Package size={14} />
-                        Production Logs
-                    </button>
+                    <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Calendar style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
+                            <input
+                                type="date"
+                                value={dateFilter}
+                                onChange={e => setDateFilter(e.target.value)}
+                                style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'white', fontSize: '0.875rem', outline: 'none', height: '100%' }}
+                            />
+                        </div>
+                        <div style={{ position: 'relative', minWidth: '250px' }}>
+                            <Search style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : "Search Material..."}
+                                style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'white', fontSize: '0.875rem', outline: 'none' }}
+                            />
+                        </div>
+                        <button type="submit" className="btn-action" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                            Search
+                        </button>
+                    </form>
                 </div>
-
-                <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
-                    <div className="relative group">
-                        <Calendar className="absolute left-3 top-2.5 text-slate-500 group-focus-within:text-white transition-colors" size={14} />
-                        <input
-                            type="date"
-                            value={dateFilter}
-                            onChange={e => setDateFilter(e.target.value)}
-                            className="bg-[#0f1219] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-all font-mono"
-                        />
-                    </div>
-                    <div className="relative flex-1 xl:w-72 group">
-                        <Search className="absolute left-3 top-2.5 text-slate-500 group-focus-within:text-white transition-colors" size={14} />
-                        <input
-                            type="text"
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : "Search Material..."}
-                            className="w-full bg-[#0f1219] border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-all placeholder-slate-600"
-                        />
-                    </div>
-                    <button type="submit" className="bg-[#252b3b] hover:bg-[#2d3345] border border-white/5 text-slate-200 px-5 py-2 rounded-lg text-sm font-medium transition-all">
-                        Search
-                    </button>
-                </form>
             </div>
 
             {/* Status Message */}
             {status.message && (
-                <div className={`p-4 rounded-lg mb-6 flex items-center gap-3 text-sm animate-in fade-in slide-in-from-top-2 border ${status.type === 'error' ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                    }`}>
+                <div style={{ padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem', border: status.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', background: status.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: status.type === 'error' ? '#fca5a5' : '#6ee7b7' }}>
                     {status.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
-                    <span className="font-medium">{status.message}</span>
-                    <button onClick={() => setStatus({ type: 'idle', message: '' })} className="ml-auto text-current opacity-70 hover:opacity-100 hover:bg-white/10 p-1 rounded-full"><X size={14} /></button>
+                    <span style={{ fontWeight: 500 }}>{status.message}</span>
+                    <button onClick={() => setStatus({ type: 'idle', message: '' })} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'currentColor', opacity: 0.7, cursor: 'pointer' }}><X size={14} /></button>
                 </div>
             )}
 
             {/* Data Table */}
-            <div className="flex-1 overflow-hidden bg-[#0f1219] rounded-xl border border-white/5 relative flex flex-col shadow-inner">
-                <div className="overflow-auto flex-1 custom-scrollbar">
-                    <table className="w-full text-left text-sm border-collapse">
-                        <thead className="bg-[#151923] text-slate-400 font-semibold uppercase tracking-wider text-xs sticky top-0 z-10 border-b border-white/5">
+            <div style={{ flex: 1, overflow: 'hidden', background: '#0f1219', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ overflow: 'auto', flex: 1 }} className="custom-scrollbar">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                        <thead style={{ background: '#151923', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold', position: 'sticky', top: 0, zIndex: 10 }}>
                             <tr>
-                                <th className="p-4">Date</th>
+                                <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Date</th>
                                 {selectedTable === 'transactions' ? (
                                     <>
-                                        <th className="p-4">Type</th>
-                                        <th className="p-4">Item / Description</th>
-                                        <th className="p-4 text-right">Amount</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Type</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Item / Description</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Amount</th>
                                     </>
                                 ) : (
                                     <>
-                                        <th className="p-4">Type</th>
-                                        <th className="p-4">Material</th>
-                                        <th className="p-4 text-right">Weight (KG)</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Type</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Material</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Weight (KG)</th>
                                     </>
                                 )}
-                                <th className="p-4 text-right w-32">Actions</th>
+                                <th style={{ padding: '1rem', textAlign: 'right', width: '120px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
+                        <tbody style={{ color: 'white' }}>
                             {data.map(row => (
-                                <tr key={row.id} className={`hover:bg-white/5 transition-colors group ${editingId === row.id ? 'bg-blue-500/10' : ''}`}>
+                                <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: editingId === row.id ? 'rgba(59, 130, 246, 0.1)' : 'transparent', transition: 'background 0.2s' }} className="hover:bg-slate-800/50">
                                     {editingId === row.id ? (
                                         // EDIT MODE
                                         <>
-                                            <td className="p-4">
+                                            <td style={{ padding: '1rem' }}>
                                                 <input type="date" value={editForm.date} onChange={e => handleEditChange('date', e.target.value)}
-                                                    className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none" />
+                                                    style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
                                             </td>
                                             {selectedTable === 'transactions' ? (
                                                 <>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <select value={editForm.payment_mode} onChange={e => handleEditChange('payment_mode', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }}>
                                                             <option value="Sale">Sale</option>
                                                             <option value="Expense">Expense</option>
+                                                            <option value="Online">Online</option>
                                                         </select>
                                                     </td>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.item_name} onChange={e => handleEditChange('item_name', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none" />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
                                                     </td>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.amount} onChange={e => handleEditChange('amount', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-right text-white focus:outline-none" />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <select value={editForm.type} onChange={e => handleEditChange('type', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none">
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }}>
                                                             <option value="stock_in">Stock In</option>
                                                             <option value="usage">Usage</option>
                                                             <option value="production">Production</option>
                                                         </select>
                                                     </td>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.material} onChange={e => handleEditChange('material', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none" />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
                                                     </td>
-                                                    <td className="p-4">
+                                                    <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.weight} onChange={e => handleEditChange('weight', e.target.value)}
-                                                            className="w-full bg-black/40 border border-blue-500/50 rounded px-2 py-1 text-xs text-right text-white focus:outline-none" />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
                                             )}
-                                            <td className="p-4 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <button onClick={saveEdit} disabled={loading} className="text-emerald-400 hover:bg-emerald-500/20 p-1.5 rounded transition-colors"><Save size={14} /></button>
-                                                    <button onClick={cancelEdit} disabled={loading} className="text-slate-400 hover:bg-white/10 p-1.5 rounded transition-colors"><X size={14} /></button>
+                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                    <button onClick={saveEdit} disabled={loading} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '0.25rem' }}><Save size={16} /></button>
+                                                    <button onClick={cancelEdit} disabled={loading} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}><X size={16} /></button>
                                                 </div>
                                             </td>
                                         </>
                                     ) : (
                                         // VIEW MODE
                                         <>
-                                            <td className="p-4 text-slate-300 font-mono text-xs">{row.date}</td>
+                                            <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>{row.date}</td>
                                             {selectedTable === 'transactions' ? (
                                                 <>
-                                                    <td className="p-4">
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${row.payment_mode === 'Expense'
-                                                            ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                            }`}>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <span style={{
+                                                            padding: '0.125rem 0.5rem',
+                                                            borderRadius: '0.25rem',
+                                                            fontSize: '0.625rem',
+                                                            fontWeight: 'bold',
+                                                            textTransform: 'uppercase',
+                                                            background: row.payment_mode === 'Expense' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                            color: row.payment_mode === 'Expense' ? '#fca5a5' : '#6ee7b7',
+                                                            border: row.payment_mode === 'Expense' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                                        }}>
                                                             {row.payment_mode}
                                                         </span>
                                                     </td>
-                                                    <td className="p-4 text-slate-200 font-medium">
+                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>
                                                         {row.item_name}
-                                                        {row.invoice_no && <span className="ml-2 text-[10px] text-slate-500 px-1.5 rounded bg-white/5">#{row.invoice_no}</span>}
+                                                        {row.invoice_no && <span style={{ marginLeft: '0.5rem', fontSize: '0.625rem', color: '#64748b', padding: '0.125rem 0.375rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.25rem' }}>#{row.invoice_no}</span>}
                                                     </td>
-                                                    <td className="p-4 text-right font-mono text-slate-200">
+                                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#e2e8f0', fontFamily: 'monospace' }}>
                                                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(row.amount)}
                                                     </td>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <td className="p-4">
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border ${row.type === 'stock_in' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                            row.type === 'usage' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                                            }`}>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <span style={{
+                                                            padding: '0.125rem 0.5rem',
+                                                            borderRadius: '0.25rem',
+                                                            fontSize: '0.625rem',
+                                                            fontWeight: 'bold',
+                                                            textTransform: 'uppercase',
+                                                            background: row.type === 'stock_in' ? 'rgba(59, 130, 246, 0.1)' : (row.type === 'usage' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(168, 85, 247, 0.1)'),
+                                                            color: row.type === 'stock_in' ? '#93c5fd' : (row.type === 'usage' ? '#fcd34d' : '#d8b4fe'),
+                                                            border: row.type === 'stock_in' ? '1px solid rgba(59, 130, 246, 0.2)' : (row.type === 'usage' ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid rgba(168, 85, 247, 0.2)')
+                                                        }}>
                                                             {(row.type || 'N/A').replace('_', ' ')}
                                                         </span>
                                                     </td>
-                                                    <td className="p-4 text-slate-200 font-medium">{row.material}</td>
-                                                    <td className="p-4 text-right font-mono text-slate-200">{row.weight} KG</td>
+                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>{row.material}</td>
+                                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#e2e8f0', fontFamily: 'monospace' }}>{row.weight} KG</td>
                                                 </>
                                             )}
 
-                                            <td className="p-4 text-right">
-                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button onClick={() => startEdit(row)} className="text-blue-400 hover:bg-blue-500/10 p-1.5 rounded transition-colors" title="Edit">
-                                                        <Edit2 size={14} />
+                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                    <button onClick={() => startEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: '#60a5fa' }} title="Edit">
+                                                        <Edit2 size={16} />
                                                     </button>
-                                                    <button onClick={() => handleDelete(row.id)} className="text-red-400 hover:bg-red-500/10 p-1.5 rounded transition-colors" title="Delete">
-                                                        <Trash2 size={14} />
+                                                    <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: '#94a3b8' }} title="Delete" onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}>
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -343,7 +350,7 @@ const DataManager = () => {
                             ))}
                             {data.length === 0 && !loading && (
                                 <tr>
-                                    <td colSpan="5" className="p-12 text-center text-slate-500 italic">
+                                    <td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
                                         No records found.
                                     </td>
                                 </tr>
@@ -354,11 +361,11 @@ const DataManager = () => {
 
                 {/* Load More Bar */}
                 {hasMore && (
-                    <div className="p-3 bg-[#151923] border-t border-white/5 text-center">
+                    <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', background: '#151923' }}>
                         <button
                             onClick={() => { setPage(p => p + 1); fetchData(); }}
                             disabled={loading}
-                            className="text-xs text-blue-400 hover:text-blue-300 font-bold tracking-wide uppercase disabled:opacity-50 transition-colors"
+                            style={{ background: 'none', border: 'none', color: '#60a5fa', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', letterSpacing: '0.05em' }}
                         >
                             {loading ? 'Loading...' : 'Load More Records'}
                         </button>

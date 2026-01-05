@@ -21,31 +21,33 @@ const AdminPanel = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-[#0f1219] text-slate-100 font-sans selection:bg-blue-500/30">
+        <div style={{ minHeight: '100vh', background: '#0f1219', color: '#f8fafc', fontFamily: 'var(--font-sans)' }}>
             {/* Top Navigation Bar - Clean & Professional */}
-            <div className="bg-[#1e293b] border-b border-slate-700 sticky top-0 z-50 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+            <div style={{ background: '#1e293b', borderBottom: '1px solid #334155', position: 'sticky', top: 0, zIndex: 50 }}>
+                <div style={{ maxWidth: '80rem', margin: '0 auto', padding: '0 1rem', height: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <button
                             onClick={() => navigate('/')}
-                            className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
                             title="Back to Dashboard"
+                            style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', transition: 'color 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
                         >
                             <ArrowLeft size={20} />
                         </button>
 
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                                <LayoutGrid size={18} className="text-white" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ width: '2rem', height: '2rem', background: '#2563eb', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <LayoutGrid size={18} color="white" />
                             </div>
-                            <h1 className="text-lg font-bold text-white tracking-wide">
+                            <h1 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', letterSpacing: '0.025em' }}>
                                 Admin Console
                             </h1>
                         </div>
                     </div>
 
                     {/* Dashboard-style Pill Tabs */}
-                    <div className="flex items-center gap-2">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         {tabs.map(tab => {
                             const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
@@ -53,12 +55,22 @@ const AdminPanel = () => {
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`
-                                        flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                                        ${isActive
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-slate-400 hover:text-white hover:bg-slate-800'}
-                                    `}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '0.5rem',
+                                        fontSize: '0.875rem',
+                                        fontWeight: 500,
+                                        transition: 'all 0.2s',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        background: isActive ? '#2563eb' : 'transparent',
+                                        color: isActive ? 'white' : '#94a3b8'
+                                    }}
+                                    onMouseEnter={e => !isActive && (e.currentTarget.style.color = 'white')}
+                                    onMouseLeave={e => !isActive && (e.currentTarget.style.color = '#94a3b8')}
                                 >
                                     <Icon size={16} />
                                     <span>{tab.label}</span>
@@ -70,9 +82,9 @@ const AdminPanel = () => {
             </div>
 
             {/* Main Content Area - Consistent padding and layout */}
-            <main className="max-w-7xl mx-auto px-6 py-8">
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="bg-[#1a1f2e] border border-white/5 rounded-2xl p-1 shadow-2xl">
+            <main className="admin-container">
+                <div style={{ animation: 'fadeIn 0.5s ease-out forwards' }}>
+                    <div style={{ background: '#1a1f2e', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
                         {activeTab === 'upload' && <AdminDataIngestion />}
                         {activeTab === 'manager' && <DataManager />}
                         {activeTab === 'manual' && <ManualEntry />}

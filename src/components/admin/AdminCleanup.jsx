@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Calendar, AlertTriangle, RefreshCw, CheckCircle } from 'lucide-react';
+import { Trash2, Calendar, AlertTriangle, RefreshCw, CheckCircle, X, Bomb } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const AdminCleanup = () => {
@@ -143,127 +143,158 @@ const AdminCleanup = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-3 mb-6">
-                <Trash2 className="text-red-500" size={24} />
-                <h2 className="text-xl font-semibold text-white">Data Cleanup</h2>
-            </div>
+        <div className="admin-wrapper" style={{ minHeight: '600px' }}>
+            <div className="admin-header">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ padding: '0.75rem', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'inline-flex' }}>
+                        <Trash2 color="#ef4444" size={32} />
+                    </div>
 
-            {/* Mode Switcher */}
-            <div className="flex gap-4 border-b border-slate-700 pb-4">
-                <button
-                    onClick={() => { setMode('period'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'period' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                >
-                    Clean by Period
-                </button>
-                <button
-                    onClick={() => { setMode('all_production'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${mode === 'all_production' ? 'bg-red-600 text-white shadow-lg shadow-red-900/20' : 'bg-slate-800 text-slate-400 hover:text-red-400'}`}
-                >
-                    Reset Production DB
-                </button>
-            </div>
+                    <div>
+                        <h2 className="admin-title">
+                            Data Cleanup
+                        </h2>
+                        <p className="admin-subtitle">Permanently delete records or reset the database.</p>
+                    </div>
 
-            {/* Selection Card */}
-            <div className="bg-[#1e293b] border border-slate-700 rounded-xl p-6 shadow-sm">
-                <p className="text-slate-400 mb-4 text-sm">
-                    {mode === 'period'
-                        ? "Select a period to permanently delete Sales, Expenses, and Production records."
-                        : "Permanently delete ALL Production Logs from the database."}
-                    <br /> <span className="text-orange-400">Warning: This action is irreversible.</span>
-                </p>
-
-                <div className="flex flex-wrap items-end gap-4">
-                    {mode === 'period' && (
-                        <>
-                            {/* Year Selector */}
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Year</label>
-                                <select
-                                    value={selectedYear}
-                                    onChange={(e) => setSelectedYear(Number(e.target.value))}
-                                    className="bg-[#0f1219] border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-32 p-2.5"
-                                >
-                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Month Selector */}
-                            <div className="space-y-2">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Month</label>
-                                <select
-                                    value={selectedMonth}
-                                    onChange={(e) => {
-                                        setSelectedMonth(e.target.value);
-                                        setPreviewData(null);
-                                        setStatus({ type: '', message: '' });
-                                    }}
-                                    className="bg-[#0f1219] border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-40 p-2.5"
-                                >
-                                    <option value="">Select Month</option>
-                                    {months.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                            </div>
-                        </>
-                    )}
-
-                    {/* Preview Button */}
-                    <button
-                        onClick={fetchPreview}
-                        disabled={(mode === 'period' && !selectedMonth) || previewLoading}
-                        className={`mb-[1px] px-5 py-2.5 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${mode === 'period' ? 'bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500' : 'bg-red-600 hover:bg-red-700'}`}
-                    >
-                        {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : <Calendar size={18} />}
-                        {mode === 'period' ? 'Analyze Records' : 'Analyze Total Database'}
-                    </button>
+                    {/* Mode Switcher - Centered */}
+                    <div className="btn-toggle-group">
+                        <button
+                            onClick={() => { setMode('period'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
+                            className={`btn-toggle ${mode === 'period' ? 'active blue' : ''}`}
+                        >
+                            <Calendar size={16} />
+                            Clean by Period
+                        </button>
+                        <button
+                            onClick={() => { setMode('all_production'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
+                            className="btn-toggle"
+                            style={mode === 'all_production' ? { background: '#dc2626', color: 'white', borderColor: '#dc2626' } : {}}
+                        >
+                            <Bomb size={16} />
+                            Reset Production DB
+                        </button>
+                    </div>
                 </div>
+            </div>
+
+            <div className="admin-grid" style={{ maxWidth: '40rem', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+                {/* Selection Card */}
+                <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1.5rem', textAlign: 'center', lineHeight: '1.5' }}>
+                        {mode === 'period'
+                            ? "Select a period to permanently delete Sales, Expenses, and Production records."
+                            : "Permanently delete ALL Production Logs from the database."}
+                        <br /> <span style={{ color: '#fb923c', fontWeight: 'bold' }}>Warning: This action is irreversible.</span>
+                    </p>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', justifyContent: 'center' }}>
+                        {mode === 'period' && (
+                            <>
+                                {/* Year Selector */}
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Year</label>
+                                    <select
+                                        value={selectedYear}
+                                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                        style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
+                                    >
+                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Month Selector */}
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Month</label>
+                                    <select
+                                        value={selectedMonth}
+                                        onChange={(e) => {
+                                            setSelectedMonth(e.target.value);
+                                            setPreviewData(null);
+                                            setStatus({ type: '', message: '' });
+                                        }}
+                                        style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
+                                    >
+                                        <option value="">Select Month</option>
+                                        {months.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Preview Button */}
+                        <button
+                            onClick={fetchPreview}
+                            disabled={(mode === 'period' && !selectedMonth) || previewLoading}
+                            className="btn-action"
+                            style={{
+                                background: mode === 'period' ? 'linear-gradient(to right, #2563eb, #3b82f6)' : '#dc2626',
+                                opacity: (mode === 'period' && !selectedMonth) || previewLoading ? 0.5 : 1,
+                                cursor: (mode === 'period' && !selectedMonth) || previewLoading ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : (mode === 'period' ? <Calendar size={18} /> : <Bomb size={18} />)}
+                            {mode === 'period' ? 'Analyze' : 'Scan DB'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Preview & Delete Action */}
+                {previewData && previewData.totalCount > 0 && (
+                    <div style={{ marginTop: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.75rem', padding: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', animation: 'fadeIn 0.5s ease-out forwards' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
+                            <div>
+                                <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '0.25rem' }}>{mode === 'period' ? 'Confirm Deletion' : '🔥 NUCLEAR DELETE'}</h3>
+                                <p style={{ color: '#cbd5e1', fontSize: '0.875rem', lineHeight: '1.5' }}>
+                                    {mode === 'period' ? (
+                                        <>
+                                            Found <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.totalCount}</span> records
+                                            for <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{previewData.period}</span>.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Found <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.totalCount}</span> records in TOTAL.
+                                            This includes all Stock In, Pre-Production, and Post-Production logs.
+                                        </>
+                                    )}
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleDelete}
+                                disabled={deleteLoading}
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    background: '#dc2626',
+                                    color: 'white',
+                                    borderRadius: '0.5rem',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.875rem',
+                                    boxShadow: '0 10px 15px -3px rgba(220, 38, 38, 0.2)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    transition: 'transform 0.1s',
+                                    whiteSpace: 'nowrap'
+                                }}
+                                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
+                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                                {deleteLoading ? <RefreshCw className="animate-spin" size={20} /> : <Trash2 size={20} />}
+                                {mode === 'period' ? 'Delete Data' : 'WIPE ALL'}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Status Messages */}
             {status.message && (
-                <div className={`p-4 rounded-lg flex items-center gap-3 ${status.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                    status.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                        'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                    }`}>
+                <div style={{ maxWidth: '40rem', margin: '1.5rem auto 0', padding: '1rem', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: status.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', background: status.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : (status.type === 'info' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)'), color: status.type === 'error' ? '#fca5a5' : (status.type === 'info' ? '#bfdbfe' : '#6ee7b7') }}>
                     {status.type === 'error' ? <AlertTriangle size={20} /> : status.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
-                    <span>{status.message}</span>
-                </div>
-            )}
-
-            {/* Preview & Delete Action */}
-            {previewData && previewData.totalCount > 0 && (
-                <div className={`border rounded-xl p-6 animate-in fade-in slide-in-from-bottom-2 ${mode === 'period' ? 'bg-red-500/5 border-red-500/20' : 'bg-red-900/10 border-red-500/50'}`}>
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h3 className="text-lg font-bold text-red-500 mb-1">{mode === 'period' ? 'Confirm Deletion' : '🔥 NUCLEAR DELETE'}</h3>
-                            <p className="text-slate-300">
-                                {mode === 'period' ? (
-                                    <>
-                                        Found <span className="font-bold text-white text-lg mx-1">{previewData.totalCount}</span> records
-                                        for <span className="text-blue-400 font-medium">{previewData.period}</span>.
-                                    </>
-                                ) : (
-                                    <>
-                                        Found <span className="font-bold text-white text-lg mx-1">{previewData.totalCount}</span> records in TOTAL.
-                                        This includes all Stock In, Pre-Production, and Post-Production logs.
-                                    </>
-                                )}
-                            </p>
-                            <p className="text-slate-500 text-sm mt-2">
-                                Please confirm if you want to verify these records are removed from the database.
-                            </p>
-                        </div>
-
-                        <button
-                            onClick={handleDelete}
-                            disabled={deleteLoading}
-                            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg shadow-red-900/20 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-                        >
-                            {deleteLoading ? <RefreshCw className="animate-spin" size={20} /> : <Trash2 size={20} />}
-                            {mode === 'period' ? 'Delete Period Data' : 'WIPE DATABASE'}
-                        </button>
-                    </div>
+                    <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{status.message}</span>
                 </div>
             )}
         </div>

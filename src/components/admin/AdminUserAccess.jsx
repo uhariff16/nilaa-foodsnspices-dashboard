@@ -72,173 +72,175 @@ const AdminUserAccess = () => {
     };
 
     return (
-        <div className="p-6 space-y-6 bg-[#0f1219] min-h-[calc(100vh-140px)]">
-
-            {/* Header */}
-            <div>
-                <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-                    <Users className="text-blue-500" size={24} />
-                    User Access Management
-                </h2>
-                <p className="text-slate-400">Control who has access to the dashboard and data.</p>
-            </div>
-
-            {/* Grant Access Card - Clean & Solid */}
-            <div className="bg-[#1e293b] p-6 rounded-lg border border-slate-700 shadow-sm">
-                <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
-                    <div className="p-2 bg-blue-500/10 rounded-md text-blue-400">
-                        <UserPlus size={20} />
+        <div className="admin-wrapper" style={{ minHeight: '600px' }}>
+            <div className="admin-header">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ padding: '0.75rem', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', display: 'inline-flex' }}>
+                        <Users color="#3b82f6" size={32} />
                     </div>
+
                     <div>
-                        <h3 className="text-lg font-bold text-white">Invite Team Member</h3>
-                        <p className="text-slate-500 text-xs">Grant access via email address.</p>
+                        <h2 className="admin-title">
+                            User Access Management
+                        </h2>
+                        <p className="admin-subtitle">Control who has access to the dashboard and data.</p>
                     </div>
                 </div>
+            </div>
 
-                <form onSubmit={handleAddUser} className="space-y-6">
-                    <div className="grid md:grid-cols-2 gap-8">
-                        {/* Email Input */}
-                        <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-3 text-slate-500" size={18} />
-                                <input
-                                    type="email"
-                                    required
-                                    value={newUserEmail}
-                                    onChange={e => setNewUserEmail(e.target.value)}
-                                    placeholder="colleague@example.com"
-                                    className="w-full bg-[#0f1219] border border-slate-700 rounded-md py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors placeholder-slate-600"
-                                />
-                            </div>
+            <div className="admin-grid">
+                {/* Grant Access Card - Clean & Solid */}
+                <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
+                        <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: '#60a5fa' }}>
+                            <UserPlus size={20} />
                         </div>
-
-                        {/* Role Selection */}
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Assign Role</label>
-                            <div className="grid grid-cols-2 gap-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setNewUserRole('viewer')}
-                                    className={`p-3 rounded-lg border text-left transition-all ${newUserRole === 'viewer'
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-[#0f1219] border-slate-700 text-slate-400 hover:border-slate-600'
-                                        }`}
-                                >
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="font-bold text-sm">Viewer</span>
-                                        {newUserRole === 'viewer' && <CheckCircle size={14} />}
-                                    </div>
-                                    <div className={`text-[10px] ${newUserRole === 'viewer' ? 'text-blue-200' : 'text-slate-500'}`}>Read-only access</div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setNewUserRole('admin')}
-                                    className={`p-3 rounded-lg border text-left transition-all ${newUserRole === 'admin'
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-[#0f1219] border-slate-700 text-slate-400 hover:border-slate-600'
-                                        }`}
-                                >
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="font-bold text-sm">Admin</span>
-                                        {newUserRole === 'admin' && <CheckCircle size={14} />}
-                                    </div>
-                                    <div className={`text-[10px] ${newUserRole === 'admin' ? 'text-blue-200' : 'text-slate-500'}`}>Full access</div>
-                                </button>
-                            </div>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Invite Team Member</h3>
+                            <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>Grant access via email address.</p>
                         </div>
                     </div>
 
-                    <div className="flex justify-end pt-2">
-                        <button
-                            type="submit"
-                            disabled={loading || !newUserEmail}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            {loading && <RefreshCw className="animate-spin" size={14} />}
-                            {loading ? 'Processing...' : 'Grant Access'}
+                    <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {/* Email Input */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Email Address</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Mail style={{ position: 'absolute', left: '0.75rem', top: '0.75rem', color: '#64748b' }} size={18} />
+                                    <input
+                                        type="email"
+                                        required
+                                        value={newUserEmail}
+                                        onChange={e => setNewUserEmail(e.target.value)}
+                                        placeholder="colleague@example.com"
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem' }}
+                                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Role Selection */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Assign Role</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewUserRole('viewer')}
+                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Viewer</span>
+                                            {newUserRole === 'viewer' && <CheckCircle size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Read-only access</div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewUserRole('admin')}
+                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Admin</span>
+                                            {newUserRole === 'admin' && <CheckCircle size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full access</div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+                            <button
+                                type="submit"
+                                disabled={loading || !newUserEmail}
+                                className="btn-action btn-sales"
+                                style={{ width: '100%', padding: '0.75rem', opacity: loading || !newUserEmail ? 0.5 : 1, cursor: loading || !newUserEmail ? 'not-allowed' : 'pointer', justifyContent: 'center' }}
+                            >
+                                {loading && <RefreshCw className="animate-spin" size={14} />}
+                                {loading ? 'Processing...' : 'Grant Access'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                {/* Current Users List */}
+                <div style={{ background: '#1e293b', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#1e293b' }}>
+                        <h3 style={{ fontWeight: 'bold', color: 'white', fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            Active Members ({users.length})
+                        </h3>
+                        <button onClick={fetchUsers} disabled={loading} style={{ color: '#60a5fa', fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
                         </button>
                     </div>
-                </form>
-            </div>
 
-            {/* Current Users List (Table Layout for robustness) */}
-            <div className="bg-[#1e293b] rounded-lg border border-slate-700 overflow-hidden shadow-sm">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-[#1e293b]">
-                    <h3 className="font-bold text-white text-lg flex items-center gap-2">
-                        Active Members ({users.length})
-                    </h3>
-                    <button onClick={fetchUsers} disabled={loading} className="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1 transition-colors">
-                        <RefreshCw size={12} className={loading && 'animate-spin'} /> Refresh
-                    </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-[#0f1219] text-slate-400 uppercase font-bold text-xs">
-                            <tr>
-                                <th className="px-6 py-3">User</th>
-                                <th className="px-6 py-3">Role</th>
-                                <th className="px-6 py-3">Joined</th>
-                                <th className="px-6 py-3 text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-700">
-                            {users.map((user) => (
-                                <tr key={user.id || user.email} className="hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold text-white">
-                                                {user.email.substring(0, 2).toUpperCase()}
-                                            </div>
-                                            <span className="text-white font-medium">{user.email}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {user.role === 'admin' ? (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                                <Crown size={12} /> Admin
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                                <Eye size={12} /> Viewer
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-slate-400">
-                                        {new Date(user.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleDeleteUser(user.email)}
-                                            className="text-slate-400 hover:text-red-400 hover:bg-red-500/10 p-2 rounded transition-all"
-                                            title="Revoke Access"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {users.length === 0 && !loading && (
+                    <div style={{ overflowX: 'auto', flex: 1 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                            <thead style={{ background: '#0f1219', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-12 text-center text-slate-500">
-                                        No active members found.
-                                    </td>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody style={{ color: 'white' }}>
+                                {users.map((user) => (
+                                    <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0 }}>
+                                                    {user.email.substring(0, 2).toUpperCase()}
+                                                </div>
+                                                <span style={{ fontWeight: 500, wordBreak: 'break-all' }}>{user.email}</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                            {user.role === 'admin' ? (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                                    <Crown size={12} /> Admin
+                                                </span>
+                                            ) : (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                                    <Eye size={12} /> Viewer
+                                                </span>
+                                            )}
+                                        </td>
+                                        {/* Removed Joined Date to save space if needed, or keeping it but with less padding */}
+                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                                            <button
+                                                onClick={() => handleDeleteUser(user.email)}
+                                                style={{ color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.25rem', transition: 'all 0.2s' }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
+                                                title="Revoke Access"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {users.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan="4" style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
+                                            No active members found.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            {/* Status Toast - Simple */}
+            {/* Status Toast - Fixed */}
             {status.message && (
-                <div className={`fixed bottom-8 right-8 px-4 py-3 rounded shadow-lg flex items-center gap-3 z-50 text-sm font-medium ${status.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
-                    }`}>
+                <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '0.75rem 1rem', borderRadius: '0.375rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 50, fontSize: '0.875rem', fontWeight: 500, background: status.type === 'error' ? '#dc2626' : '#059669', color: 'white' }}>
                     {status.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
                     <span>{status.message}</span>
-                    <button onClick={() => setStatus({ type: 'idle', message: '' })} className="ml-2 opacity-80 hover:opacity-100"><X size={14} /></button>
+                    <button onClick={() => setStatus({ type: 'idle', message: '' })} style={{ marginLeft: '0.5rem', opacity: 0.8, background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={14} /></button>
                 </div>
             )}
         </div>

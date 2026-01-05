@@ -4,7 +4,6 @@ import { RefreshCw, Calculator, DollarSign, Info } from 'lucide-react';
 const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     // State for inputs
     const [inputs, setInputs] = useState({
-        salesChannel: 'retail', // 'retail', 'wholesale'
         productType: 'paste', // 'paste', 'ginger_peeled', 'garlic_peeled'
         pasteVariant: 'mix', // 'mix', 'ginger', 'garlic' (Only for productType === 'paste')
         gingerKg: 50,
@@ -13,7 +12,6 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         garlicRate: 0,
         labourCost: 0,
         overheadCost: 0,
-        packagingCost: 0, // Portion of Overhead that is packaging
         gingerWastage: 10,
         garlicWastage: 20,
         waterPercentage: 20, // Default 20% water
@@ -60,13 +58,11 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             // Apply Previous Month's Per-KG operational costs
             const estLabour = projectedOutput * (previousMonthStats.labourPerKg || 0);
             const estOverhead = projectedOutput * (previousMonthStats.overheadPerKg || 0);
-            const estPackaging = projectedOutput * (previousMonthStats.packagingPerKg || 0);
 
             setInputs(prev => ({
                 ...prev,
                 labourCost: Math.round(estLabour),
-                overheadCost: Math.round(estOverhead),
-                packagingCost: Math.round(estPackaging)
+                overheadCost: Math.round(estOverhead)
             }));
         }
     }, [inputs.gingerKg, inputs.garlicKg, inputs.gingerWastage, inputs.garlicWastage, inputs.waterPercentage, inputs.useSmartDefaults, previousMonthStats, inputs.productType, inputs.pasteVariant]);
@@ -112,14 +108,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             totalInput = Number(inputs.garlicKg);
         }
 
-        // Operational Cost Logic
-        // Wholesale excludes Packaging Cost (which is part of Overhead)
-        let effectiveOverhead = Number(inputs.overheadCost);
-        if (inputs.salesChannel === 'wholesale') {
-            effectiveOverhead = Math.max(0, effectiveOverhead - Number(inputs.packagingCost));
-        }
-
-        const totalMfgCost = totalMaterialCost + Number(inputs.labourCost) + effectiveOverhead;
+        const totalMfgCost = totalMaterialCost + Number(inputs.labourCost) + Number(inputs.overheadCost);
         const costPerKg = totalOutput > 0 ? totalMfgCost / totalOutput : 0;
         const recPrice = costPerKg * (1 + (inputs.profitMargin || 0) / 100);
         const yieldPct = totalInput > 0 ? (totalOutput / totalInput) * 100 : 0;
@@ -137,7 +126,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     const handleInput = (key, value) => {
         setInputs(prev => ({
             ...prev,
-            [key]: (key === 'productType' || key === 'pasteVariant' || key === 'salesChannel') ? value : (parseFloat(value) || 0)
+            [key]: (key === 'productType' || key === 'pasteVariant') ? value : (parseFloat(value) || 0)
         }));
     };
 
@@ -187,30 +176,6 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                 </div>
                             )}
                         </div>
-                    </div>
-
-                    {/* Sales Channel Toggle */}
-                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                        {['retail', 'wholesale'].map(channel => (
-                            <button
-                                key={channel}
-                                onClick={() => handleInput('salesChannel', channel)}
-                                style={{
-                                    padding: '0.5rem 1rem',
-                                    borderRadius: '0.35rem',
-                                    border: 'none',
-                                    background: inputs.salesChannel === channel ? 'var(--accent-primary)' : 'transparent',
-                                    color: inputs.salesChannel === channel ? '#fff' : 'var(--text-secondary)',
-                                    cursor: 'pointer',
-                                    fontSize: '0.85rem',
-                                    fontWeight: inputs.salesChannel === channel ? '600' : 'normal',
-                                    textTransform: 'capitalize',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                {channel}
-                            </button>
-                        ))}
                     </div>
                 </div>
 
@@ -375,7 +340,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                     </h3>
                                     {inputs.useSmartDefaults && previousMonthStats && (
                                         <div style={{ fontSize: '0.7rem', color: '#60a5fa', marginTop: '0.25rem' }}>
-                                            Based on {previousMonthStats.month} actuals ({previousMonthStats.labourPerKg?.toFixed(2)}/kg, {previousMonthStats.overheadPerKg?.toFixed(2)}/kg{previousMonthStats.packagingPerKg ? `, Pkg: ${previousMonthStats.packagingPerKg.toFixed(2)}/kg` : ''})
+                                            Based on {previousMonthStats.month} actuals ({previousMonthStats.labourPerKg?.toFixed(2)}/kg, {previousMonthStats.overheadPerKg?.toFixed(2)}/kg)
                                         </div>
                                     )}
                                 </div>
@@ -390,11 +355,11 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem', alignItems: 'end' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Labour</label>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Labour (Total)</label>
                                     <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
+                                        <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>₹</span>
                                         <input
                                             type="number"
                                             value={inputs.labourCost}
@@ -403,13 +368,18 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                                 setInputs(prev => ({ ...prev, useSmartDefaults: false }));
                                             }}
                                             style={{ ...inputStyle, paddingLeft: '1.5rem' }}
+                                            onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                            onBlur={(e) => {
+                                                e.target.style.borderColor = 'var(--glass-border)';
+                                                e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                                            }}
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Overhead</label>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Overhead (Total)</label>
                                     <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
+                                        <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>₹</span>
                                         <input
                                             type="number"
                                             value={inputs.overheadCost}
@@ -418,40 +388,27 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                                 setInputs(prev => ({ ...prev, useSmartDefaults: false }));
                                             }}
                                             style={{ ...inputStyle, paddingLeft: '1.5rem' }}
+                                            onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                            onBlur={(e) => {
+                                                e.target.style.borderColor = 'var(--glass-border)';
+                                                e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                                            }}
                                         />
                                     </div>
                                 </div>
-                                {/* Packaging Component Input */}
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }} title="Included in Overhead">Pkg Cost</label>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#a855f7', marginBottom: '0.5rem' }}>Total Op. Cost</label>
                                     <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
+                                        <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#a855f7' }}>₹</span>
                                         <input
                                             type="number"
-                                            value={inputs.packagingCost}
-                                            onChange={(e) => handleInput('packagingCost', e.target.value)}
-                                            style={{ ...inputStyle, paddingLeft: '1.5rem', borderColor: inputs.salesChannel === 'wholesale' ? 'var(--accent-primary)' : 'var(--glass-border)' }}
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#a78bfa', marginBottom: '0.35rem' }}>Total Op. Cost</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="text"
+                                            value={inputs.labourCost + inputs.overheadCost}
                                             readOnly
-                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Math.max(0, Number(inputs.overheadCost) - Number(inputs.packagingCost))) : (Number(inputs.labourCost) + Number(inputs.overheadCost))).toFixed(0)}
-                                            style={{ ...inputStyle, background: 'rgba(167, 139, 250, 0.1)', borderColor: '#a78bfa', color: '#a78bfa', paddingLeft: '1.5rem' }}
+                                            style={{ ...inputStyle, paddingLeft: '1.5rem', color: '#a855f7', fontWeight: 'bold', background: 'rgba(168, 85, 247, 0.1)', borderColor: 'rgba(168, 85, 247, 0.3)' }}
                                         />
                                     </div>
                                 </div>
                             </div>
-                            {inputs.salesChannel === 'wholesale' && Number(inputs.packagingCost) > 0 && (
-                                <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', marginTop: '0.5rem', textAlign: 'right' }}>
-                                    * Wholesale: Subtracting packaging (₹{inputs.packagingCost}) from overhead.
-                                </div>
-                            )}
                         </div>
 
                         {/* Wastage & Water Section */}

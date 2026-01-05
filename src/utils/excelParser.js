@@ -211,6 +211,16 @@ export const parseExcelFile = (files) => {
                                         customerName: String(name).trim().toUpperCase(),
                                         invoiceNo: `SUMMARY-${parsedDate}-${rIdx}`
                                     });
+
+                                    // [NEW] Push to Customers Array for Dashboard Analysis
+                                    mergedData.customers.push({
+                                        id: `cust-master-${name}-${parsedDate}-${rIdx}`,
+                                        name: String(name).trim().toUpperCase(),
+                                        revenue: amount,
+                                        profit: profit,
+                                        parsedDate: parsedDate,
+                                        source: 'ProfitFile'
+                                    });
                                 }
                             });
                         }

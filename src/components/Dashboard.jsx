@@ -497,6 +497,9 @@ const Dashboard = (props) => {
 
     const filteredCustomers = React.useMemo(() => {
         let custToFilter = data.customers || [];
+        console.log("DEBUG: All Customers Count:", custToFilter.length);
+        if (custToFilter.length > 0) console.log("DEBUG: Sample Customer:", custToFilter[0]);
+
         let result = [];
 
         if (selectedMonth === 'Overall') {
@@ -508,6 +511,7 @@ const Dashboard = (props) => {
             result = aggregateByName(yearFiltered);
         } else {
             const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
             const strictFiltered = custToFilter.filter(cust => {
                 if (!cust.parsedDate) return false;
                 let cMonthYear = '';
@@ -526,6 +530,7 @@ const Dashboard = (props) => {
                         cMonthYear = parts[1] + ' ' + parts[2];
                     }
                 }
+
                 return cMonthYear === selectedMonth;
             });
             result = aggregateByName(strictFiltered);
@@ -1553,79 +1558,7 @@ const Dashboard = (props) => {
                             )}
                         </div>
 
-                        {/* Cost Analysis Card */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {/* DEBUG SECTION */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <DollarSign size={18} color="#f59e0b" />
-                                        Production Cost Analysis
-                                    </h3>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                        Ginger Wastage: <span style={{ color: '#f87171', fontWeight: 600 }}>10%</span>
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                        Garlic Wastage: <span style={{ color: '#f87171', fontWeight: 600 }}>20%</span>
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', color: '#34d399', fontWeight: 600, background: 'rgba(52, 211, 153, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.5rem', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
-                                        Yield: {materialStats.procurement > 0 ? ((materialStats.production / materialStats.procurement) * 100).toFixed(1) + '%' : '-'}
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Key Metrics Grid */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Material Cost</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f59e0b' }}>
-                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.materialCost)}
-                                    </div>
-                                </div>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Direct Labour</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#f472b6' }}>
-                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.labourCost)}
-                                    </div>
-                                </div>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Overhead</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: '#a78bfa' }}>
-                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.overheadCost)}
-                                    </div>
-                                </div>
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'white' }}>Total Mfg Cost</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>
-                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(materialStats.totalProductionCost)}
-                                    </div>
-                                </div>
-                                <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05))', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: '#4ade80' }}>Cost Per KG</div>
-                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#4ade80' }}>
-                                        {materialStats.production > 0
-                                            ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(materialStats.totalProductionCost / materialStats.production)
-                                            : '₹0.00'
-                                        }
-                                        <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.8 }}> /kg</span>
-                                    </div>
-                                </div>
-                                <div style={{ background: 'linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05))', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(167, 139, 250, 0.2)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                        Rec. Selling Price <span style={{ fontSize: '0.6rem', opacity: 0.7 }}>(30% Margin)</span>
-                                    </div>
-                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#a78bfa' }}>
-                                        {materialStats.production > 0
-                                            ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format((materialStats.totalProductionCost / materialStats.production) * 1.30)
-                                            : '₹0.00'
-                                        }
-                                        <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.8 }}> /kg</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
                         <Charts
                             transactions={filteredTransactions}
@@ -2019,7 +1952,7 @@ const Dashboard = (props) => {
 
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
             {activeTab === 'customers' && (
-                <CustomerAnalysis data={aggregatedCustomers} />
+                <CustomerAnalysis data={filteredCustomers} />
             )}{activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {

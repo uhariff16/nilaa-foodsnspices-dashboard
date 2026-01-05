@@ -173,6 +173,27 @@ const AdminDataIngestion = () => {
 
                 const { error } = await supabase.from('transactions').insert(formattedData);
                 if (error) throw error;
+
+                // [NEW] Save Customer Profit Data
+                const customerData = result.customers || [];
+                if (customerData.length > 0) {
+                    const mappedCustomers = customerData.map(c => ({
+                        customer_name: c.name,
+                        revenue: c.revenue,
+                        profit: c.profit,
+                        date: c.parsedDate
+                    }));
+
+                    // Insert into customer_stats (allow duplicates or handle them? For simplicity, we just insert for now as unique constraints might not be set up strictly yet, or we assume file granularity)
+                    // Better to delete existing for this month/file logic if possible, but standard append is safer for now unless we have IDs.
+                    // Actually, let's just insert.
+                    const { error: custError } = await supabase.from('customer_stats').insert(mappedCustomers);
+                    if (custError) {
+                        console.error("Customer Stats Insert Error:", custError);
+                        // Don't fail the whole upload, but log it.
+                        alert("Warning: Transactions saved, but Customer Profit data failed to save: " + custError.message);
+                    }
+                }
             } else if (type === 'production') {
                 data = await parseProductionFile([file]);
 

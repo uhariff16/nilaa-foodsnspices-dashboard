@@ -793,7 +793,7 @@ const Dashboard = (props) => {
             const prevMonthNum = String(prevMIndex + 1).padStart(2, '0');
             const targetPrefix = `${prevYear}-${prevMonthNum}`;
 
-            // 1. Calculate Output
+            // 1. Calculate Output (Production)
             if (props.productionData?.postProduction) {
                 props.productionData.postProduction.forEach(item => {
                     if (item.date && item.date.startsWith(targetPrefix)) {
@@ -802,22 +802,30 @@ const Dashboard = (props) => {
                 });
             }
 
-            // 2. Calculate Expenses
+            // 1.1 Calculate Sales Volume (Fallback if Production Logs Missing)
+            let monthSalesQty = 0;
             if (data.transactions) {
                 data.transactions.forEach(t => {
                     if (t.parsedDate && t.parsedDate.startsWith(targetPrefix)) {
                         const type = t.parsedType;
-                        if (type === 'Expense') {
+                        // Check for Sales
+                        if (type && String(type).toLowerCase().includes('sale')) {
+                            monthSalesQty += parseFloat(t.parsedQty || 0);
+                        }
+
+                        // 2. Calculate Expenses
+                        if (type && String(type).toLowerCase().includes('expense')) {
                             const amount = parseFloat(t.parsedAmount || 0);
                             const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
 
-                            const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
+                            // [FIX] Expanded Keywords for Better Detection
+                            const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
                             const isLabour = labourKeywords.some(k => nameUpper.includes(k));
 
                             const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
                             const isMaterial = materialKeywords.some(k => nameUpper.includes(k));
 
-                            const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL'];
+                            const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
                             const isPackaging = packagingKeywords.some(k => nameUpper.includes(k));
 
                             if (isLabour) totalLabour += amount;
@@ -828,6 +836,11 @@ const Dashboard = (props) => {
                     }
                 });
             }
+
+            // Use fallback if production output is suspicious (e.g. less than 10% of sales or just 0)
+            // Actually, for Per Kg Cost, if I sold it I must have produced it.
+            // So Effective Output = Max(Production, Sales)
+            totalOutput = Math.max(totalOutput, monthSalesQty);
         }
 
         // reverse labels to show chronological order (e.g. Nov, Dec)

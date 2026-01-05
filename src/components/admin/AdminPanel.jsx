@@ -5,6 +5,7 @@ import AdminDataIngestion from './AdminDataIngestion';
 import DataManager from './DataManager';
 import AdminUserAccess from './AdminUserAccess';
 import AdminCleanup from './AdminCleanup';
+import ManualEntry from './ManualEntry';
 
 const AdminPanel = () => {
     const navigate = useNavigate();

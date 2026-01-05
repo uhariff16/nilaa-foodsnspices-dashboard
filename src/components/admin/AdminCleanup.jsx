@@ -18,6 +18,15 @@ const AdminCleanup = () => {
         "July", "August", "September", "October", "November", "December"
     ];
 
+    // [FIX] Timezone-safe date string helper
+    const getLocalDateString = (year, month, day) => {
+        const d = new Date(year, month, day);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const da = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${da}`;
+    };
+
     const fetchPreview = async () => {
         setPreviewLoading(true);
         setStatus({ type: '', message: '' });
@@ -32,8 +41,9 @@ const AdminCleanup = () => {
                 }
 
                 const monthIndex = months.indexOf(selectedMonth);
-                const startDate = new Date(selectedYear, monthIndex, 1).toISOString().split('T')[0];
-                const nextMonthDate = new Date(selectedYear, monthIndex + 1, 1).toISOString().split('T')[0];
+                // [FIX] Use local date construction
+                const startDate = getLocalDateString(selectedYear, monthIndex, 1);
+                const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
                 const { count: txCount, error: txError } = await supabase
                     .from('transactions')
@@ -103,8 +113,9 @@ const AdminCleanup = () => {
         try {
             if (mode === 'period') {
                 const monthIndex = months.indexOf(selectedMonth);
-                const startDate = new Date(selectedYear, monthIndex, 1).toISOString().split('T')[0];
-                const nextMonthDate = new Date(selectedYear, monthIndex + 1, 1).toISOString().split('T')[0];
+                // [FIX] Use local date construction
+                const startDate = getLocalDateString(selectedYear, monthIndex, 1);
+                const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
                 const { error: txError } = await supabase.from('transactions').delete().gte('date', startDate).lt('date', nextMonthDate);
                 if (txError) throw txError;

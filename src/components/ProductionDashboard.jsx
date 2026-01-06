@@ -53,7 +53,7 @@ const MetricCard = ({ title, value, subtext, icon: Icon, trend, image }) => (
             </div>
             <div style={{
                 fontSize: '0.75rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.25rem',
-                color: trend === 'up' ? '#34d399' : trend === 'down' ? '#f43f5e' : '#6b7280'
+                color: trend === 'up' ? '#34d399' : trend === 'down' ? '#f43f5e' : '#34d399'
             }}>
                 {subtext}
             </div>

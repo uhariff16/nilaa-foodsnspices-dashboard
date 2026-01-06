@@ -98,6 +98,40 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
+    useEffect(() => {
+        // Auto-logout for non-admin users after 15 minutes of inactivity
+        if (!user || role === 'admin') return;
+
+        const TIMEOUT_MS = 15 * 60 * 1000; // 15 Minutes
+        let lastActivity = Date.now();
+
+        const updateActivity = () => {
+            lastActivity = Date.now();
+        };
+
+        // Listen for activity
+        window.addEventListener('mousemove', updateActivity);
+        window.addEventListener('keydown', updateActivity);
+        window.addEventListener('click', updateActivity);
+        window.addEventListener('scroll', updateActivity);
+
+        const activityInterval = setInterval(() => {
+            if (Date.now() - lastActivity > TIMEOUT_MS) {
+                console.log(`Auto-logout triggered for ${user.email} due to inactivity.`);
+                logout(); // Call the internal logout function
+            }
+        }, 60000); // Check every minute
+
+        return () => {
+            window.removeEventListener('mousemove', updateActivity);
+            window.removeEventListener('keydown', updateActivity);
+            window.removeEventListener('click', updateActivity);
+            window.removeEventListener('scroll', updateActivity);
+            clearInterval(activityInterval);
+        };
+    }, [user, role]); // Re-bind when user/role changes
+
+
     const login = async (email, password) => {
         const { data, error } = await supabase.auth.signInWithPassword({
             email,

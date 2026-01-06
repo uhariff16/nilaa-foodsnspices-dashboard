@@ -132,7 +132,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
             {renderSeries(true)}
             <YAxis
               width={yAxisWidth}
-              stroke="#94a3b8"
+              stroke="#e2e8f0"
               fontSize={12}
               tickLine={false}
               axisLine={false}
@@ -164,7 +164,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
               <XAxis
                 dataKey="name"
-                stroke="#94a3b8"
+                stroke="#e2e8f0"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}

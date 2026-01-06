@@ -11,7 +11,7 @@ import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
@@ -50,7 +50,7 @@ const getValueColor = (value, type) => {
 
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
-    const { logout } = useAuth();
+    const { logout, isAdmin } = useAuth();
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -94,6 +94,10 @@ const Dashboard = (props) => {
             return { salary: '', daily: '' };
         }
     });
+
+    // Sorting State for Expenses
+    const [expenseSort, setExpenseSort] = useState({ key: 'total', direction: 'desc' });
+
 
     // Persist manual expenses
     useEffect(() => {
@@ -231,7 +235,21 @@ const Dashboard = (props) => {
 
     const avgOrderValue = salesCount > 0 ? salesRevenue / salesCount : 0;
 
-    const recordedExpenses = expenseTransactions.reduce((sum, t) => sum + (parseFloat(t.parsedAmount) || 0), 0);
+    // Split Expenses Calculation
+    let rawMaterialExpenses = 0;
+    let otherExpenses = 0;
+    const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+
+    const recordedExpenses = expenseTransactions.reduce((sum, t) => {
+        const amount = parseFloat(t.parsedAmount) || 0;
+        const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
+        const isMaterial = materialKeywords.some(keyword => nameUpper.includes(keyword));
+
+        if (isMaterial) rawMaterialExpenses += amount;
+        else otherExpenses += amount;
+
+        return sum + amount;
+    }, 0);
     const manualSalaryCalc = parseFloat(manualExpenses.salary) || 0;
     const manualDailyCalc = parseFloat(manualExpenses.daily) || 0;
     const totalManual = manualSalaryCalc + manualDailyCalc;
@@ -1071,18 +1089,20 @@ const Dashboard = (props) => {
                     <button className="btn-primary" onClick={handleDownloadReport}>
                         <Download size={18} style={{ marginRight: '0.5rem' }} /> Download
                     </button>
-                    <button className="btn-primary"
-                        disabled={props.isSyncing}
-                        style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none', opacity: props.isSyncing ? 0.7 : 1 }}
-                        onClick={async () => {
-                            if (props.onSync) {
-                                await props.onSync();
-                            }
-                        }}
-                    >
-                        <RefreshCw size={18} style={{ marginRight: '0.5rem', animation: props.isSyncing ? 'spin 1s linear infinite' : 'none' }} />
-                        {props.isSyncing ? 'Syncing...' : 'Sync Data'}
-                    </button>
+                    {props.isAdmin && (
+                        <button className="btn-primary"
+                            disabled={props.isSyncing}
+                            style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none', opacity: props.isSyncing ? 0.7 : 1 }}
+                            onClick={async () => {
+                                if (props.onSync) {
+                                    await props.onSync();
+                                }
+                            }}
+                        >
+                            <RefreshCw size={18} style={{ marginRight: '0.5rem', animation: props.isSyncing ? 'spin 1s linear infinite' : 'none' }} />
+                            {props.isSyncing ? 'Syncing...' : 'Sync Data'}
+                        </button>
+                    )}
                     <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={() => {
                         // Force a hard reload to ensure new files (which change the import.meta.glob manifest) are detected
                         const url = new URL(window.location.href);
@@ -1091,19 +1111,17 @@ const Dashboard = (props) => {
                     }}>
                         <RotateCw size={18} style={{ marginRight: '0.5rem' }} /> Refresh
                     </button>
-                    <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={onReset}>
-                        <RefreshCw size={18} style={{ marginRight: '0.5rem' }} /> Reset
-                    </button>
+
                     {props.isAdmin && (
                         <button
                             className="btn-primary"
-                            style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#3b82f6', boxShadow: 'none' }}
+                            style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--glass-border)', color: 'var(--accent-primary)', boxShadow: 'none' }}
                             onClick={() => window.location.href = '/admin'}
                         >
                             <Settings size={18} style={{ marginRight: '0.5rem' }} /> Admin
                         </button>
                     )}
-                    <button className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', boxShadow: 'none' }} onClick={logout}>
+                    <button className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--glass-border)', color: 'var(--danger)', boxShadow: 'none' }} onClick={logout}>
                         <LogOut size={18} style={{ marginRight: '0.5rem' }} /> Logout
                     </button>
                 </div>
@@ -1139,7 +1157,7 @@ const Dashboard = (props) => {
                         key={month}
                         onClick={() => setSelectedMonth(month)}
                         style={{
-                            background: selectedMonth === month ? '#3b82f6' : 'var(--glass-highlight)',
+                            background: selectedMonth === month ? 'var(--accent-primary)' : 'var(--glass-highlight)',
                             color: selectedMonth === month ? 'white' : 'var(--text-secondary)',
                             border: '1px solid var(--glass-border)',
                             padding: '0.5rem 1rem',
@@ -1157,13 +1175,13 @@ const Dashboard = (props) => {
             </div >
 
             {/* Navigation Tabs */}
-            <div className="custom-scrollbar" style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+            <div className="custom-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
                 <button
                     onClick={() => setActiveTab('overview')}
                     style={{
                         background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'overview' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'overview' ? '2px solid #3b82f6' : '2px solid transparent',
+                        color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'overview' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                         cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'overview' ? 600 : 400
                     }}
                 >
@@ -1174,8 +1192,8 @@ const Dashboard = (props) => {
                     onClick={() => setActiveTab('sales')}
                     style={{
                         background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'sales' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'sales' ? '2px solid #3b82f6' : '2px solid transparent',
+                        color: activeTab === 'sales' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'sales' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                         cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'sales' ? 600 : 400
                     }}
                 >
@@ -1187,68 +1205,21 @@ const Dashboard = (props) => {
                     onClick={() => setActiveTab('expenses')}
                     style={{
                         background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'expenses' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'expenses' ? '2px solid #3b82f6' : '2px solid transparent',
+                        color: activeTab === 'expenses' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'expenses' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                         cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'expenses' ? 600 : 400
                     }}
                 >
                     <CreditCard size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
                     Expenses
                 </button>
-                <button
-                    onClick={() => setActiveTab('items')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'items' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'items' ? '2px solid #3b82f6' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'items' ? 600 : 400
-                    }}
-                >
-                    <Package size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Item Analysis
-                </button>
-                <button
-                    onClick={() => setActiveTab('customers')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'customers' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'customers' ? '2px solid #3b82f6' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'customers' ? 600 : 400
-                    }}
-                >
-                    <Users size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Customers
-                </button>
-                <button
-                    onClick={() => setActiveTab('stock')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'stock' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'stock' ? '2px solid #3b82f6' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'stock' ? 600 : 400
-                    }}
-                >
-                    <Layers size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Stock
-                </button>
-                <button
-                    onClick={() => setActiveTab('production')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'production' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'production' ? '2px solid #3b82f6' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'production' ? 600 : 400
-                    }}
-                >
-                    <Factory size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Production
-                </button>
+
                 <button
                     onClick={() => setActiveTab('procurement')}
                     style={{
                         background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'procurement' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'procurement' ? '2px solid #3b82f6' : '2px solid transparent',
+                        color: activeTab === 'procurement' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'procurement' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                         cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'procurement' ? 600 : 400
                     }}
                 >
@@ -1257,20 +1228,64 @@ const Dashboard = (props) => {
                         Procurement
                     </div>
                 </button>
-                {/* [NEW] Simulator Tab */}
+
+                <button
+                    onClick={() => setActiveTab('stock')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.5rem 0',
+                        color: activeTab === 'stock' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'stock' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'stock' ? 600 : 400
+                    }}
+                >
+                    <Layers size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                    Stock
+                </button>
+
+                <button
+                    onClick={() => setActiveTab('production')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.5rem 0',
+                        color: activeTab === 'production' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'production' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'production' ? 600 : 400
+                    }}
+                >
+                    <Factory size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                    Production
+                </button>
+
+                <button
+                    onClick={() => setActiveTab('customers')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.5rem 0',
+                        color: activeTab === 'customers' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'customers' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'customers' ? 600 : 400
+                    }}
+                >
+                    <Users size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                    Customers
+                </button>
+
+
+
+                {/* [NEW] Simulator Tab - Highlighted */}
                 <button
                     onClick={() => setActiveTab('simulator')}
                     style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'simulator' ? '#3b82f6' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'simulator' ? '2px solid #3b82f6' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'simulator' ? 600 : 400
+                        background: activeTab === 'simulator' ? 'var(--accent-primary)' : 'var(--glass-highlight)',
+                        border: '1px solid var(--glass-border)',
+                        padding: '0.5rem 1rem',
+                        color: activeTab === 'simulator' ? 'white' : 'var(--text-primary)',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
+                        transition: 'all 0.2s',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
                     }}
                 >
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <Calculator size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        Simulator
-                    </div>
+                    <Calculator size={18} />
+                    Simulator
                 </button>
             </div >
 
@@ -1802,18 +1817,39 @@ const Dashboard = (props) => {
                             </div>
 
                             {/* Expense Metrics */}
-                            <div className="responsive-grid-3" style={{ marginBottom: '1.5rem' }}>
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Recorded (Files)</div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getValueColor(recordedExpenses, 'expense') }}>{formatCurrency(recordedExpenses)}</div>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: '1rem',
+                                marginBottom: '1.5rem'
+                            }}>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(249, 115, 22, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Material</div>
+                                        <Leaf size={16} color="#f97316" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
                                 </div>
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Manual (Salary/Daily)</div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Other Expenses</div>
+                                        <Tag size={16} color="#a855f7" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(otherExpenses)}</div>
+                                </div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Manual (Salary/Daily)</div>
+                                        <Settings size={16} color="#f59e0b" />
+                                    </div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(totalManual)}</div>
                                 </div>
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Total Outflow</div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getValueColor(grandTotalExpenses, 'expense') }}>{formatCurrency(grandTotalExpenses)}</div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Total Outflow</div>
+                                        <IndianRupee size={16} color="var(--danger)" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--danger)' }}>{formatCurrency(grandTotalExpenses)}</div>
                                 </div>
                             </div>
                             <div className="glass-panel" style={{
@@ -1844,13 +1880,22 @@ const Dashboard = (props) => {
                                     </span>
                                 </div>
                                 <div style={{
-                                    display: 'grid', gridTemplateColumns: '1fr 80px 120px', padding: '0.75rem',
+                                    display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(150px, 1fr) 80px 120px', padding: '0.75rem',
                                     borderBottom: '1px solid var(--glass-border)',
-                                    fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase'
+                                    fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase'
                                 }}>
-                                    <div>Description</div>
-                                    <div style={{ textAlign: 'center' }}>Count</div>
-                                    <div style={{ textAlign: 'right' }}>Total Amount</div>
+                                    <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                        Type {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                    <div onClick={() => setExpenseSort(p => ({ key: 'receiver', direction: p.key === 'receiver' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                        Paid To {expenseSort.key === 'receiver' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                    <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                        Count {expenseSort.key === 'count' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                    <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                        Total {expenseSort.key === 'total' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
                                 </div>
                                 <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                                     {(() => {
@@ -1859,12 +1904,30 @@ const Dashboard = (props) => {
                                         expenseTransactions.forEach(t => {
                                             const key = t.originalDesc || 'Uncategorized';
                                             if (!summary[key]) {
-                                                summary[key] = { name: key, total: 0, count: 0 };
+                                                // Split Logic: "Type - Receiver"
+                                                const parts = key.split(' - ');
+                                                const type = parts[0];
+                                                const receiver = parts.length > 1 ? parts.slice(1).join(' - ') : '-';
+                                                summary[key] = { name: key, type, receiver, total: 0, count: 0 };
                                             }
                                             summary[key].total += Math.abs(t.parsedAmount);
                                             summary[key].count += 1;
                                         });
-                                        const sortedItems = Object.values(summary).sort((a, b) => b.total - a.total);
+                                        let sortedItems = Object.values(summary);
+
+                                        // Sorting Logic
+                                        sortedItems.sort((a, b) => {
+                                            let valA = a[expenseSort.key];
+                                            let valB = b[expenseSort.key];
+
+                                            // Case insensitive for strings
+                                            if (typeof valA === 'string') valA = valA.toLowerCase();
+                                            if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                                            if (valA < valB) return expenseSort.direction === 'asc' ? -1 : 1;
+                                            if (valA > valB) return expenseSort.direction === 'asc' ? 1 : -1;
+                                            return 0;
+                                        });
 
                                         if (sortedItems.length === 0) {
                                             return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No expenses found.</div>;
@@ -1872,12 +1935,15 @@ const Dashboard = (props) => {
 
                                         return sortedItems.map((item, i) => (
                                             <div key={i} style={{
-                                                display: 'grid', gridTemplateColumns: '1fr 80px 120px', padding: '0.75rem',
+                                                display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(150px, 1fr) 80px 120px', padding: '0.75rem',
                                                 borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
                                                 background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
                                             }}>
-                                                <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
-                                                    {item.name}
+                                                <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.type}>
+                                                    {item.type}
+                                                </div>
+                                                <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.receiver}>
+                                                    {item.receiver}
                                                 </div>
                                                 <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                                                     {item.count}
@@ -1892,81 +1958,85 @@ const Dashboard = (props) => {
                             </div>
                         </div>
 
-                        {/* Manual Adjustments Panel */}
-                        <div>
-                            <div className="glass-panel" style={{ padding: '1.5rem', height: 'fit-content', position: 'sticky', top: '2rem' }}>
-                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                                    <Settings size={20} /> Manual Adjustments
-                                </h3>
-                                {/* ... (Manual Expense inputs remain same) */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                        Staff Salary (Monthly)
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
-                                        <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
-                                        <input
-                                            type="text"
-                                            value={manualExpenses.salary}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                                    setManualExpenses({ ...manualExpenses, salary: val });
-                                                }
-                                            }}
-                                            placeholder="0.00"
-                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
-                                        />
+                        {/* Manual Adjustments Panel (Admin Only) */}
+                        {isAdmin && (
+                            <div>
+                                <div className="glass-panel" style={{ padding: '1.5rem', height: 'fit-content', position: 'sticky', top: '2rem' }}>
+                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                                        <Settings size={20} /> Manual Adjustments
+                                    </h3>
+                                    {/* ... (Manual Expense inputs remain same) */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                                            Staff Salary (Monthly)
+                                        </label>
+                                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                                            <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
+                                            <input
+                                                type="text"
+                                                value={manualExpenses.salary}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                        setManualExpenses({ ...manualExpenses, salary: val });
+                                                    }
+                                                }}
+                                                placeholder="0.00"
+                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                        Other Daily Expenses
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
-                                        <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
-                                        <input
-                                            type="text"
-                                            value={manualExpenses.daily}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                                    setManualExpenses({ ...manualExpenses, daily: val });
-                                                }
-                                            }}
-                                            placeholder="0.00"
-                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
-                                        />
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                                            Other Daily Expenses
+                                        </label>
+                                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                                            <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
+                                            <input
+                                                type="text"
+                                                value={manualExpenses.daily}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                        setManualExpenses({ ...manualExpenses, daily: val });
+                                                    }
+                                                }}
+                                                placeholder="0.00"
+                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
+                                            />
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '0.5rem', marginBottom: '1rem' }}>
-                                    <p style={{ margin: 0, fontSize: '0.875rem', color: '#ef4444' }}>
-                                        These values will be added to your Total Expenses calculation immediately.
-                                    </p>
-                                </div>
+                                    <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+                                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#ef4444' }}>
+                                            These values will be added to your Total Expenses calculation immediately.
+                                        </p>
+                                    </div>
 
-                                <button
-                                    onClick={() => {
-                                        localStorage.setItem('manualExpenses', JSON.stringify(manualExpenses));
-                                        alert("Settings Saved Successfully!");
-                                    }}
-                                    className="btn-primary"
-                                    style={{ width: '100%', justifyContent: 'center' }}
-                                >
-                                    Save Configuration
-                                </button>
+                                    <button
+                                        onClick={() => {
+                                            localStorage.setItem('manualExpenses', JSON.stringify(manualExpenses));
+                                            alert("Settings Saved Successfully!");
+                                        }}
+                                        className="btn-primary"
+                                        style={{ width: '100%', justifyContent: 'center' }}
+                                    >
+                                        Save Configuration
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )
             }
 
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
-            {activeTab === 'customers' && (
-                <CustomerAnalysis data={filteredCustomers} />
-            )}{activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
+            {
+                activeTab === 'customers' && (
+                    <CustomerAnalysis data={filteredCustomers} />
+                )
+            } {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {
                 activeTab === 'procurement' && (
@@ -1981,12 +2051,14 @@ const Dashboard = (props) => {
             }
 
             {/* [NEW] Simulator Tab Content */}
-            {activeTab === 'simulator' && (
-                <CostSimulator
-                    previousMonthStats={previousMonthStats}
-                    selectedMonth={selectedMonth}
-                />
-            )}
+            {
+                activeTab === 'simulator' && (
+                    <CostSimulator
+                        previousMonthStats={previousMonthStats}
+                        selectedMonth={selectedMonth}
+                    />
+                )
+            }
 
         </div >
     );

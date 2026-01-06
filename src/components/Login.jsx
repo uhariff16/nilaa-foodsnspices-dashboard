@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, Loader2, Play } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -18,7 +19,6 @@ const Login = () => {
 
         try {
             await login(email, password);
-            // navigate is handled by AuthContext listener, but we can double tap it here for speed
             navigate('/');
         } catch (err) {
             console.error("Login failed:", err);
@@ -29,68 +29,209 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-[#1e293b]/80 backdrop-blur-lg border border-slate-700/50 rounded-2xl p-8 shadow-2xl animate-fade-in">
+        <div style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-primary)',
+            position: 'relative',
+            overflow: 'hidden'
+        }}>
+            {/* Background Effects */}
+            <div style={{
+                position: 'absolute',
+                top: '-50%', left: '-50%',
+                width: '200%', height: '200%',
+                background: 'radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.05), transparent 60%)',
+                animation: 'spin 20s linear infinite',
+                pointerEvents: 'none'
+            }} />
 
-                {/* Logo/Header */}
-                <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
-                        <Lock className="text-blue-400 w-8 h-8" />
+            <div className="glass-panel" style={{
+                width: '100%',
+                maxWidth: '420px',
+                padding: '2.5rem',
+                margin: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2rem',
+                position: 'relative',
+                zIndex: 10,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            }}>
+                {/* Header */}
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: '90px', height: '90px',
+                        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(255,255,255,0.05))',
+                        borderRadius: '1.5rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 1.5rem auto',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        boxShadow: '0 0 20px rgba(59, 130, 246, 0.1)',
+                        padding: '12px'
+                    }}>
+                        <img src={logo} alt="Nilaa Foods Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-                    <p className="text-slate-400">Sign in to Nilaa Foods Dashboard</p>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6', marginBottom: '0.25rem', letterSpacing: '-0.5px' }}>
+                        Nilaa Foods & Spices
+                    </h2>
+                    <h1 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', opacity: 0.8 }}>
+                        Welcome Back
+                    </h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
+                        Sign in to access your dashboard
+                    </p>
                 </div>
 
                 {error && (
-                    <div className="bg-red-500/10 border border-red-500/50 text-red-200 px-4 py-3 rounded-lg mb-6 text-sm">
-                        {error}
+                    <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        color: '#fca5a5',
+                        padding: '1rem',
+                        borderRadius: '0.75rem',
+                        fontSize: '0.875rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}>
+                        <span style={{ fontWeight: 600 }}>Error:</span> {error}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {/* Email Input */}
+                    <div style={{ position: 'relative' }}>
+                        <label style={{
+                            display: 'block',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            marginBottom: '0.5rem',
+                            paddingLeft: '0.25rem'
+                        }}>Email Address</label>
+                        <div style={{ position: 'relative' }}>
+                            <Mail size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
                             <input
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-600"
-                                placeholder="admin@nilaafoods.com"
+                                placeholder="name@company.com"
+                                style={{
+                                    width: '100%',
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.75rem',
+                                    padding: '0.875rem 1rem 0.875rem 3rem',
+                                    color: 'white',
+                                    fontSize: '1rem',
+                                    outline: 'none',
+                                    transition: 'all 0.2s',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = '#3b82f6';
+                                    e.target.style.background = 'rgba(15, 23, 42, 0.8)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = 'var(--glass-border)';
+                                    e.target.style.background = 'rgba(15, 23, 42, 0.6)';
+                                }}
                             />
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                    {/* Password Input */}
+                    <div style={{ position: 'relative' }}>
+                        <label style={{
+                            display: 'block',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            marginBottom: '0.5rem',
+                            paddingLeft: '0.25rem'
+                        }}>Password</label>
+                        <div style={{ position: 'relative' }}>
+                            <Lock size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
                             <input
                                 type="password"
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-600"
                                 placeholder="••••••••"
+                                style={{
+                                    width: '100%',
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.75rem',
+                                    padding: '0.875rem 1rem 0.875rem 3rem',
+                                    color: 'white',
+                                    fontSize: '1rem',
+                                    outline: 'none',
+                                    transition: 'all 0.2s',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.borderColor = '#3b82f6';
+                                    e.target.style.background = 'rgba(15, 23, 42, 0.8)';
+                                }}
+                                onBlur={(e) => {
+                                    e.target.style.borderColor = 'var(--glass-border)';
+                                    e.target.style.background = 'rgba(15, 23, 42, 0.6)';
+                                }}
                             />
                         </div>
                     </div>
 
+                    {/* Submit Button */}
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                        style={{
+                            marginTop: '0.5rem',
+                            width: '100%',
+                            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.75rem',
+                            padding: '1rem',
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            cursor: isLoading ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.75rem',
+                            transition: 'all 0.2s',
+                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                            opacity: isLoading ? 0.7 : 1
+                        }}
+                        onMouseOver={(e) => {
+                            if (!isLoading) {
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+                            }
+                        }}
+                        onMouseOut={(e) => {
+                            if (!isLoading) {
+                                e.currentTarget.style.transform = 'none';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                            }
+                        }}
                     >
-                        {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Sign In"}
-                        {!isLoading && <Play className="w-4 h-4 fill-current" />}
+                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : "Sign In"}
+                        {!isLoading && <Play size={16} fill="currentColor" />}
                     </button>
 
                 </form>
 
-                <div className="mt-6 text-center text-xs text-slate-500">
-                    Protected System • Authorized Personnel Only
+                <div style={{ textAlign: 'center', marginTop: '1rem', opacity: 0.6 }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                        Protected System • Authorized Personnel Only
+                    </p>
                 </div>
             </div>
         </div>

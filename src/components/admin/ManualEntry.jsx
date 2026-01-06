@@ -114,12 +114,12 @@ const ManualEntry = () => {
                             </h3>
                             <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Transaction Date</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Transaction Date</label>
                                     <input type="date" required value={txnForm.date} onChange={e => setTxnForm({ ...txnForm, date: e.target.value })}
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Type</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Type</label>
                                     <select value={txnForm.type} onChange={e => setTxnForm({ ...txnForm, type: e.target.value })}
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', cursor: 'pointer' }}>
                                         <option value="Sales">Sales Income (+)</option>
@@ -128,18 +128,18 @@ const ManualEntry = () => {
                                 </div>
                             </div>
                             <div style={{ marginTop: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Description / Item Name</label>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Description / Item Name</label>
                                 <input type="text" required value={txnForm.item_name} onChange={e => setTxnForm({ ...txnForm, item_name: e.target.value })} placeholder="e.g. Ginger Paste 1kg"
                                     style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontSize: '0.875rem' }} />
                             </div>
                             <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Amount (₹)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Amount (₹)</label>
                                     <input type="number" required value={txnForm.amount} onChange={e => setTxnForm({ ...txnForm, amount: e.target.value })} placeholder="0.00"
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '1.125rem', fontWeight: 'bold', textAlign: 'right' }} />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Invoice No. (Optional)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Invoice No. (Optional)</label>
                                     <input type="text" value={txnForm.invoice_no} onChange={e => setTxnForm({ ...txnForm, invoice_no: e.target.value })} placeholder="#INV-001"
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
@@ -152,12 +152,12 @@ const ManualEntry = () => {
                             </h3>
                             <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Log Date</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Log Date</label>
                                     <input type="date" required value={prodForm.date} onChange={e => setProdForm({ ...prodForm, date: e.target.value })}
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Activity Type</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Activity Type</label>
                                     <select value={prodForm.type} onChange={e => setProdForm({ ...prodForm, type: e.target.value })}
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', cursor: 'pointer' }}>
                                         <option value="stock_in">Stock In (Purchase)</option>
@@ -168,12 +168,12 @@ const ManualEntry = () => {
                             </div>
                             <div className="admin-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Material / Product</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Material / Product</label>
                                     <input type="text" required value={prodForm.material} onChange={e => setProdForm({ ...prodForm, material: e.target.value })} placeholder="e.g. Raw Ginger"
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontSize: '0.875rem' }} />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>Weight (KG)</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Weight (KG)</label>
                                     <input type="number" step="0.01" required value={prodForm.weight} onChange={e => setProdForm({ ...prodForm, weight: e.target.value })} placeholder="0.00"
                                         style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: 'white', fontFamily: 'monospace', fontSize: '1.125rem', fontWeight: 'bold', textAlign: 'right' }} />
                                 </div>

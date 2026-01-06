@@ -39,7 +39,7 @@ const ItemAnalysis = ({ data }) => {
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByProfit} layout="vertical" margin={{ left: 20 }}>
                             <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#e2e8f0', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="profit" fill="#10b981" radius={[0, 4, 4, 0]}>
                                 {sortedByProfit.map((entry, index) => (
@@ -56,7 +56,7 @@ const ItemAnalysis = ({ data }) => {
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByRevenue} layout="vertical" margin={{ left: 20 }}>
                             <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#e2e8f0', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
                         </BarChart>

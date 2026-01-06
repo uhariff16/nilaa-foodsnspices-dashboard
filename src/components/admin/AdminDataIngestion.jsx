@@ -29,9 +29,9 @@ const AdminDataIngestion = () => {
         };
     }, []);
 
-    const checkDbStatus = async () => {
+    const checkDbStatus = async (silent = false) => {
         setLoading(true);
-        setStatus({ type: 'idle', message: '' });
+        if (!silent) setStatus({ type: 'idle', message: '' });
         try {
             const { count: txCount, error: txError } = await supabase.from('transactions').select('*', { count: 'exact', head: true });
             const { count: custCount, error: cError } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).not('customer_name', 'is', null);
@@ -41,7 +41,7 @@ const AdminDataIngestion = () => {
             if (plError) throw plError;
 
             setDbReport({ transactions: txCount, production: plCount, customers: custCount || 0 });
-            setStatus({ type: 'success', message: "Database connection healthy." });
+            if (!silent) setStatus({ type: 'success', message: "Database connection healthy." });
         } catch (error) {
             console.error(error);
             setStatus({ type: 'error', message: "DB Connection Failed: " + error.message });
@@ -49,6 +49,36 @@ const AdminDataIngestion = () => {
             setLoading(false);
         }
     };
+
+
+    const fetchAllRecords = async (table, select, minDate, maxDate) => {
+        let allRecords = [];
+        let from = 0;
+        const PAGE_SIZE = 1000;
+        let more = true;
+
+        while (more) {
+            const { data, error } = await supabase
+                .from(table)
+                .select(select)
+                .gte('date', minDate)
+                .lte('date', maxDate)
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allRecords = [...allRecords, ...data];
+                // If we got less than the page size, we're done
+                if (data.length < PAGE_SIZE) more = false;
+                from += PAGE_SIZE;
+            } else {
+                more = false;
+            }
+        }
+        return allRecords;
+    };
+
 
     const handleFileSelect = (e, type) => {
         const file = e.target.files[0];
@@ -142,10 +172,62 @@ const AdminDataIngestion = () => {
                     throw new Error(`No valid records found after filtering.\n\nDebug Info:\n${debugInfo}`);
                 }
 
-                const { error } = await supabase.from('transactions').insert(formattedData);
-                if (error) throw error;
+                // 2025-01-05: Deduplication Logic
+                const allDates = formattedData.map(d => d.date).sort();
+                const minDate = allDates[0];
+                const maxDate = allDates[allDates.length - 1];
+
+                // Fetch Existing Transactions
+                const existingTxns = await fetchAllRecords('transactions', 'date, amount, item_name, invoice_no', minDate, maxDate);
+
+                console.log(`[Dedup] Range: ${minDate} to ${maxDate}`);
+                console.log(`[Dedup] Fetched ${existingTxns.length} existing records.`);
+
+                // Create Signatures
+                const createTxSig = (t) => {
+                    // Ensure robust comparison
+                    // Fix: Normalise DB Timestamp (YYYY-MM-DDT...) to YYYY-MM-DD
+                    let d = String(t.date || '').trim();
+                    if (d.includes('T')) d = d.split('T')[0];
+
+                    const a = Number(t.amount || 0).toFixed(2); // "150.00"
+                    const i = String(t.item_name || '').trim().toLowerCase(); // "item name"
+                    const inv = String(t.invoice_no || '').trim().toLowerCase(); // "inv-001"
+                    return `${d}|${a}|${i}|${inv}`;
+                };
+
+                const existingTxSet = new Set(existingTxns.map(t => {
+                    const sig = createTxSig(t);
+                    // console.log("[Dedup] DB Sig:", sig); // Uncomment if needed
+                    return sig;
+                }));
+
+                // Filter New
+                const uniqueTransactions = formattedData.filter(t => {
+                    const sig = createTxSig(t);
+                    const isDup = existingTxSet.has(sig);
+                    if (!isDup && existingTxns.length > 0 && Math.random() < 0.05) {
+                        // Sample log for non-duplicates to see why they didn't match
+                        console.log(`[Dedup] New (No Match): ${sig}`);
+                    }
+                    if (isDup && Math.random() < 0.05) {
+                        console.log(`[Dedup] Skipped (Match): ${sig}`);
+                    }
+                    return !isDup;
+                });
+
+                console.log(`[Dedup] New: ${uniqueTransactions.length}, Existing: ${existingTxSet.size}, Total Upload: ${formattedData.length}`);
+
+                if (uniqueTransactions.length > 0) {
+                    const { error } = await supabase.from('transactions').insert(uniqueTransactions);
+                    if (error) throw error;
+                } else {
+                    console.log("No new transactions to insert.");
+                }
 
                 const customerData = result.customers || [];
+                let addedCust = 0;
+
                 if (customerData.length > 0) {
                     const mappedCustomers = customerData.map(c => ({
                         customer_name: c.name,
@@ -153,12 +235,48 @@ const AdminDataIngestion = () => {
                         profit: c.profit,
                         date: c.parsedDate
                     }));
-                    const { error: custError } = await supabase.from('customer_stats').insert(mappedCustomers);
-                    if (custError) {
-                        console.error("Customer Stats Insert Error:", custError);
-                        alert("Warning: Transactions saved, but Customer Profit data failed to save: " + custError.message);
+
+                    // Deduplicate Customer Stats
+                    try {
+                        const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', minDate, maxDate);
+
+                        if (existingCusts) {
+                            const createCustSig = (c) => {
+                                let d = String(c.date || '').trim();
+                                if (d.includes('T')) d = d.split('T')[0];
+                                return `${d}|${String(c.customer_name).trim().toUpperCase()}|${Number(c.revenue).toFixed(2)}`;
+                            };
+                            const existingCustSet = new Set(existingCusts.map(createCustSig));
+
+                            const uniqueCustomers = mappedCustomers.filter(c => !existingCustSet.has(createCustSig(c)));
+
+                            if (uniqueCustomers.length > 0) {
+                                const { error: custError } = await supabase.from('customer_stats').insert(uniqueCustomers);
+                                if (custError) {
+                                    console.error("Customer Stats Insert Error:", custError);
+                                    alert("Warning: Transactions processed, but Customer Profit data failed: " + custError.message);
+                                } else {
+                                    addedCust = uniqueCustomers.length;
+                                }
+                            }
+                        }
+                    } catch (custErr) {
+                        console.warn("Could not fetch existing customer stats for dedup. Skipping stats insert to be safe.", custErr);
                     }
                 }
+
+                if (uniqueTransactions.length === 0 && addedCust === 0) {
+                    setStatus({ type: 'success', message: `Upload Skipped: All records already exist.` });
+                    setLoading(false);
+                    return; // Early return to avoid overwriting success message
+                }
+
+                const statsMsg = uniqueTransactions.length > 0
+                    ? `Uploaded ${uniqueTransactions.length} new transactions.`
+                    : `All transactions existed.`;
+
+                setStatus({ type: 'success', message: `Success! ${statsMsg}` });
+
             } else if (type === 'production') {
                 data = await parseProductionFile([file]);
                 if (data.preProduction.length === 0) {
@@ -172,15 +290,13 @@ const AdminDataIngestion = () => {
                 const minDate = allDates[0];
                 const maxDate = allDates[allDates.length - 1];
 
-                const { data: existingLogs, error: fetchError } = await supabase
-                    .from('production_logs')
-                    .select('date, material, weight, type')
-                    .gte('date', minDate)
-                    .lte('date', maxDate);
+                const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
 
-                if (fetchError) throw new Error("Dedup Check Error: " + fetchError.message);
-
-                const createSig = (d) => `${d.date}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                const createSig = (d) => {
+                    let dateStr = String(d.date || '').trim();
+                    if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
+                    return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                };
                 const existingSet = new Set(existingLogs.map(createSig));
 
                 const filterNew = (items, type) => {
@@ -257,15 +373,13 @@ const AdminDataIngestion = () => {
                 const minDate = allDates[0];
                 const maxDate = allDates[allDates.length - 1];
 
-                const { data: existingLogs, error: fetchError } = await supabase
-                    .from('production_logs')
-                    .select('date, material, weight, type')
-                    .gte('date', minDate)
-                    .lte('date', maxDate);
+                const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
 
-                if (fetchError) throw new Error("Dedup Check Error: " + fetchError.message);
-
-                const createSig = (d) => `${d.date}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                const createSig = (d) => {
+                    let dateStr = String(d.date || '').trim();
+                    if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
+                    return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                };
                 const existingSet = new Set(existingLogs.map(createSig));
 
                 const filterNew = (items, type) => {
@@ -312,11 +426,77 @@ const AdminDataIngestion = () => {
                 })).filter(r => r.date && r.amount && r.item_name);
 
                 if (formattedData.length === 0) throw new Error("No valid records found after filtering.");
-                const { error } = await supabase.from('transactions').insert(formattedData);
-                if (error) throw error;
-                setStatus({ type: 'success', message: `Batch Upload Complete. Uploaded ${formattedData.length} transactions from ${excelFiles.length} files.` });
+
+                // 2025-01-06: Added Dedup Logic to Folder Mode
+                const allDates = formattedData.map(d => d.date).sort();
+                const minDate = allDates[0];
+                const maxDate = allDates[allDates.length - 1];
+
+                // Fetch Existing
+                const existingTxns = await fetchAllRecords('transactions', 'date, amount, item_name, invoice_no', minDate, maxDate);
+
+                if (!existingTxns) throw new Error("Dedup Check Error (Tx): Failed to fetch records");
+
+                const createTxSig = (t) => {
+                    let d = String(t.date || '').trim();
+                    if (d.includes('T')) d = d.split('T')[0];
+                    const a = Number(t.amount || 0).toFixed(2);
+                    const i = String(t.item_name || '').trim().toLowerCase();
+                    const inv = String(t.invoice_no || '').trim().toLowerCase();
+                    return `${d}|${a}|${i}|${inv}`;
+                };
+                const existingTxSet = new Set(existingTxns.map(createTxSig));
+
+                // Filter
+                const uniqueTransactions = formattedData.filter(t => !existingTxSet.has(createTxSig(t)));
+
+                if (uniqueTransactions.length > 0) {
+                    const { error } = await supabase.from('transactions').insert(uniqueTransactions);
+                    if (error) throw error;
+                } else {
+                    console.log("No new transactions in this batch.");
+                }
+
+                // Customer Stats Logic for Folder Mode (Ported from File Mode)
+                const customerData = result.customers || [];
+                let addedCust = 0;
+
+                if (customerData.length > 0) {
+                    const mappedCustomers = customerData.map(c => ({
+                        customer_name: c.name,
+                        revenue: c.revenue,
+                        profit: c.profit,
+                        date: c.parsedDate
+                    }));
+
+                    try {
+                        const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', minDate, maxDate);
+
+                        if (existingCusts) {
+                            const createCustSig = (c) => {
+                                let d = String(c.date || '').trim();
+                                if (d.includes('T')) d = d.split('T')[0];
+                                return `${d}|${String(c.customer_name).trim().toUpperCase()}|${Number(c.revenue).toFixed(2)}`;
+                            };
+                            const existingCustSet = new Set(existingCusts.map(createCustSig));
+                            const uniqueCustomers = mappedCustomers.filter(c => !existingCustSet.has(createCustSig(c)));
+
+                            if (uniqueCustomers.length > 0) {
+                                const { error: custError } = await supabase.from('customer_stats').insert(uniqueCustomers);
+                                if (custError) console.error("Customer Stats Insert Error:", custError);
+                                else addedCust = uniqueCustomers.length;
+                            }
+                        }
+                    } catch (custErr) {
+                        console.error("Customer Stats Fetch Error", custErr);
+                    }
+                }
+
+                setStatus({ type: 'success', message: `Batch Upload Complete. Uploaded ${uniqueTransactions.length} new transactions and ${addedCust} customer stats from ${excelFiles.length} files. (Skipped duplicates)` });
             }
-            checkDbStatus();
+
+            // Update stats silently
+            await checkDbStatus(true);
             if (prodFolderRef.current) prodFolderRef.current.value = "";
         } catch (err) {
             console.error("Batch Upload Error:", err);

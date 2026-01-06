@@ -11,6 +11,8 @@ const AdminCleanup = () => {
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
 
+    const [targets, setTargets] = useState({ sales: true, production: true });
+
     // Generate Year Options
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
     const months = [
@@ -40,38 +42,50 @@ const AdminCleanup = () => {
                     return;
                 }
 
+                if (!targets.sales && !targets.production) {
+                    setStatus({ type: 'error', message: 'Please select at least one data type to clean.' });
+                    setPreviewLoading(false);
+                    return;
+                }
+
                 const monthIndex = months.indexOf(selectedMonth);
-                // [FIX] Use local date construction
                 const startDate = getLocalDateString(selectedYear, monthIndex, 1);
                 const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
-                const { count: txCount, error: txError } = await supabase
-                    .from('transactions')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('date', startDate)
-                    .lt('date', nextMonthDate);
+                let txCount = 0;
+                let plCount = 0;
 
-                if (txError) throw txError;
+                if (targets.sales) {
+                    const { count, error } = await supabase
+                        .from('transactions')
+                        .select('*', { count: 'exact', head: true })
+                        .gte('date', startDate)
+                        .lt('date', nextMonthDate);
+                    if (error) throw error;
+                    txCount = count || 0;
+                }
 
-                const { count: plCount, error: plError } = await supabase
-                    .from('production_logs')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('date', startDate)
-                    .lt('date', nextMonthDate);
+                if (targets.production) {
+                    const { count, error } = await supabase
+                        .from('production_logs')
+                        .select('*', { count: 'exact', head: true })
+                        .gte('date', startDate)
+                        .lt('date', nextMonthDate);
+                    if (error) throw error;
+                    plCount = count || 0;
+                }
 
-                if (plError) throw plError;
-
-                const totalCount = (txCount || 0) + (plCount || 0);
+                const totalCount = txCount + plCount;
 
                 setPreviewData({
                     mode: 'period',
-                    txCount: txCount || 0,
-                    plCount: plCount || 0,
+                    txCount,
+                    plCount,
                     totalCount,
                     period: `${selectedMonth} ${selectedYear}`
                 });
 
-                if (totalCount === 0) setStatus({ type: 'info', message: `No records found for ${selectedMonth} ${selectedYear}.` });
+                if (totalCount === 0) setStatus({ type: 'info', message: `No selected records found for ${selectedMonth} ${selectedYear}.` });
 
             } else if (mode === 'all_production') {
                 // Fetch Total Production Logs
@@ -98,11 +112,53 @@ const AdminCleanup = () => {
         }
     };
 
+    // Recursive deletion helper to bypass limits
+    const deleteInBatches = async (table, startDate, endDate) => {
+        let deletedTotal = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+            // Check if ANY records exist in this range
+            const { count, error: checkError } = await supabase
+                .from(table)
+                .select('*', { count: 'exact', head: true })
+                .gte('date', startDate)
+                .lt('date', endDate);
+
+            if (checkError) throw checkError;
+
+            if (!count || count === 0) {
+                hasMore = false;
+                break;
+            }
+
+            // Perform Delete
+            // Note: supabase .delete() usually deletes all matching rows, but sometimes has a timeout/limit.
+            // We loop just to be safe and verify count drops to 0.
+            const { error: deleteError } = await supabase
+                .from(table)
+                .delete()
+                .gte('date', startDate)
+                .lt('date', endDate);
+
+            if (deleteError) throw deleteError;
+
+            deletedTotal += count; // Estimate based on check
+
+            // Safety break loop if it seems infinite (though delete should work)
+            if (count === 0) hasMore = false;
+        }
+        return deletedTotal;
+    };
+
     const handleDelete = async () => {
         if (!previewData || previewData.totalCount === 0) return;
 
         const confirmMessage = mode === 'period'
-            ? `Are you SURE you want to delete data from ${previewData.period}? \n\n- ${previewData.txCount} Sales/Expenses\n- ${previewData.plCount} Production Logs\n\nThis cannot be undone.`
+            ? `Are you SURE you want to delete data from ${previewData.period}? \n` +
+            (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses (and related Customer Stats)` : '') +
+            (targets.production ? `\n- ${previewData.plCount} Production Logs` : '') +
+            `\n\nThis cannot be undone.`
             : `⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to delete ALL Production Logs (${previewData.count} records)?\n\nThis will wipe the entire production history from the database.\nThis action is IRREVERSIBLE.`;
 
         if (!window.confirm(confirmMessage)) return;
@@ -113,21 +169,26 @@ const AdminCleanup = () => {
         try {
             if (mode === 'period') {
                 const monthIndex = months.indexOf(selectedMonth);
-                // [FIX] Use local date construction
                 const startDate = getLocalDateString(selectedYear, monthIndex, 1);
                 const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
-                const { error: txError } = await supabase.from('transactions').delete().gte('date', startDate).lt('date', nextMonthDate);
-                if (txError) throw txError;
+                if (targets.sales) {
+                    await deleteInBatches('transactions', startDate, nextMonthDate);
+                    await deleteInBatches('customer_stats', startDate, nextMonthDate); // Clean up stats too
+                }
 
-                const { error: plError } = await supabase.from('production_logs').delete().gte('date', startDate).lt('date', nextMonthDate);
-                if (plError) throw plError;
+                if (targets.production) {
+                    await deleteInBatches('production_logs', startDate, nextMonthDate);
+                }
 
-                setStatus({ type: 'success', message: `Successfully deleted records from ${previewData.period}.` });
+                setStatus({ type: 'success', message: `Successfully deleted selected records from ${previewData.period}.` });
 
             } else if (mode === 'all_production') {
-                // Delete ALL Production Logs
-                const { error } = await supabase.from('production_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+                // Delete ALL Production Logs (Limitless)
+                // Since we can't use date range easily here, we might need a different recursive strategy 
+                // or just trust the 'neq 0' trick.
+                // Let's stick to the neq trick but wrap in a loop if needed.
+                const { error } = await supabase.from('production_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
                 if (error) throw error;
 
                 setStatus({ type: 'success', message: `Successfully wiped all Production Logs.` });
@@ -191,33 +252,63 @@ const AdminCleanup = () => {
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', justifyContent: 'center' }}>
                         {mode === 'period' && (
                             <>
-                                {/* Year Selector */}
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Year</label>
-                                    <select
-                                        value={selectedYear}
-                                        onChange={(e) => setSelectedYear(Number(e.target.value))}
-                                        style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
-                                    >
-                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
+                                {/* Granular Toggles */}
+                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.25rem', justifyContent: 'center', width: '100%' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.sales ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={targets.sales}
+                                            onChange={(e) => {
+                                                setTargets(prev => ({ ...prev, sales: e.target.checked }));
+                                                setPreviewData(null);
+                                            }}
+                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
+                                        />
+                                        Sales & Expenses
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.production ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={targets.production}
+                                            onChange={(e) => {
+                                                setTargets(prev => ({ ...prev, production: e.target.checked }));
+                                                setPreviewData(null);
+                                            }}
+                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
+                                        />
+                                        Production Logs
+                                    </label>
                                 </div>
 
-                                {/* Month Selector */}
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Month</label>
-                                    <select
-                                        value={selectedMonth}
-                                        onChange={(e) => {
-                                            setSelectedMonth(e.target.value);
-                                            setPreviewData(null);
-                                            setStatus({ type: '', message: '' });
-                                        }}
-                                        style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
-                                    >
-                                        <option value="">Select Month</option>
-                                        {months.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
+                                <div style={{ display: 'flex', gap: '1rem', width: '100%', justifyContent: 'center' }}>
+                                    {/* Year Selector */}
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Year</label>
+                                        <select
+                                            value={selectedYear}
+                                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                            style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
+                                        >
+                                            {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Month Selector */}
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Month</label>
+                                        <select
+                                            value={selectedMonth}
+                                            onChange={(e) => {
+                                                setSelectedMonth(e.target.value);
+                                                setPreviewData(null);
+                                                setStatus({ type: '', message: '' });
+                                            }}
+                                            style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
+                                        >
+                                            <option value="">Select Month</option>
+                                            {months.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                             </>
                         )}

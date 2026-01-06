@@ -51,14 +51,8 @@ const getValueColor = (value, type) => {
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
     const { logout } = useAuth();
-    // Persist active tab to restore after refresh
-    const [activeTab, setActiveTab] = useState(() => {
-        const saved = localStorage.getItem('dashboard_active_tab');
-        const allowed = ['overview', 'sales', 'expenses', 'items', 'customers', 'production', 'procurement', 'stock', 'simulator'];
-        return allowed.includes(saved) ? saved : 'overview';
-    });
-
-
+    // Default to Overview tab (per user request)
+    const [activeTab, setActiveTab] = useState('overview');
 
     // Theme State
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -78,8 +72,14 @@ const Dashboard = (props) => {
 
     const [salesViewMode, setSalesViewMode] = useState('summary'); // 'summary' | 'item'
     const [expenseSearch, setExpenseSearch] = useState('');
-    const [selectedMonth, setSelectedMonth] = React.useState('Overall');
-    const [selectedYear, setSelectedYear] = React.useState('2025');
+
+    // Default to Current Date
+    const [selectedMonth, setSelectedMonth] = React.useState(() => {
+        const m = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const d = new Date();
+        return `${m[d.getMonth()]} ${d.getFullYear()}`;
+    });
+    const [selectedYear, setSelectedYear] = React.useState(() => String(new Date().getFullYear()));
 
     // State for tooltips
     const [hoveredCard, setHoveredCard] = useState(null);

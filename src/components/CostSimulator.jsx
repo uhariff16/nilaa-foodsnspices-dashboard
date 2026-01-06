@@ -7,9 +7,9 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         salesChannel: 'retail', // 'retail', 'wholesale'
         productType: 'paste', // 'paste', 'ginger_peeled', 'garlic_peeled'
         pasteVariant: 'mix', // 'mix', 'ginger', 'garlic' (Only for productType === 'paste')
-        gingerKg: 50,
+        gingerKg: 100,
         gingerRate: 0,
-        garlicKg: 50,
+        garlicKg: 100,
         garlicRate: 0,
         labourCost: 0,
         overheadCost: 0,

@@ -11,7 +11,7 @@ const AdminCleanup = () => {
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
 
-    const [targets, setTargets] = useState({ sales: true, production: true });
+    const [targets, setTargets] = useState({ sales: true, production: true, receivables: true });
 
     // Generate Year Options
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -42,7 +42,7 @@ const AdminCleanup = () => {
                     return;
                 }
 
-                if (!targets.sales && !targets.production) {
+                if (!targets.sales && !targets.production && !targets.receivables) {
                     setStatus({ type: 'error', message: 'Please select at least one data type to clean.' });
                     setPreviewLoading(false);
                     return;
@@ -54,6 +54,15 @@ const AdminCleanup = () => {
 
                 let txCount = 0;
                 let plCount = 0;
+                let rxCount = 0;
+
+                if (targets.receivables) {
+                    const { count, error } = await supabase
+                        .from('customer_receivables')
+                        .select('*', { count: 'exact', head: true });
+                    if (error) throw error;
+                    rxCount = count || 0;
+                }
 
                 if (targets.sales) {
                     const { count, error } = await supabase
@@ -75,12 +84,13 @@ const AdminCleanup = () => {
                     plCount = count || 0;
                 }
 
-                const totalCount = txCount + plCount;
+                const totalCount = txCount + plCount + rxCount;
 
                 setPreviewData({
                     mode: 'period',
                     txCount,
                     plCount,
+                    rxCount,
                     totalCount,
                     period: `${selectedMonth} ${selectedYear}`
                 });
@@ -156,8 +166,9 @@ const AdminCleanup = () => {
 
         const confirmMessage = mode === 'period'
             ? `Are you SURE you want to delete data from ${previewData.period}? \n` +
-            (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses (and related Customer Stats)` : '') +
+            (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses` : '') +
             (targets.production ? `\n- ${previewData.plCount} Production Logs` : '') +
+            (targets.receivables ? `\n- ${previewData.rxCount} Customer Receivables (ALL)` : '') +
             `\n\nThis cannot be undone.`
             : `⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to delete ALL Production Logs (${previewData.count} records)?\n\nThis will wipe the entire production history from the database.\nThis action is IRREVERSIBLE.`;
 
@@ -172,6 +183,16 @@ const AdminCleanup = () => {
                 const startDate = getLocalDateString(selectedYear, monthIndex, 1);
                 const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
+                if (targets.receivables) {
+                    // Wipe all receivables (no date column, so deleteInBatches won't work)
+                    const { error } = await supabase
+                        .from('customer_receivables')
+                        .delete()
+                        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+                    if (error) throw error;
+                }
+
                 if (targets.sales) {
                     await deleteInBatches('transactions', startDate, nextMonthDate);
                     await deleteInBatches('customer_stats', startDate, nextMonthDate); // Clean up stats too
@@ -181,7 +202,7 @@ const AdminCleanup = () => {
                     await deleteInBatches('production_logs', startDate, nextMonthDate);
                 }
 
-                setStatus({ type: 'success', message: `Successfully deleted selected records from ${previewData.period}.` });
+                setStatus({ type: 'success', message: `Successfully deleted selected records.` });
 
             } else if (mode === 'all_production') {
                 // Delete ALL Production Logs (Limitless)
@@ -277,6 +298,18 @@ const AdminCleanup = () => {
                                             style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
                                         />
                                         Production Logs
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.receivables ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={targets.receivables}
+                                            onChange={(e) => {
+                                                setTargets(prev => ({ ...prev, receivables: e.target.checked }));
+                                                setPreviewData(null);
+                                            }}
+                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
+                                        />
+                                        Receivables
                                     </label>
                                 </div>
 

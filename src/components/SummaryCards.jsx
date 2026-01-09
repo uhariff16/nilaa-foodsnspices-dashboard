@@ -61,7 +61,7 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
                 } else {
                     legacyInvoiceCount++;
                 }
-            } else if (type.includes('expense') || type.includes('cost')) {
+            } else if (type.includes('expense') || type.includes('cost') || type.includes('purchase')) {
                 expenses += amt;
             } else {
                 if (!type) {

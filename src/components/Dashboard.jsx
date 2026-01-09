@@ -217,7 +217,7 @@ const Dashboard = (props) => {
     // Derived Data for Tabs (using filteredTransactions)
     const salesTransactions = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
     const expenseTransactions = filteredTransactions
-        .filter(t => String(t.parsedType).toLowerCase().includes('expense'))
+        .filter(t => String(t.parsedType).toLowerCase().includes('expense') || t.parsedType === 'Purchase')
         .filter(t => {
             if (!expenseSearch) return true;
             const searchLower = expenseSearch.toLowerCase();
@@ -698,13 +698,13 @@ const Dashboard = (props) => {
                 // Accumulate Invoice Sales for Consistency Calculation
                 totalInvoiceSales += parseFloat(item.parsedAmount || 0);
             }
-            else if (type === 'Expense') {
+            else if (type === 'Expense' || type === 'Purchase') {
                 const amount = parseFloat(item.parsedAmount || 0);
                 const nameUpper = (item.originalDesc || item.name || '').toUpperCase();
 
                 // 1. Material Cost (Whitelist)
                 const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
-                const isMaterial = materialKeywords.some(keyword => nameUpper.includes(keyword));
+                const isMaterial = (type === 'Purchase') || materialKeywords.some(keyword => nameUpper.includes(keyword));
 
                 // 2. Direct Labour (Keywords)
                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
@@ -832,7 +832,7 @@ const Dashboard = (props) => {
                         }
 
                         // 2. Calculate Expenses
-                        if (type && String(type).toLowerCase().includes('expense')) {
+                        if (type && (String(type).toLowerCase().includes('expense') || String(type) === 'Purchase')) {
                             const amount = parseFloat(t.parsedAmount || 0);
                             const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
 
@@ -2034,7 +2034,7 @@ const Dashboard = (props) => {
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
             {
                 activeTab === 'customers' && (
-                    <CustomerAnalysis data={filteredCustomers} />
+                    <CustomerAnalysis data={filteredCustomers} receivables={props.data?.receivables || []} />
                 )
             } {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}

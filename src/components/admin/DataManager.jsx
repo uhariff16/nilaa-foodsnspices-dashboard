@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { Search, Filter, Edit2, Trash2, ChevronLeft, ChevronRight, X, Save, AlertCircle, CheckCircle, Database, Calendar, DollarSign, Package, RefreshCw } from 'lucide-react';
 
 const DataManager = () => {
-    const [selectedTable, setSelectedTable] = useState('transactions'); // 'transactions' | 'production_logs'
+    const [selectedTable, setSelectedTable] = useState('transactions'); // 'transactions' | 'production_logs' | 'customer_receivables'
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -30,19 +30,29 @@ const DataManager = () => {
         try {
             let query = supabase
                 .from(selectedTable)
-                .select('*')
-                .order('date', { ascending: false })
-                .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+                .select('*');
+
+            // Conditional Sorting
+            if (selectedTable === 'customer_receivables') {
+                query = query.order('customer_name', { ascending: true });
+            } else {
+                query = query.order('date', { ascending: false });
+            }
+
+            query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
             // Apply Filters
-            if (dateFilter) query = query.eq('date', dateFilter);
+            if (dateFilter && selectedTable !== 'customer_receivables') query = query.eq('date', dateFilter);
 
             if (searchTerm) {
                 if (selectedTable === 'transactions') {
                     // Search by item name or invoice
                     query = query.or(`item_name.ilike.%${searchTerm}%,invoice_no.ilike.%${searchTerm}%`);
+                } else if (selectedTable === 'customer_receivables') {
+                    // Search by customer name
+                    query = query.ilike('customer_name', `%${searchTerm}%`);
                 } else {
-                    // Search by material
+                    // Search by material (production_logs)
                     query = query.ilike('material', `%${searchTerm}%`);
                 }
             }
@@ -103,6 +113,9 @@ const DataManager = () => {
             const updatePayload = { ...editForm };
             delete updatePayload.id; // Don't update ID
             delete updatePayload.created_at;
+            if (selectedTable === 'customer_receivables') {
+                delete updatePayload.date; // Receivables don't strictly use a daily log date
+            }
 
             const { error } = await supabase
                 .from(selectedTable)
@@ -168,6 +181,18 @@ const DataManager = () => {
                             <Package size={16} />
                             Production Logs
                         </button>
+                        <button
+                            onClick={() => setSelectedTable('customer_receivables')}
+                            className={`btn-toggle ${selectedTable === 'customer_receivables' ? 'active rose' : ''}`}
+                            style={{
+                                background: selectedTable === 'customer_receivables' ? 'rgba(244, 63, 94, 0.2)' : 'transparent',
+                                color: selectedTable === 'customer_receivables' ? '#f43f5e' : 'inherit',
+                                border: selectedTable === 'customer_receivables' ? '1px solid #f43f5e' : '1px solid rgba(255,255,255,0.1)'
+                            }}
+                        >
+                            <DollarSign size={16} />
+                            Receivables
+                        </button>
                     </div>
 
                     <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -186,7 +211,7 @@ const DataManager = () => {
                                 type="text"
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
-                                placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : "Search Material..."}
+                                placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : (selectedTable === 'customer_receivables' ? "Search Customer..." : "Search Material...")}
                                 style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'white', fontSize: '0.875rem', outline: 'none' }}
                             />
                         </div>
@@ -219,6 +244,12 @@ const DataManager = () => {
                                         <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Item / Description</th>
                                         <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Amount</th>
                                     </>
+                                ) : selectedTable === 'customer_receivables' ? (
+                                    <>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Customer Name</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>City</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Balance Due</th>
+                                    </>
                                 ) : (
                                     <>
                                         <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Type</th>
@@ -236,8 +267,12 @@ const DataManager = () => {
                                         // EDIT MODE
                                         <>
                                             <td style={{ padding: '1rem' }}>
-                                                <input type="date" value={editForm.date} onChange={e => handleEditChange('date', e.target.value)}
-                                                    style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                {selectedTable === 'customer_receivables' ? (
+                                                    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>N/A</span>
+                                                ) : (
+                                                    <input type="date" value={editForm.date} onChange={e => handleEditChange('date', e.target.value)}
+                                                        style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                )}
                                             </td>
                                             {selectedTable === 'transactions' ? (
                                                 <>
@@ -255,6 +290,21 @@ const DataManager = () => {
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.amount} onChange={e => handleEditChange('amount', e.target.value)}
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
+                                                    </td>
+                                                </>
+                                            ) : selectedTable === 'customer_receivables' ? (
+                                                <>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input type="text" value={editForm.customer_name} onChange={e => handleEditChange('customer_name', e.target.value)}
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input type="text" value={editForm.city} onChange={e => handleEditChange('city', e.target.value)}
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input type="number" value={editForm.balance} onChange={e => handleEditChange('balance', e.target.value)}
                                                             style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
@@ -288,7 +338,12 @@ const DataManager = () => {
                                     ) : (
                                         // VIEW MODE
                                         <>
-                                            <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>{row.date}</td>
+                                            {selectedTable === 'customer_receivables' ? (
+                                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>-</td>
+                                            ) : (
+                                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>{row.date}</td>
+                                            )}
+
                                             {selectedTable === 'transactions' ? (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
@@ -313,6 +368,14 @@ const DataManager = () => {
                                                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(row.amount)}
                                                     </td>
                                                 </>
+                                            ) : selectedTable === 'customer_receivables' ? (
+                                                <>
+                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>{row.customer_name}</td>
+                                                    <td style={{ padding: '1rem', color: '#94a3b8' }}>{row.city}</td>
+                                                    <td style={{ padding: '1rem', textAlign: 'right', color: row.balance > 0 ? '#ef4444' : '#10b981', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                                        {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(row.balance)}
+                                                    </td>
+                                                </>
                                             ) : (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
@@ -333,7 +396,6 @@ const DataManager = () => {
                                                     <td style={{ padding: '1rem', textAlign: 'right', color: '#e2e8f0', fontFamily: 'monospace' }}>{row.weight} KG</td>
                                                 </>
                                             )}
-
                                             <td style={{ padding: '1rem', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                                     <button onClick={() => startEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: '#60a5fa' }} title="Edit">

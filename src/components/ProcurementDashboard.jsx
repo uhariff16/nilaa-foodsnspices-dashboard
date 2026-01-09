@@ -92,9 +92,9 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         const dateFiltered = getFilteredItems(purchases);
         return dateFiltered.filter(item => {
             const desc = (item.originalDesc || item.supplier || item.remarks || '').toLowerCase();
-            // Whitelist: Only allow Ginger and Garlic related records
+            // Whitelist: Only allow Ginger and Garlic related records OR explicit 'Purchase' type
             // Also explicit allow for 'jayakodi' as fallback if item name is missing
-            return desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi');
+            return item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi');
         });
     }, [purchases, selectedMonth, selectedYear]);
 
@@ -397,10 +397,10 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                                 padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)'
                             }}>
                                 <div>
-                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{supplier}</div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
+                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '1rem' }}>{supplier}</div>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
                                 </div>
-                                <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.9rem' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
+                                <div style={{ fontWeight: 700, color: '#34D399', fontSize: '1rem' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
                             </div>
                         ))}
                     </div>
@@ -417,12 +417,13 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 }}>
                     <div style={{ padding: '1rem', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid rgba(51, 65, 85, 0.5)', fontWeight: 600, color: '#f43f5e', display: 'flex', justifyContent: 'space-between' }}>
                         <span>Supplier Ledger</span>
-                        <span style={{ fontSize: '0.75rem', background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', padding: '0.1rem 0.5rem', borderRadius: '0.25rem' }}>{sortedPurchases.length} Recs</span>
+                        <span style={{ fontSize: '0.85rem', background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', padding: '0.1rem 0.5rem', borderRadius: '0.25rem' }}>{sortedPurchases.length} Recs</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '90px 100px 1fr 80px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                         <div>Date</div>
                         <div>Bill No</div>
-                        <div>Supplier & Remarks</div>
+                        <div>Item Name</div>
+                        <div>Supplier</div>
                         <div style={{ textAlign: 'right' }}>Qty</div>
                         <div style={{ textAlign: 'right' }}>Unit Price</div>
                         <div style={{ textAlign: 'right' }}>Amount</div>
@@ -432,19 +433,21 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                             const qty = item.quantity || item.parsedQty || 0;
                             const amount = item.parsedAmount || item.amount || 0;
                             const unitPrice = qty > 0 ? (amount / qty) : 0;
-                            const supplierName = item.customerName || item.originalDesc || item.supplier;
+                            const supplierName = item.customerName || item.supplier || '-';
+                            const itemName = item.originalDesc || item.item_name || 'Item';
 
                             return (
-                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 100px 1fr 80px 80px 100px', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.875rem', alignItems: 'center' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{formatDate(item.parsedDate || item.date)}</div>
-                                    <div style={{ color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 500 }}>{item.invoice_no || item.invoiceNo || '-'}</div>
+                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.95rem', alignItems: 'center' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatDate(item.parsedDate || item.date)}</div>
+                                    <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 500 }}>{item.invoice_no || item.invoiceNo || '-'}</div>
+                                    <div style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '0.5rem' }}>{itemName}</div>
                                     <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '0.5rem', minWidth: 0 }}>
-                                        <span style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{supplierName}</span>
-                                        {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.remarks}</span>}
+                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplierName}</span>
+                                        {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>{item.remarks}</span>}
                                     </div>
-                                    <div style={{ textAlign: 'right', color: '#e0f2fe', fontSize: '0.8rem' }}>{qty > 0 ? qty.toLocaleString() : '-'}</div>
-                                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{qty > 0 ? `₹${unitPrice.toFixed(0)}` : '-'}</div>
-                                    <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600, fontSize: '0.85rem' }}>₹{amount.toLocaleString('en-IN')}</div>
+                                    <div style={{ textAlign: 'right', color: '#e0f2fe', fontSize: '0.9rem' }}>{qty > 0 ? qty.toLocaleString() : '-'}</div>
+                                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{qty > 0 ? `₹${unitPrice.toFixed(0)}` : '-'}</div>
+                                    <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600, fontSize: '0.95rem' }}>₹{amount.toLocaleString('en-IN')}</div>
                                 </div>
                             );
                         })}

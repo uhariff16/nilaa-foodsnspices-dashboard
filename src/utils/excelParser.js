@@ -5,7 +5,8 @@ export const parseExcelFile = (files) => {
         const mergedData = {
             transactions: [],
             items: [],
-            customers: []
+            customers: [],
+            receivables: []
         };
         const debugLog = [];
 
@@ -228,7 +229,7 @@ export const parseExcelFile = (files) => {
 
 
                     // --- TYPE 3: SALES SUMMARY (Invoicewise) ---
-                    else if ((contentString.includes('particulars') || contentString.includes('description')) && contentString.includes('amount')) {
+                    else if ((contentString.includes('particulars') || contentString.includes('description')) && contentString.includes('amount') && !contentString.includes('supplier')) {
                         debugLog.push("Matched Type 3 (Sales Summary)");
                         let headerRowIdx = -1;
                         let amountColIdx = -1;
@@ -348,6 +349,75 @@ export const parseExcelFile = (files) => {
                         });
                         debugLog.push(`Type 3: Extracted ${extractedCount} transactions.`);
                     }
+                    // --- TYPE 6: BILLWISE PURCHASE SUMMARY ---
+                    else if (((contentString.includes('unit price') && contentString.includes('quantity')) || (contentString.includes('particulars') && contentString.includes('amount') && contentString.includes('supplier'))) && !contentString.includes('client') && !contentString.includes('sale')) {
+                        debugLog.push("Matched Type 6 (Billwise Purchase Summary)");
+                        const partIdx = headerRow.findIndex(h => /particulars/i.test(h));
+                        const qtyIdx = headerRow.findIndex(h => /quantity|qty/i.test(h));
+                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
+
+                        if (partIdx !== -1) {
+                            let currentSupplier = null;
+                            let currentDate = null;
+                            let currentBillNo = null;
+                            debugLog.push(`Indices: Particulars=${partIdx}, Qty=${qtyIdx}, Amount=${amountIdx}`);
+
+                            jsonData.slice(1).forEach((row, index) => {
+                                if (!row || row.length === 0) return;
+                                const colPart = String(row[partIdx] || '').trim();
+                                if (!colPart) return;
+
+                                // 1. Header Row Detection
+                                const lowerPart = colPart.toLowerCase();
+                                const isHeaderRow = lowerPart.includes('date') && lowerPart.includes('supplier');
+
+                                if (isHeaderRow) {
+                                    const supMatch = colPart.match(/supplier\s*[:.-]?\s*(.+)$/i);
+                                    if (supMatch) currentSupplier = supMatch[1].trim();
+
+                                    const dateMatch = colPart.match(/date\s*[:.-]?\s*([\w-]+)/i);
+                                    if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
+
+                                    const billPart = colPart.split(/date/i)[0].trim();
+                                    if (billPart && billPart.length > 0) currentBillNo = billPart;
+
+                                    debugLog.push(`Header Row ${index}: Bill=${currentBillNo}, Date=${currentDate}, Sup=${currentSupplier}`);
+                                    return;
+                                }
+
+                                // 2. Item Row Detection
+                                // FIX: Fallback to effectiveDate if no inline date found
+                                const rowDate = currentDate || effectiveDate;
+                                if (!rowDate) return;
+
+                                let qty = 0;
+                                if (qtyIdx !== -1) {
+                                    const rawQty = String(row[qtyIdx] || 0).replace(/,/g, '').replace(/[^\d.]/g, '');
+                                    qty = parseFloat(rawQty);
+                                }
+
+                                const rawAmount = String(row[amountIdx] || 0).replace(/,/g, '');
+                                const amount = parseFloat(rawAmount);
+
+                                const isTotal = colPart.toLowerCase() === 'total';
+                                if (!isTotal && (qty > 0 || amount > 0)) {
+                                    const desc = colPart;
+
+                                    mergedData.transactions.push({
+                                        id: `pur-bill-${rowDate}-${amount}-${index}-${Math.random().toString(36).substr(2, 5)}`,
+                                        parsedDate: rowDate,
+                                        parsedAmount: amount,
+                                        parsedQty: qty || 0,
+                                        parsedType: 'Purchase',
+                                        originalDesc: desc,
+                                        customerName: currentSupplier,
+                                        invoiceNo: currentBillNo,
+                                        remarks: currentSupplier
+                                    });
+                                }
+                            });
+                        }
+                    }
                     // --- TYPE 4: PURCHASES ---
                     else if (contentString.includes('supplier') && (contentString.includes('total amount') || contentString.includes('total'))) {
                         debugLog.push("Matched Type 4 (Purchases)");
@@ -375,7 +445,7 @@ export const parseExcelFile = (files) => {
                                         id: `pur-${pDate}-${amount}-${supplier}-${index}`, // Unique ID
                                         parsedDate: pDate,
                                         parsedAmount: amount,
-                                        parsedType: 'Expense',
+                                        parsedType: 'Purchase',
                                         originalDesc: desc
                                     });
                                 }
@@ -411,75 +481,42 @@ export const parseExcelFile = (files) => {
                             });
                         }
                     }
-                    // --- TYPE 6: BILLWISE PURCHASE SUMMARY ---
-                    else if (((contentString.includes('unit price') && contentString.includes('quantity')) || (contentString.includes('particulars') && contentString.includes('amount') && contentString.includes('supplier'))) && !contentString.includes('client') && !contentString.includes('sale')) {
-                        debugLog.push("Matched Type 6 (Billwise Purchase Summary)");
-                        const partIdx = headerRow.findIndex(h => /particulars/i.test(h));
-                        const qtyIdx = headerRow.findIndex(h => /quantity|qty/i.test(h));
-                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
 
-                        if (partIdx !== -1) {
-                            let currentSupplier = null;
-                            let currentDate = null;
-                            let currentBillNo = null;
-                            debugLog.push(`Indices: Particulars=${partIdx}, Qty=${qtyIdx}, Amount=${amountIdx}`);
+                    // --- TYPE 7: CUSTOMER RECEIVABLES ---
+                    else if (contentString.includes('balance due') && contentString.includes('customer') && contentString.includes('city')) {
+                        debugLog.push("Matched Type 7 (Customer Receivables)");
 
+                        // Header Mapping
+                        const custIdx = headerRow.findIndex(h => /customer/i.test(h));
+                        const addressIdx = headerRow.findIndex(h => /address/i.test(h));
+                        const cityIdx = headerRow.findIndex(h => /city/i.test(h));
+                        const contactIdx = headerRow.findIndex(h => /contact/i.test(h));
+                        const balanceIdx = headerRow.findIndex(h => /balance due/i.test(h));
+
+                        if (custIdx !== -1 && balanceIdx !== -1) {
                             jsonData.slice(1).forEach((row, index) => {
                                 if (!row || row.length === 0) return;
-                                const colPart = String(row[partIdx] || '').trim();
-                                if (!colPart) return;
 
-                                // 1. Header Row Detection
-                                const lowerPart = colPart.toLowerCase();
-                                const isHeaderRow = lowerPart.includes('date') && lowerPart.includes('supplier');
+                                const customer = String(row[custIdx] || '').trim();
+                                if (!customer) return; // Skip empty rows
 
-                                if (isHeaderRow) {
-                                    // Extract Supplier
-                                    const supMatch = colPart.match(/supplier\s*[:.-]?\s*(.+)$/i);
-                                    if (supMatch) currentSupplier = supMatch[1].trim();
+                                const balanceStr = String(row[balanceIdx] || '0').replace(/,/g, '');
+                                const balance = parseFloat(balanceStr);
 
-                                    // Extract Date
-                                    const dateMatch = colPart.match(/date\s*[:.-]?\s*([\w-]+)/i);
-                                    if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
-
-                                    // Extract Bill No: "P-194 Date" -> "P-194"
-                                    const billPart = colPart.split(/date/i)[0].trim();
-                                    if (billPart && billPart.length > 0) currentBillNo = billPart;
-
-                                    debugLog.push(`Header Row ${index}: Bill=${currentBillNo}, Date=${currentDate}, Sup=${currentSupplier}`);
-                                    return;
-                                }
-
-                                // 2. Item Row Detection
-                                if (!currentDate) return;
-
-                                let qty = 0;
-                                if (qtyIdx !== -1) {
-                                    // Clean "50" or "50.00" or "50 kg"
-                                    const rawQty = String(row[qtyIdx] || 0).replace(/,/g, '').replace(/[^\d.]/g, '');
-                                    qty = parseFloat(rawQty);
-                                }
-
-                                const rawAmount = String(row[amountIdx] || 0).replace(/,/g, '');
-                                const amount = parseFloat(rawAmount);
-
-                                const isTotal = colPart.toLowerCase() === 'total';
-                                if (!isTotal && (qty > 0 || amount > 0)) {
-                                    const desc = colPart;
-
-                                    mergedData.transactions.push({
-                                        id: `pur-bill-${currentDate}-${amount}-${index}-${Math.random().toString(36).substr(2, 5)}`,
-                                        parsedDate: currentDate,
-                                        parsedAmount: amount,
-                                        parsedQty: qty || 0,
-                                        parsedType: 'Expense',
-                                        originalDesc: desc,
-                                        customerName: currentSupplier,
-                                        invoiceNo: currentBillNo,
-                                        remarks: currentSupplier
+                                // Allow negative balances as well? Yes, report shows negative.
+                                if (!isNaN(balance)) {
+                                    mergedData.receivables.push({
+                                        customerName: customer,
+                                        address: row[addressIdx] || '',
+                                        city: row[cityIdx] || '',
+                                        contact: row[contactIdx] || '',
+                                        balanceDue: balance
                                     });
                                 }
                             });
+                            debugLog.push(`Type 7: Extracted ${mergedData.receivables.length} receivables records.`);
+                        } else {
+                            debugLog.push("Type 7: Failed to map headers.");
                         }
                     }
                     else {

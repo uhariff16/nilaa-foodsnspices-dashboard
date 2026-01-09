@@ -60,7 +60,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
 // Main App Logic (Dashboard + Data Loading)
 const DashboardLayout = () => {
-    const [data, setData] = useState({ transactions: [], items: [], customers: [] });
+    const [data, setData] = useState({ transactions: [], items: [], customers: [], receivables: [] });
     const [productionData, setProductionData] = useState({ stockIn: [], preProduction: [], postProduction: [] });
     const [purchaseData, setPurchaseData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -162,8 +162,20 @@ const DashboardLayout = () => {
                 revenue: Number(c.revenue),
                 profit: Number(c.profit),
                 parsedDate: c.date,
+                date: c.date,
                 createdAt: c.created_at // Pass timestamp
             }));
+
+            // 4. Fetch Customer Receivables (Provision)
+            let allReceivables = [];
+            try {
+                const { data: recData, error: recError } = await supabase.from('customer_receivables').select('*');
+                if (!recError && recData) {
+                    allReceivables = recData;
+                }
+            } catch (e) {
+                console.warn("Receivables table might not exist yet:", e);
+            }
 
             // Split logs
             const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
@@ -175,9 +187,9 @@ const DashboardLayout = () => {
             });
 
             // Update State
-            setData(prev => ({ ...prev, transactions: mappedTransactions, customers: mappedCustomers }));
+            setData(prev => ({ ...prev, transactions: mappedTransactions, customers: mappedCustomers, receivables: allReceivables }));
             setProductionData(newProdData);
-            setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense'));
+            setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense' || t.parsedType === 'Purchase'));
 
         } catch (error) {
             console.error("Supabase Load Error:", error);

@@ -225,6 +225,8 @@ export const parseExcelFile = (files) => {
                             });
                         }
                     }
+
+
                     // --- TYPE 3: SALES SUMMARY (Invoicewise) ---
                     else if ((contentString.includes('particulars') || contentString.includes('description')) && contentString.includes('amount')) {
                         debugLog.push("Matched Type 3 (Sales Summary)");
@@ -319,7 +321,7 @@ export const parseExcelFile = (files) => {
                                 const amount = parseFloat(String(row[amountColIdx]).replace(/,/g, ''));
 
                                 if (!isNaN(amount) && amount > 0) {
-                                    let finalDate = currentInvDate || currentDate || effectiveDate;
+                                    let finalDate = currentInvDate || currentDate || masterFileDate;
                                     if (dateColIdx !== -1 && row[dateColIdx]) finalDate = normalizeDate(row[dateColIdx]);
 
                                     let qty = 1;
@@ -404,6 +406,77 @@ export const parseExcelFile = (files) => {
                                         parsedAmount: amount,
                                         parsedType: 'Expense',
                                         originalDesc: desc
+                                    });
+                                }
+                            });
+                        }
+                    }
+                    // --- TYPE 6: BILLWISE PURCHASE SUMMARY ---
+                    else if (((contentString.includes('unit price') && contentString.includes('quantity')) || (contentString.includes('particulars') && contentString.includes('amount') && contentString.includes('supplier'))) && !contentString.includes('client') && !contentString.includes('sale')) {
+                        debugLog.push("Matched Type 6 (Billwise Purchase Summary)");
+                        const partIdx = headerRow.findIndex(h => /particulars/i.test(h));
+                        const qtyIdx = headerRow.findIndex(h => /quantity|qty/i.test(h));
+                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
+
+                        if (partIdx !== -1) {
+                            let currentSupplier = null;
+                            let currentDate = null;
+                            let currentBillNo = null;
+                            debugLog.push(`Indices: Particulars=${partIdx}, Qty=${qtyIdx}, Amount=${amountIdx}`);
+
+                            jsonData.slice(1).forEach((row, index) => {
+                                if (!row || row.length === 0) return;
+                                const colPart = String(row[partIdx] || '').trim();
+                                if (!colPart) return;
+
+                                // 1. Header Row Detection
+                                const lowerPart = colPart.toLowerCase();
+                                const isHeaderRow = lowerPart.includes('date') && lowerPart.includes('supplier');
+
+                                if (isHeaderRow) {
+                                    // Extract Supplier
+                                    const supMatch = colPart.match(/supplier\s*[:.-]?\s*(.+)$/i);
+                                    if (supMatch) currentSupplier = supMatch[1].trim();
+
+                                    // Extract Date
+                                    const dateMatch = colPart.match(/date\s*[:.-]?\s*([\w-]+)/i);
+                                    if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
+
+                                    // Extract Bill No: "P-194 Date" -> "P-194"
+                                    const billPart = colPart.split(/date/i)[0].trim();
+                                    if (billPart && billPart.length > 0) currentBillNo = billPart;
+
+                                    debugLog.push(`Header Row ${index}: Bill=${currentBillNo}, Date=${currentDate}, Sup=${currentSupplier}`);
+                                    return;
+                                }
+
+                                // 2. Item Row Detection
+                                if (!currentDate) return;
+
+                                let qty = 0;
+                                if (qtyIdx !== -1) {
+                                    // Clean "50" or "50.00" or "50 kg"
+                                    const rawQty = String(row[qtyIdx] || 0).replace(/,/g, '').replace(/[^\d.]/g, '');
+                                    qty = parseFloat(rawQty);
+                                }
+
+                                const rawAmount = String(row[amountIdx] || 0).replace(/,/g, '');
+                                const amount = parseFloat(rawAmount);
+
+                                const isTotal = colPart.toLowerCase() === 'total';
+                                if (!isTotal && (qty > 0 || amount > 0)) {
+                                    const desc = colPart;
+
+                                    mergedData.transactions.push({
+                                        id: `pur-bill-${currentDate}-${amount}-${index}-${Math.random().toString(36).substr(2, 5)}`,
+                                        parsedDate: currentDate,
+                                        parsedAmount: amount,
+                                        parsedQty: qty || 0,
+                                        parsedType: 'Expense',
+                                        originalDesc: desc,
+                                        customerName: currentSupplier,
+                                        invoiceNo: currentBillNo,
+                                        remarks: currentSupplier
                                     });
                                 }
                             });

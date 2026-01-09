@@ -152,7 +152,20 @@ const AdminDataIngestion = () => {
                 const result = await parseExcelFile([file]);
                 data = result.transactions || [];
                 const totalParsed = data.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
-                alert(`Parser Verification:\nFound ${data.length} transactions.\nTotal Sales Amount: ${totalParsed.toFixed(2)}\n\nIf this matches your file, the upload is correct.`);
+
+                // Debug Check
+                const first = data[0] || {};
+                alert(`Parser Verification:
+Found ${data.length} transactions.
+Total Sales Amount: ${totalParsed.toFixed(2)}
+
+Sample Record (Row 1):
+Item: ${first.originalDesc}
+Qty: ${first.parsedQty}
+Inv: ${first.invoiceNo}
+Cost: ${first.parsedAmount}
+
+If this matches your file, the upload is correct.`);
 
                 if (!data || data.length === 0) throw new Error("No valid transactions found in file.");
 

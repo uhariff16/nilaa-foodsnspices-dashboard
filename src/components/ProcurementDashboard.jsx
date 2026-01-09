@@ -102,33 +102,38 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     // 1. Process Physical Stock (Quantity) - Dynamic Grouping
     const { materialGroups, totalWeight, pieData, trendData } = useMemo(() => {
 
-        // Strict OS Filtering
-        const procurementItems = filteredStockIn.filter(item => {
-            const mat = String(item.material || '').trim().toUpperCase();
-            const isOS = mat.startsWith('OS') || mat.startsWith('OPENING') || mat.includes('B/F') || mat.includes('BROKEN GARLIC');
-            return !isOS;
-        });
+        // Source of Truth: Purchases (Bills)
+        // We ignore StockIn here to avoid double counting with bills.
+        const procurementItems = filteredPurchases;
 
-        // Group by Material Name from Stock In
+        // Group by Material Name
         const groups = {};
-        procurementItems.forEach(item => {
-            let name = String(item.material || 'Unknown').trim();
-            name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-            groups[name] = (groups[name] || 0) + item.weight;
-        });
-
-        // NEW: Ensure items from Purchases are also represented (even if 0 weight)
-        // This ensures the Card appears even if only Financial data exists (User Case: Missing Card)
-        filteredPurchases.forEach(p => {
-            const desc = (p.originalDesc || p.supplier || '').toLowerCase();
+        procurementItems.forEach(p => {
+            // Determine Name
+            const desc = (p.originalDesc || p.supplier || p.remarks || '').toLowerCase();
             let name = null;
+
+            // Smart Mapping
             if (desc.includes('ginger') || desc.includes('jayakodi')) name = 'Ginger';
             else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk')) name = 'Garlic';
+            else {
+                // Fallback to extraction if possible or 'Others'
+                if (desc.includes('onion')) name = 'Onion';
+                else name = 'Others';
+            }
 
-            if (name) {
-                // Initialize with 0 weight if not present. 
-                // We do NOT add weight here because Purchase weight is unreliable/not parsed.
-                if (!groups[name]) groups[name] = 0;
+            if (name && name !== 'Others') { // Only count known materials for Cards? Or All? 
+                // Actually logic before was explicitly Ginger/Garlic via if/else if.
+                // Let's stick to the previous conditional structure but cleaner.
+            }
+
+            // Re-implementing previous fuzzy logic:
+            let finalName = null;
+            if (desc.includes('ginger') || desc.includes('jayakodi')) finalName = 'Ginger';
+            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk')) finalName = 'Garlic';
+
+            if (finalName) {
+                groups[finalName] = (groups[finalName] || 0) + (p.parsedQty || p.quantity || 0);
             }
         });
 
@@ -152,16 +157,21 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             months.forEach(m => monthMap[m] = { name: m, Ginger: 0, Garlic: 0, Others: 0 });
 
             procurementItems.forEach(item => {
-                // item.date is from Production Logs which uses 'date'
-                const dateParts = item.date.split('-'); // YYYY-MM-DD
+                // item.parsedDate is from Transactions YYYY-MM-DD
+                const dateStr = item.parsedDate || item.date;
+                if (!dateStr || typeof dateStr !== 'string') return;
+
+                const dateParts = dateStr.split('-'); // YYYY-MM-DD
                 if (dateParts.length >= 2) {
                     const monthIndex = parseInt(dateParts[1], 10) - 1;
                     const monthName = months[monthIndex];
                     if (monthName) {
-                        const matLower = (item.material || '').toLowerCase();
-                        if (matLower.includes('ginger')) monthMap[monthName].Ginger += item.weight;
-                        else if (matLower.includes('garlic')) monthMap[monthName].Garlic += item.weight;
-                        else monthMap[monthName].Others += item.weight;
+                        const matLower = (item.originalDesc || item.supplier || item.remarks || '').toLowerCase();
+                        const qty = item.parsedQty || item.quantity || 0;
+
+                        if (matLower.includes('ginger')) monthMap[monthName].Ginger += qty;
+                        else if (matLower.includes('garlic')) monthMap[monthName].Garlic += qty;
+                        else monthMap[monthName].Others += qty;
                     }
                 }
             });
@@ -169,7 +179,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         }
 
         return { materialGroups: groupList, totalWeight: total, pieData: pData, trendData: tData };
-    }, [filteredStockIn, selectedMonth]);
+    }, [filteredPurchases, selectedMonth]);
 
 
     // 2. Process Financials
@@ -216,9 +226,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     // Supplier Summary Data
     const supplierSummary = useMemo(() => {
         const summary = filteredPurchases.reduce((acc, curr) => {
-            // Use 'originalDesc' as 'Supplier' name since we don't have explicit supplier field in mapped txns
-            // Or extract from desc if possible? For now, group by Item Name (originalDesc)
-            const sName = (curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
+            // Use 'customerName' (parsed from Billwise Summary)
+            const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
             if (!acc[sName]) acc[sName] = { amount: 0, count: 0 };
             acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
             acc[sName].count += 1;
@@ -267,7 +276,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             {/* Top Stats Grid - Compact Cards */}
             {/* Top Stats Grid - Compact Cards */}
-            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-3" style={{ marginBottom: '1.5rem' }}>
                 {/* 1. Material Cards */}
                 {materialGroups.map((group, index) => {
                     const { cost, count } = materialStats[group.name] || { cost: 0, count: 0 };
@@ -365,55 +374,10 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 </div>
             )}
 
-            {/* Charts & Details Grid - 3 Columns */}
-            <div className="responsive-grid-3" style={{ gap: '1rem' }}>
+            {/* Side-by-Side Grid: Payments & Ledger */}
+            <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1.5rem', alignItems: 'stretch' }}>
 
-                {/* Col 1: Material Distribution (Pie) */}
-                <div style={{
-                    background: 'var(--glass-highlight)',
-                    borderRadius: '1rem',
-                    padding: '1.25rem',
-                    border: '1px solid var(--glass-border)',
-                    display: 'flex', flexDirection: 'column',
-                    height: '400px'
-                }}>
-                    <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '1rem' }}>Volume Mix</h4>
-                    <div style={{ flex: 1 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={pieData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={50}
-                                    outerRadius={70}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {pieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={getColorForMaterial(entry.name, index)} />
-                                    ))}
-                                </Pie>
-                                <RechartsTooltip
-                                    contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: 'none', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
-                                    itemStyle={{ color: 'var(--text-primary)' }}
-                                    formatter={(value, name) => [`${value.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg`, name]}
-                                />
-                                <Legend
-                                    verticalAlign="bottom"
-                                    height={36}
-                                    formatter={(value, entry) => {
-                                        const item = pieData.find(d => d.name === value);
-                                        const percent = item ? ((item.value / totalWeight) * 100).toFixed(1) : 0;
-                                        return `${value} (${percent}%)`;
-                                    }}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Col 2: Supplier Payment Summary */}
+                {/* 1. Supplier Payments */}
                 <div style={{
                     background: 'var(--glass-highlight)',
                     borderRadius: '1rem',
@@ -421,7 +385,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     border: '1px solid var(--glass-border)',
                     display: 'flex', flexDirection: 'column',
                     overflow: 'hidden',
-                    height: '400px'
+                    height: '450px' // Match Ledger Height
                 }}>
                     <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8' }}>
                         Supplier Payments
@@ -442,38 +406,50 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     </div>
                 </div>
 
-                {/* Col 3: Financial Ledger */}
+                {/* 2. Financial Ledger */}
                 <div style={{
                     background: 'var(--glass-highlight)',
                     border: '1px solid var(--glass-border)',
                     borderRadius: '1rem',
                     overflow: 'hidden',
                     display: 'flex', flexDirection: 'column',
-                    height: '400px'
+                    height: '450px'
                 }}>
                     <div style={{ padding: '1rem', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid rgba(51, 65, 85, 0.5)', fontWeight: 600, color: '#f43f5e', display: 'flex', justifyContent: 'space-between' }}>
                         <span>Supplier Ledger</span>
                         <span style={{ fontSize: '0.75rem', background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', padding: '0.1rem 0.5rem', borderRadius: '0.25rem' }}>{sortedPurchases.length} Recs</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '85px 1fr 90px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '90px 100px 1fr 80px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                         <div>Date</div>
+                        <div>Bill No</div>
                         <div>Supplier & Remarks</div>
+                        <div style={{ textAlign: 'right' }}>Qty</div>
+                        <div style={{ textAlign: 'right' }}>Unit Price</div>
                         <div style={{ textAlign: 'right' }}>Amount</div>
                     </div>
                     <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
-                        {sortedPurchases.map((item, i) => (
-                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '85px 1fr 90px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.875rem', alignItems: 'center' }}>
-                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatDate(item.parsedDate || item.date)}</div>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.originalDesc || item.supplier}</span>
-                                    {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.remarks}</span>}
+                        {sortedPurchases.map((item, i) => {
+                            const qty = item.quantity || item.parsedQty || 0;
+                            const amount = item.parsedAmount || item.amount || 0;
+                            const unitPrice = qty > 0 ? (amount / qty) : 0;
+                            const supplierName = item.customerName || item.originalDesc || item.supplier;
+
+                            return (
+                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 100px 1fr 80px 80px 100px', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.875rem', alignItems: 'center' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{formatDate(item.parsedDate || item.date)}</div>
+                                    <div style={{ color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 500 }}>{item.invoice_no || item.invoiceNo || '-'}</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '0.5rem', minWidth: 0 }}>
+                                        <span style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{supplierName}</span>
+                                        {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.remarks}</span>}
+                                    </div>
+                                    <div style={{ textAlign: 'right', color: '#e0f2fe', fontSize: '0.8rem' }}>{qty > 0 ? qty.toLocaleString() : '-'}</div>
+                                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{qty > 0 ? `₹${unitPrice.toFixed(0)}` : '-'}</div>
+                                    <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600, fontSize: '0.85rem' }}>₹{amount.toLocaleString('en-IN')}</div>
                                 </div>
-                                <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600 }}>₹{(item.parsedAmount || item.amount || 0).toLocaleString('en-IN')}</div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
-
             </div>
 
             {/* Variety Analysis Section (New) */}

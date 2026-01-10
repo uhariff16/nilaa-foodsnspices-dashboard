@@ -546,6 +546,50 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                     icon={Factory}
                     trend="neutral"
                 />
+                {/* Today's Production Card */}
+                {(() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    const todayItems = data.postProduction ? data.postProduction.filter(item => item.date === today) : [];
+                    const todayTotal = todayItems.reduce((sum, item) => sum + item.weight, 0);
+
+                    // Item breakdown
+                    const breakdown = {};
+                    todayItems.forEach(item => {
+                        const name = item.material || 'Unknown';
+                        breakdown[name] = (breakdown[name] || 0) + item.weight;
+                    });
+                    const breakdownEntries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+
+                    return (
+                        <MetricCard
+                            title="Today's Production"
+                            value={
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
+                                    {breakdownEntries.length > 0 ? (
+                                        breakdownEntries.map(([name, weight]) => (
+                                            <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#34d399', fontWeight: 500 }}>
+                                                <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</span>
+                                                <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>No production today</div>
+                                    )}
+                                    <div style={{
+                                        display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
+                                        borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
+                                    }}>
+                                        <span>Total:</span>
+                                        <span>{todayTotal.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+                                    </div>
+                                </div>
+                            }
+                            subtext={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            icon={Factory}
+                            trend="neutral"
+                        />
+                    );
+                })()}
                 <MetricCard
                     title="Total Output"
                     value={

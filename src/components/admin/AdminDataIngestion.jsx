@@ -237,7 +237,7 @@ Click OK to proceed with uploading receivables.`);
 
                         uniqueTransactions = [];
 
-                        formattedData.forEach(t => {
+                        formattedData.forEach((t, index) => {
                             const sig = createTxSig(t);
                             const existing = existingTxMap.get(sig);
 
@@ -478,225 +478,227 @@ Click OK to proceed with uploading receivables.`);
             setLoading(false);
             return;
         }
-        setStatus({ type: 'idle', message: `Processing ${excelFiles.length} files...` });
+
+        let processedCount = 0;
+        let successCount = 0;
+        let skipCount = 0;
+        let failCount = 0;
+        let newRecordsCount = 0;
+        const errorLogs = [];
+
+        // Helper to update status during loop
+        const updateProgress = () => {
+            const pct = Math.round((processedCount / excelFiles.length) * 100);
+            setStatus({ type: 'idle', message: `Processing ${processedCount}/${excelFiles.length} (${pct}%)...` });
+        };
 
         try {
-            if (type === 'production') {
-                const data = await parseProductionFile(excelFiles);
-                if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
-                    throw new Error("No valid production logs found in any file.");
-                }
+            for (let i = 0; i < excelFiles.length; i++) {
+                const file = excelFiles[i];
+                processedCount++;
+                updateProgress();
 
-                const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
-                if (allDates.length === 0) throw new Error("No dates found in batch data.");
-                const minDate = allDates[0];
-                const maxDate = allDates[allDates.length - 1];
+                try {
+                    if (type === 'production') {
+                        const data = await parseProductionFile([file]);
 
-                const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
+                        // Check if valid data found
+                        if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
+                            // Not an error, just empty/irrelevant file
+                            skipCount++;
+                            continue;
+                        }
 
-                const createSig = (d) => {
-                    let dateStr = String(d.date || '').trim();
-                    if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
-                    return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
-                };
-                const existingSet = new Set(existingLogs.map(createSig));
+                        // Dedup Logic (Per File)
+                        const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
+                        if (allDates.length === 0) { skipCount++; continue; }
 
-                const filterNew = (items, type) => {
-                    return items
-                        .map(i => ({ ...i, type }))
-                        .filter(i => {
-                            const sig = createSig(i);
-                            return !existingSet.has(sig);
-                        })
-                        .map(({ id, source_sheet, source_file, ...rest }) => rest);
-                };
-
-                const newStockIn = filterNew(data.stockIn, 'stock_in');
-                const newPreProd = filterNew(data.preProduction, 'usage');
-                const newPostProd = filterNew(data.postProduction, 'production');
-                const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
-
-                if (totalNew === 0) {
-                    setStatus({ type: 'success', message: `Batch Skipped: All ${allDates.length} records in these ${excelFiles.length} files already exist.` });
-                    setLoading(false);
-                    return;
-                }
-
-                if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
-                if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
-                if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
-
-                setStatus({
-                    type: 'success',
-                    message: `Batch Sync Complete. Added ${totalNew} new records from ${excelFiles.length} files.`
-                });
-
-            } else if (type === 'sales') {
-                const result = await parseExcelFile(excelFiles);
-                const data = result.transactions || [];
-                const receivablesData = result.receivables || [];
-
-                if (data.length === 0 && receivablesData.length === 0) {
-                    throw new Error("No valid records (Transactions or Receivables) found in batch.");
-                }
-
-                let uniqueTransactions = [];
-                let updates = [];
-                let addedCust = 0;
-                let addedRec = 0;
-
-                // --- 1. Process Transactions ---
-                if (data.length > 0) {
-                    const formattedData = data.map(record => ({
-                        date: record.parsedDate,
-                        amount: record.parsedAmount,
-                        payment_mode: record.parsedType,
-                        item_name: record.originalDesc,
-                        invoice_no: record.invoiceNo,
-                        quantity: record.parsedQty || 1,
-                        customer_name: record.customerName // [FIX] Map Supplier Name to customer_name
-                    })).filter(r => r.date && r.amount && r.item_name);
-
-                    if (formattedData.length > 0) {
-                        // 2025-01-06: Added Dedup Logic to Folder Mode
-                        const allDates = formattedData.map(d => d.date).sort();
                         const minDate = allDates[0];
                         const maxDate = allDates[allDates.length - 1];
 
-                        // Fetch Existing
-                        const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
+                        // Fetch existing for this range
+                        const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
 
-                        if (!existingTxns) throw new Error("Dedup Check Error (Tx): Failed to fetch records");
+                        const createSig = (d) => {
+                            let dateStr = String(d.date || '').trim();
+                            if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
+                            return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+                        };
+                        const existingSet = new Set(existingLogs.map(createSig));
 
-                        const createTxSig = (t) => {
-                            let d = String(t.date || '').trim();
-                            if (d.includes('T')) d = d.split('T')[0];
-                            const a = Number(t.amount || 0).toFixed(2);
-                            const i = String(t.item_name || '').trim().toLowerCase();
-                            const inv = String(t.invoice_no || '').trim().toLowerCase();
-                            return `${d}|${a}|${i}|${inv}`;
+                        const filterNew = (items, type) => {
+                            return items
+                                .map(i => ({ ...i, type }))
+                                .filter(i => !existingSet.has(createSig(({ ...i, type }))))
+                                .map(({ id, source_sheet, source_file, ...rest }) => rest);
                         };
 
-                        const existingTxMap = new Map();
-                        existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
+                        const newStockIn = filterNew(data.stockIn, 'stock_in');
+                        const newPreProd = filterNew(data.preProduction, 'usage');
+                        const newPostProd = filterNew(data.postProduction, 'production');
+                        const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
 
+                        if (totalNew > 0) {
+                            if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
+                            if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
+                            if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
+                            newRecordsCount += totalNew;
+                            successCount++;
+                        } else {
+                            skipCount++;
+                        }
 
+                    } else if (type === 'sales') {
+                        const result = await parseExcelFile([file]);
+                        const data = result.transactions || [];
+                        const receivablesData = result.receivables || [];
 
-                        // Filter
-                        formattedData.forEach(t => {
-                            const sig = createTxSig(t);
-                            const existing = existingTxMap.get(sig);
+                        if (data.length === 0 && receivablesData.length === 0) {
+                            skipCount++;
+                            continue;
+                        }
 
-                            if (!existing) {
-                                uniqueTransactions.push(t);
-                            } else if (
-                                existing.payment_mode !== t.payment_mode ||
-                                (t.customer_name && (!existing.customer_name || existing.customer_name !== t.customer_name))
-                            ) {
-                                // Smart Update including Supplier Name
-                                updates.push({ ...t, id: existing.id });
+                        let fileAddedCount = 0;
+                        let addedCust = 0;
+
+                        // 1. Transactions
+                        if (data.length > 0) {
+                            const formattedData = data.map(record => ({
+                                date: record.parsedDate,
+                                amount: record.parsedAmount,
+                                payment_mode: record.parsedType,
+                                item_name: record.originalDesc,
+                                invoice_no: record.invoiceNo,
+                                quantity: record.parsedQty || 1,
+                                customer_name: record.customerName
+                            })).filter(r => r.date && r.amount && r.item_name);
+
+                            if (formattedData.length > 0) {
+                                const allDates = formattedData.map(d => d.date).sort();
+                                const minDate = allDates[0];
+                                const maxDate = allDates[allDates.length - 1];
+
+                                const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
+
+                                const createTxSig = (t) => `${String(t.date).split('T')[0]}|${Number(t.amount).toFixed(2)}|${String(t.item_name).trim().toLowerCase()}|${String(t.invoice_no).trim().toLowerCase()}`;
+                                const existingTxMap = new Map();
+                                existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
+
+                                const uniqueTransactions = [];
+                                const updates = [];
+
+                                formattedData.forEach(t => {
+                                    const sig = createTxSig(t);
+                                    const existing = existingTxMap.get(sig);
+
+                                    if (!existing) {
+                                        uniqueTransactions.push(t);
+                                    } else if (
+                                        existing.payment_mode !== t.payment_mode ||
+                                        (t.customer_name && existing.customer_name !== t.customer_name)
+                                    ) {
+                                        updates.push({ ...t, id: existing.id });
+                                    }
+                                });
+
+                                if (uniqueTransactions.length > 0) {
+                                    const { error } = await supabase.from('transactions').insert(uniqueTransactions);
+                                    if (error) throw error;
+                                    fileAddedCount += uniqueTransactions.length;
+                                }
+                                if (updates.length > 0) {
+                                    const { error } = await supabase.from('transactions').upsert(updates);
+                                    if (error) throw error;
+                                    fileAddedCount += updates.length;
+                                }
                             }
-                        });
-
-
-                        if (uniqueTransactions.length > 0) {
-                            const { error } = await supabase.from('transactions').insert(uniqueTransactions);
-                            if (error) throw error;
                         }
 
-                        if (updates.length > 0) {
-                            const { error } = await supabase.from('transactions').upsert(updates);
-                            if (error) throw error;
+                        // 2. Receivables (Direct Insert/Update)
+                        if (receivablesData.length > 0) {
+                            const mappedReceivables = receivablesData.map(r => ({
+                                customer_name: r.customerName,
+                                address: r.address,
+                                city: r.city,
+                                contact: r.contact,
+                                balance: r.balanceDue,
+                                updated_at: new Date()
+                            }));
+                            // Receivables are usually snapshots, so we assume simple processing
+                            const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
+                            if (!recError) fileAddedCount += mappedReceivables.length;
                         }
 
-                        if (uniqueTransactions.length === 0 && updates.length === 0) {
-                            console.log("No new transactions in this batch.");
-                        }
-
-                        // Customer Stats Logic for Folder Mode (Ported from File Mode)
+                        // 3. Customer Stats (Restored)
                         const customerData = result.customers || [];
-
                         if (customerData.length > 0) {
                             const mappedCustomers = customerData.map(c => ({
-                                customer_name: c.name,
+                                customer_name: String(c.name).trim().toUpperCase(),
                                 revenue: c.revenue,
                                 profit: c.profit,
                                 date: c.parsedDate
-                            }));
+                            })).filter(c => c.date); // Ensure date exists
 
-                            try {
-                                const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', minDate, maxDate);
+                            if (mappedCustomers.length > 0) {
+                                // Simple Batch Insert - rely on table constraints or ignore duplicates for speed
+                                // OR: Check existing if we want to be safe. 
+                                // Let's try direct insert but log errors instead of crashing, 
+                                // assuming 'customer_stats' allows multiple entries or we need to dedup.
+                                // Best practice: Check range.
 
-                                if (existingCusts) {
-                                    const createCustSig = (c) => {
-                                        let d = String(c.date || '').trim();
-                                        if (d.includes('T')) d = d.split('T')[0];
-                                        return `${d}|${String(c.customer_name).trim().toUpperCase()}|${Number(c.revenue).toFixed(2)}`;
-                                    };
-                                    const existingCustSet = new Set(existingCusts.map(createCustSig));
-                                    const uniqueCustomers = mappedCustomers.filter(c => !existingCustSet.has(createCustSig(c)));
+                                const cDates = mappedCustomers.map(c => c.date).sort();
+                                const cMin = cDates[0];
+                                const cMax = cDates[cDates.length - 1];
 
-                                    if (uniqueCustomers.length > 0) {
-                                        const { error: custError } = await supabase.from('customer_stats').insert(uniqueCustomers);
-                                        if (custError) console.error("Customer Stats Insert Error:", custError);
-                                        else addedCust = uniqueCustomers.length;
-                                    }
+                                const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', cMin, cMax);
+                                const custSig = (c) => `${String(c.date).split('T')[0]}|${String(c.customer_name).trim().toUpperCase()}`;
+                                const existingCustSet = new Set(existingCusts.map(custSig));
+
+                                const newCustStats = mappedCustomers.filter(c => !existingCustSet.has(custSig(c)));
+
+                                if (newCustStats.length > 0) {
+                                    const { error: custError } = await supabase.from('customer_stats').insert(newCustStats);
+                                    if (!custError) addedCust += newCustStats.length;
+                                    else console.warn("Customer Stats Insert Error (Batch):", custError.message);
                                 }
-                            } catch (custErr) {
-                                console.error("Customer Stats Fetch Error", custErr);
                             }
                         }
-                    }
-                }
 
-                // --- 2. Process Receivables ---
-                if (receivablesData.length > 0) {
-                    const mappedReceivables = receivablesData.map(r => ({
-                        customer_name: r.customerName,
-                        address: r.address,
-                        city: r.city,
-                        contact: r.contact,
-                        balance: r.balanceDue,
-                        updated_at: new Date()
-                    }));
-
-                    try {
-                        const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
-                        if (recError) {
-                            console.error("Receivables Insert Error:", recError);
-                            // Verify table exists by just logging, but allowing partial success
+                        if (fileAddedCount > 0 || addedCust > 0) {
+                            newRecordsCount += (fileAddedCount + addedCust);
+                            successCount++;
                         } else {
-                            addedRec = mappedReceivables.length;
+                            skipCount++;
                         }
-                    } catch (e) {
-                        console.warn("Receivables upload failed:", e);
                     }
-                }
-
-                let messageParts = [];
-                if (uniqueTransactions.length > 0) messageParts.push(`${uniqueTransactions.length} new transactions`);
-                if (updates.length > 0) messageParts.push(`${updates.length} updated transactions`);
-                if (addedCust > 0) messageParts.push(`${addedCust} customer stats`);
-                if (addedRec > 0) messageParts.push(`${addedRec} receivables`);
-
-                if (messageParts.length === 0) {
-                    // Still success if we scan.
-                    if (uniqueTransactions.length === 0 && updates.length === 0 && addedCust === 0 && addedRec === 0) {
-                        setStatus({ type: 'success', message: `Batch Scan Complete. No changed records found.` });
-                    } else {
-                        setStatus({ type: 'success', message: `Batch Upload Complete. Added ${messageParts.join(', ')}.` });
-                    }
-                } else {
-                    setStatus({ type: 'success', message: `Batch Upload Complete. Action: ${messageParts.join(', ')}.` });
+                } catch (fileErr) {
+                    console.error(`Error processing ${file.name}:`, fileErr);
+                    failCount++;
+                    errorLogs.push(`${file.name}: ${fileErr.message}`);
                 }
             }
 
-            // Update stats silently
+            // Update Global Stats
             await checkDbStatus(true);
             if (prodFolderRef.current) prodFolderRef.current.value = "";
+
+            // Final Status Message
+            if (failCount === 0) {
+                setStatus({
+                    type: 'success',
+                    message: `Batch Complete. Processed ${successCount} files, Skipped ${skipCount}. Added ${newRecordsCount} records.`
+                });
+            } else {
+                setStatus({
+                    type: 'error',
+                    message: `Completed with Errors. Success: ${successCount}, Failed: ${failCount}. Added ${newRecordsCount} records. Check console for details.`
+                });
+                alert(`Batch Upload Completed with ${failCount} errors.\n\nFailed Files:\n${errorLogs.slice(0, 5).join('\n')}\n${errorLogs.length > 5 ? '...' : ''}`);
+            }
+
         } catch (err) {
-            console.error("Batch Upload Error:", err);
-            setStatus({ type: 'error', message: "Batch Failed: " + err.message });
+            console.error("Critical Batch Error:", err);
+            setStatus({ type: 'error', message: "Critical Batch Failure: " + err.message });
         } finally {
             setLoading(false);
         }

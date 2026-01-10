@@ -11,7 +11,7 @@ import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
@@ -799,6 +799,20 @@ const Dashboard = (props) => {
             salesDetails: salesDetails.sort((a, b) => b.weight - a.weight)
         };
     }, [props.productionData, filteredItems, selectedMonth, selectedYear]);
+
+    // [NEW] Calculate Today's Sales (Live)
+    const todaySales = React.useMemo(() => {
+        if (!data.transactions) return 0;
+        const now = new Date();
+        const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+
+        return data.transactions.reduce((sum, t) => {
+            if (t.parsedDate === todayStr && String(t.parsedType).toLowerCase().includes('sale')) {
+                return sum + (t.parsedAmount || 0);
+            }
+            return sum;
+        }, 0);
+    }, [data.transactions]);
 
     // [NEW] Previous Month Stats for Simulator Defaults
     // [NEW] Previous Month Stats for Simulator Defaults
@@ -1682,7 +1696,18 @@ const Dashboard = (props) => {
                             </div>
                         </div>
 
-                        <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
+
+                        <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
+                            {/* [NEW] Today's Sales Card */}
+                            <Card
+                                title="Today's Total Sales"
+                                value={todaySales}
+                                icon={TrendingUp}
+                                color="16, 185, 129"
+                                type="sales"
+                                subtext={new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            />
+
                             <Card title="Total Sales" value={salesRevenue} icon={IndianRupee} color="16, 185, 129" type="sales" />
 
                             {/* Merged Avg Order + Daily Avg Sales */}
@@ -1754,85 +1779,7 @@ const Dashboard = (props) => {
                             })()}
                         </div>
 
-                        {/* New: Item Wise Sales Summary Card */}
-                        <div className="glass-panel" style={{
-                            background: 'var(--glass-highlight)',
-                            border: '1px solid var(--glass-border)',
-                            borderRadius: '1rem',
-                            overflow: 'hidden',
-                            display: 'flex', flexDirection: 'column',
-                            height: '400px', // Fixed height for scrolling
-                            marginBottom: '2rem'
-                        }}>
-                            <div style={{
-                                padding: '1rem',
-                                background: 'var(--bg-primary)',
-                                borderBottom: '1px solid var(--glass-border)',
-                                fontWeight: 600,
-                                color: 'var(--text-primary)',
-                                display: 'flex', justifyContent: 'space-between'
-                            }}>
-                                <span>Sales Summary (Item Wise)</span>
-                                <span style={{ fontSize: '0.75rem', background: 'var(--glass-border)', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', color: 'var(--text-secondary)' }}>
-                                    {Object.keys(salesTransactions.reduce((acc, t) => {
-                                        const k = t.name || 'Unknown';
-                                        acc[k] = 1;
-                                        return acc;
-                                    }, {})).length} Items
-                                </span>
-                            </div>
-                            <div style={{
-                                display: 'grid', gridTemplateColumns: '1fr 80px 100px 120px', padding: '0.75rem',
-                                borderBottom: '1px solid var(--glass-border)',
-                                fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase'
-                            }}>
-                                <div>Item Name</div>
-                                <div style={{ textAlign: 'center' }}>Count</div>
-                                <div style={{ textAlign: 'right' }}>Qty</div>
-                                <div style={{ textAlign: 'right' }}>Revenue</div>
-                            </div>
-                            <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
-                                {(() => {
-                                    // Inline Aggregation Logic
-                                    const summary = {};
-                                    salesTransactions.forEach(t => {
-                                        const key = t.name || 'Unknown';
-                                        if (!summary[key]) {
-                                            summary[key] = { name: key, qty: 0, amount: 0, count: 0 };
-                                        }
-                                        summary[key].qty += (t.qty || 0);
-                                        summary[key].amount += (t.parsedAmount || 0);
-                                        summary[key].count += 1;
-                                    });
-                                    const sortedItems = Object.values(summary).sort((a, b) => b.qty - a.qty);
 
-                                    if (sortedItems.length === 0) {
-                                        return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No sales data found.</div>;
-                                    }
-
-                                    return sortedItems.map((item, i) => (
-                                        <div key={i} style={{
-                                            display: 'grid', gridTemplateColumns: '1fr 80px 100px 120px', padding: '0.75rem',
-                                            borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
-                                            background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
-                                        }}>
-                                            <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
-                                                {item.name}
-                                            </div>
-                                            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                                                {item.count}
-                                            </div>
-                                            <div style={{ textAlign: 'right', color: '#34d399', fontWeight: 500 }}>
-                                                {item.qty.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
-                                            </div>
-                                            <div style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
-                                                {formatCurrency(item.amount)}
-                                            </div>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </div>
                         <SalesSummaryTable
                             transactions={salesTransactions}
                             groupBy={salesViewMode === 'item' ? 'item' : 'date'}

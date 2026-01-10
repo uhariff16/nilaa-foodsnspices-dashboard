@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Upload, Database, Users, PlusCircle, ArrowLeft, Layers, LayoutGrid, Trash2 } from 'lucide-react';
+import { Upload, Database, Users, PlusCircle, ArrowLeft, Layers, LayoutGrid, Trash2, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminDataIngestion from './AdminDataIngestion';
 import DataManager from './DataManager';
 import AdminUserAccess from './AdminUserAccess';
 import AdminCleanup from './AdminCleanup';
 import ManualEntry from './ManualEntry';
+import AdminSystemSettings from './AdminSystemSettings';
 
 const AdminPanel = () => {
     const navigate = useNavigate();
@@ -18,6 +19,7 @@ const AdminPanel = () => {
         { id: 'manual', label: 'Manual Entry', icon: PlusCircle },
         { id: 'users', label: 'User Access', icon: Users },
         { id: 'cleanup', label: 'Cleanup', icon: Trash2 },
+        { id: 'settings', label: 'Settings', icon: Settings },
     ];
 
     return (
@@ -90,6 +92,7 @@ const AdminPanel = () => {
                         {activeTab === 'manual' && <ManualEntry />}
                         {activeTab === 'users' && <AdminUserAccess />}
                         {activeTab === 'cleanup' && <AdminCleanup />}
+                        {activeTab === 'settings' && <AdminSystemSettings />}
                     </div>
                 </div>
             </main>

@@ -15,6 +15,8 @@ import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Setting
 import { useAuth } from '../context/AuthContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
+import MobileDashboard from './mobile/MobileDashboard';
+import { supabase } from '../lib/supabaseClient';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -56,6 +58,35 @@ const Dashboard = (props) => {
 
     // Theme State
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+    // Mobile State
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [mobileLayoutEnabled, setMobileLayoutEnabled] = useState(true);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+
+        // Fetch Mobile Setting
+        const fetchMobileSetting = async () => {
+            const { data } = await supabase.from('system_settings').select('value').eq('key', 'mobile_layout_enabled').single();
+            if (data) setMobileLayoutEnabled(data.value === 'true');
+        };
+        fetchMobileSetting();
+
+        // Realtime Subscription
+        const channel = supabase
+            .channel('public:system_settings')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'key=eq.mobile_layout_enabled' }, (payload) => {
+                setMobileLayoutEnabled(payload.new.value === 'true');
+            })
+            .subscribe();
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            supabase.removeChannel(channel);
+        };
+    }, []);
 
     // Toggle Theme Effect
     useEffect(() => {
@@ -103,6 +134,9 @@ const Dashboard = (props) => {
     useEffect(() => {
         localStorage.setItem('manualExpenses', JSON.stringify(manualExpenses));
     }, [manualExpenses]);
+
+    // --- Mobile View Render ---
+
 
     // ... (rest of filtering logic) ...
 
@@ -938,6 +972,23 @@ const Dashboard = (props) => {
         const [y, m, d] = dateStr.split('-');
         return `${d}-${m}-${y}`;
     };
+
+    // --- Mobile View Render (Safe Position: After all Hooks) ---
+    if (isMobile && mobileLayoutEnabled) {
+        return (
+            <MobileDashboard
+                data={data}
+                filteredTransactions={filteredTransactions} // [NEW] Pass pre-filtered data
+                selectedMonth={selectedMonth} // [NEW] Pass context
+                selectedYear={selectedYear} // [NEW] Pass context
+                productionData={props.productionData}
+                receivables={data.receivables}
+                manualExpenses={manualExpenses}
+                previousMonthStats={previousMonthStats} // [NEW] For Cost Simulator
+                onSwitchToDesktop={() => setMobileLayoutEnabled(false)} // [NEW] Ext Desktop View
+            />
+        );
+    }
 
     return (
         <div className="animate-fade-in">

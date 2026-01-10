@@ -1,27 +1,42 @@
-import React, { useMemo } from 'react';
-import { Users, IndianRupee } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Users, IndianRupee, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 const CustomerAnalysis = ({ data, receivables = [] }) => {
-    // 1. Merge Data
+    const [sortConfig, setSortConfig] = useState({ key: 'revenue', direction: 'desc' });
+
+    // 1. Merge Data and Calculate Derived Metrics
     const customersWithReceivables = useMemo(() => {
         const map = new Map();
 
         // Add Sales Data
         data.forEach(c => {
-            map.set(c.name.trim().toLowerCase(), { ...c, balance: 0 });
+            const revenue = parseFloat(c.revenue || 0);
+            const profit = parseFloat(c.profit || 0);
+            const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+            map.set(c.name.trim().toLowerCase(), {
+                ...c,
+                revenue,
+                profit,
+                margin,
+                balance: 0
+            });
         });
 
         // Merge Receivables
         receivables.forEach(r => {
             const key = r.customer_name.trim().toLowerCase();
+            const balance = parseFloat(r.balance || 0);
+
             if (map.has(key)) {
-                map.get(key).balance = r.balance;
+                map.get(key).balance = balance;
             } else {
                 map.set(key, {
                     name: r.customer_name,
                     revenue: 0,
                     profit: 0,
-                    balance: r.balance
+                    margin: 0,
+                    balance: balance
                 });
             }
         });
@@ -29,12 +44,49 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
         return Array.from(map.values());
     }, [data, receivables]);
 
+    // 2. Sorting Logic
     const sortedCustomers = useMemo(() => {
-        return [...customersWithReceivables].sort((a, b) => b.revenue - a.revenue);
-    }, [customersWithReceivables]);
+        const sortableItems = [...customersWithReceivables];
+        if (sortConfig.key !== null) {
+            sortableItems.sort((a, b) => {
+                let aValue = a[sortConfig.key];
+                let bValue = b[sortConfig.key];
+
+                // Handle strings case-insensitive
+                if (typeof aValue === 'string') {
+                    aValue = aValue.toLowerCase();
+                    bValue = bValue.toLowerCase();
+                }
+
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [customersWithReceivables, sortConfig]);
+
+    const requestSort = (key) => {
+        let direction = 'desc';
+        // Toggle direction if already sorted by this key
+        if (sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = 'asc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const getSortIcon = (name) => {
+        if (sortConfig.key !== name) return <ArrowUpDown size={14} style={{ opacity: 0.3 }} />;
+        if (sortConfig.direction === 'asc') return <ArrowUp size={14} />;
+        return <ArrowDown size={14} />;
+    };
 
     const totalReceivables = useMemo(() => {
-        return receivables.reduce((sum, r) => sum + (r.balance || 0), 0);
+        return receivables.reduce((sum, r) => sum + (parseFloat(r.balance || 0)), 0);
     }, [receivables]);
 
     return (
@@ -44,9 +96,7 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
             </h2>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-
-
-                {sortedCustomers.length === 0 ? (
+                {customersWithReceivables.length === 0 ? (
                     <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>No Customer Data Found for this Period</p>
                         <p style={{ fontSize: '0.9rem' }}>
@@ -55,7 +105,15 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                         </p>
                     </div>
                 ) : (
-                    sortedCustomers.slice(0, 3).map((customer, i) => (
+                    // Show Top 3 based on CURRENT SORT if it makes sense? 
+                    // Usually "Top Customers" implies by Revenue. 
+                    // Let's keep the Top 3 fixed to REVENUE for the cards (standard dashboard behavior), 
+                    // OR follow the sort? User asked for "Sorting option on of All customers list".
+                    // The cards are "Top Customer" highlights. Usually these are fixed to Revenue/Importance.
+                    // But if I sort by "Balance Due", maybe I want to see top debtors?
+                    // Let's stick to Revenue for the cards to avoid confusion, or use a separate sorted list for cards.
+                    // I'll create a separate topRevenueCustomers for the cards.
+                    [...customersWithReceivables].sort((a, b) => b.revenue - a.revenue).slice(0, 3).map((customer, i) => (
                         <div key={i} className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', borderColor: i === 0 ? 'var(--accent-primary)' : 'var(--glass-border)' }}>
                             <div style={{
                                 width: '3rem', height: '3rem', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.2)',
@@ -65,7 +123,7 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                                 {i + 1}
                             </div>
                             <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', textTransform: 'uppercase' }}>{customer.name}</h3>
-                            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Top Customer</p>
+                            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Top Revenue</p>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', width: '100%' }}>
                                 <div>
@@ -92,11 +150,11 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                 )}
             </div>
 
-            {/* Pending Receivables Section */}
+            {/* Pending Receivables Section - kept separate logic */}
             {(() => {
                 const sortedReceivables = [...customersWithReceivables]
                     .filter(c => c.balance < 0)
-                    .sort((a, b) => a.balance - b.balance); // Ascending because they are negative (e.g. -100 is "larger" debt than -10)
+                    .sort((a, b) => a.balance - b.balance);
 
                 if (sortedReceivables.length === 0) return null;
 
@@ -127,22 +185,33 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                                 </div>
                             ))}
 
-                            {/* Total Receivables Card (Moved to End) */}
+                            {/* Total Receivables Card */}
                             {receivables.length > 0 && (
-                                <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', borderColor: totalReceivables < 0 ? '#ef4444' : 'var(--accent-primary)' }}>
+                                <div className="glass-panel" style={{
+                                    padding: '2rem',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    textAlign: 'center',
+                                    border: '1px solid rgba(239, 68, 68, 0.5)',
+                                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(30, 41, 59, 0.5) 100%)',
+                                    boxShadow: '0 0 20px rgba(239, 68, 68, 0.15)',
+                                    transform: 'scale(1.02)'
+                                }}>
                                     <div style={{
-                                        width: '3rem', height: '3rem', borderRadius: '50%',
-                                        background: totalReceivables < 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                        color: totalReceivables < 0 ? '#ef4444' : '#10b981',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem'
+                                        width: '4rem', height: '4rem', borderRadius: '50%',
+                                        background: 'rgba(239, 68, 68, 0.2)',
+                                        color: '#ef4444',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem',
+                                        boxShadow: '0 0 10px rgba(239, 68, 68, 0.3)'
                                     }}>
-                                        <IndianRupee size={24} />
+                                        <IndianRupee size={32} />
                                     </div>
-                                    <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Total Receivables</h3>
-                                    <div style={{ fontSize: '2rem', fontWeight: 700, margin: '0.5rem 0', color: totalReceivables < 0 ? '#ef4444' : '#10b981' }}>
+                                    <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', color: '#ffadad', fontWeight: 'bold' }}>Total Receivables</h3>
+                                    <div style={{ fontSize: '2.5rem', fontWeight: 800, margin: '0.5rem 0', color: '#ef4444', textShadow: '0 0 10px rgba(239, 68, 68, 0.3)' }}>
                                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totalReceivables)}
                                     </div>
-                                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Outstanding from {receivables.length} customers</p>
+                                    <p style={{ fontSize: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>Outstanding from {receivables.length} customers</p>
                                 </div>
                             )}
                         </div>
@@ -156,17 +225,52 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zIndex: 10 }}>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
-                                <th style={{ textAlign: 'left', padding: '1rem' }}>Customer Name</th>
-                                <th style={{ textAlign: 'right', padding: '1rem' }}>Revenue</th>
-                                <th style={{ textAlign: 'right', padding: '1rem' }}>Profit</th>
-                                <th style={{ textAlign: 'right', padding: '1rem' }}>Margin</th>
-                                <th style={{ textAlign: 'right', padding: '1rem' }}>Balance Due</th>
+                                <th
+                                    onClick={() => requestSort('name')}
+                                    style={{ textAlign: 'left', padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        Customer Name {getSortIcon('name')}
+                                    </div>
+                                </th>
+                                <th
+                                    onClick={() => requestSort('revenue')}
+                                    style={{ textAlign: 'right', padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        Revenue {getSortIcon('revenue')}
+                                    </div>
+                                </th>
+                                <th
+                                    onClick={() => requestSort('profit')}
+                                    style={{ textAlign: 'right', padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        Profit {getSortIcon('profit')}
+                                    </div>
+                                </th>
+                                <th
+                                    onClick={() => requestSort('margin')}
+                                    style={{ textAlign: 'right', padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        Margin {getSortIcon('margin')}
+                                    </div>
+                                </th>
+                                <th
+                                    onClick={() => requestSort('balance')}
+                                    style={{ textAlign: 'right', padding: '1rem', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        Balance Due {getSortIcon('balance')}
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             {sortedCustomers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                    <td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
                                         No customer data available for this month.<br />
                                         Please ensure your data source contains dated customer records.
                                     </td>
@@ -182,7 +286,7 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                                             {c.profit ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.profit) : '-'}
                                         </td>
                                         <td style={{ textAlign: 'right', padding: '1rem' }}>
-                                            {c.profit && c.revenue ? ((c.profit / c.revenue) * 100).toFixed(1) + '%' : '-'}
+                                            {c.margin ? c.margin.toFixed(1) + '%' : '-'}
                                         </td>
                                         <td style={{ textAlign: 'right', padding: '1rem', fontWeight: c.balance !== 0 ? 'bold' : 'normal', color: c.balance < 0 ? '#ef4444' : (c.balance > 0 ? '#f59e0b' : 'inherit') }}>
                                             {c.balance ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(c.balance) : '-'}
@@ -194,8 +298,6 @@ const CustomerAnalysis = ({ data, receivables = [] }) => {
                     </table>
                 </div>
             </div>
-
-            {/* Removed Separate Receivables Table */}
         </div>
     );
 };

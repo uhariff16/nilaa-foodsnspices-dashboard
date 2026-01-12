@@ -277,7 +277,9 @@ const Dashboard = (props) => {
     const recordedExpenses = expenseTransactions.reduce((sum, t) => {
         const amount = parseFloat(t.parsedAmount) || 0;
         const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
-        const isMaterial = materialKeywords.some(keyword => nameUpper.includes(keyword));
+        // [FIX] Expanded Logic to match MaterialStats
+        const hasPBill = t.invoiceNo && String(t.invoiceNo).trim().toUpperCase().startsWith('P-');
+        const isMaterial = (t.parsedType === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
 
         if (isMaterial) rawMaterialExpenses += amount;
         else otherExpenses += amount;
@@ -738,7 +740,8 @@ const Dashboard = (props) => {
 
                 // 1. Material Cost (Whitelist)
                 const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
-                const isMaterial = (type === 'Purchase') || materialKeywords.some(keyword => nameUpper.includes(keyword));
+                const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
+                const isMaterial = (type === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
 
                 // 2. Direct Labour (Keywords)
                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];

@@ -101,15 +101,10 @@ const DashboardLayout = () => {
             // Deduplication Logic
             const uniqueTxnsMap = new Map();
             allTxns.forEach(t => {
-                // [FIX] Deduplication Strategy
-                // Previous error: Deduplicating by 'invoice_no' alone collapsed multi-item invoices into 1 row.
-                // We must use the unique ID (deterministic from Parser: date-amount-index) to preserve all rows.
-                let key = t.id;
-
-                // Fallback for legacy records without ID (should be rare)
-                if (!key) {
-                    key = `${t.invoice_no}-${t.item_name}-${t.amount}-${t.date}`;
-                }
+                // [FIX] Deduplication Strategy - Content Based
+                // We ignore the DB ID for unique check because re-uploads might generate new IDs for the same data.
+                // We create a composite key from the business data fields.
+                const key = `${t.date}-${t.invoice_no}-${t.item_name}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}`;
 
                 if (!uniqueTxnsMap.has(key)) {
                     uniqueTxnsMap.set(key, t);

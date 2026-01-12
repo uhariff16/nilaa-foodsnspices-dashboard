@@ -91,7 +91,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     const filteredPurchases = useMemo(() => {
         const dateFiltered = getFilteredItems(purchases);
         return dateFiltered.filter(item => {
-            const desc = (item.originalDesc || item.supplier || item.remarks || '').toLowerCase();
+            // [FIX] Concatenate all fields to ensure keywords in Supplier are caught even if Desc is present
+            const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
             // Whitelist: Only allow Ginger and Garlic related records OR explicit 'Purchase' type
             // Also explicit allow for 'jayakodi' as fallback if item name is missing
             return item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi');
@@ -107,33 +108,25 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         const procurementItems = filteredPurchases;
 
         // Group by Material Name
+        // Group by Material Name
         const groups = {};
         procurementItems.forEach(p => {
             // Determine Name
-            const desc = (p.originalDesc || p.supplier || p.remarks || '').toLowerCase();
+            // [FIX] Concatenate all fields for robust detection
+            const desc = ((p.originalDesc || '') + ' ' + (p.supplier || '') + ' ' + (p.remarks || '')).toLowerCase();
             let name = null;
 
             // Smart Mapping
             if (desc.includes('ginger') || desc.includes('jayakodi')) name = 'Ginger';
-            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk')) name = 'Garlic';
+            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu')) name = 'Garlic';
             else {
                 // Fallback to extraction if possible or 'Others'
                 if (desc.includes('onion')) name = 'Onion';
                 else name = 'Others';
             }
 
-            if (name && name !== 'Others') { // Only count known materials for Cards? Or All? 
-                // Actually logic before was explicitly Ginger/Garlic via if/else if.
-                // Let's stick to the previous conditional structure but cleaner.
-            }
-
-            // Re-implementing previous fuzzy logic:
-            let finalName = null;
-            if (desc.includes('ginger') || desc.includes('jayakodi')) finalName = 'Ginger';
-            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk')) finalName = 'Garlic';
-
-            if (finalName) {
-                groups[finalName] = (groups[finalName] || 0) + (p.parsedQty || p.quantity || 0);
+            if (name && name !== 'Others') {
+                groups[name] = (groups[name] || 0) + (p.parsedQty || p.quantity || 0);
             }
         });
 
@@ -195,7 +188,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
         filteredPurchases.forEach(p => {
             // Use originalDesc as supplier/remarks fallback
-            const str = (String(p.originalDesc || p.supplier || p.remarks || '')).toLowerCase();
+            // [FIX] Concatenate
+            const str = ((p.originalDesc || '') + ' ' + (p.supplier || '') + ' ' + (p.remarks || '')).toLowerCase();
             const amt = p.parsedAmount || p.amount || 0;
             let matched = false;
 
@@ -214,7 +208,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 if (stats['Ginger'] && (str.includes('ginger') || str.includes('jayakodi'))) {
                     stats['Ginger'].cost += amt;
                     stats['Ginger'].count += 1;
-                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk'))) {
+                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu'))) {
                     stats['Garlic'].cost += amt;
                     stats['Garlic'].count += 1;
                 }
@@ -276,7 +270,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             {/* Top Stats Grid - Compact Cards */}
             {/* Top Stats Grid - Compact Cards */}
-            <div className="responsive-grid-3" style={{ marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
                 {/* 1. Material Cards */}
                 {materialGroups.map((group, index) => {
                     const { cost, count } = materialStats[group.name] || { cost: 0, count: 0 };

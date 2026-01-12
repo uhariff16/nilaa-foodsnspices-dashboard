@@ -3,7 +3,7 @@ import { Home, ShoppingCart, Package, Menu, Settings, LogOut, TrendingUp, Trendi
 import logo from '../../assets/logo.png';
 import CostSimulator from '../CostSimulator';
 
-const MobileDashboard = ({ data, filteredTransactions, selectedMonth, selectedYear, productionData, receivables, manualExpenses, previousMonthStats, onSwitchToDesktop }) => {
+const MobileDashboard = ({ data, filteredTransactions, filteredCustomers, selectedMonth, selectedYear, productionData, receivables, manualExpenses, previousMonthStats, onSwitchToDesktop }) => {
     const [activeTab, setActiveTab] = useState('overview');
 
     // Use filteredTransactions if available for precision
@@ -76,18 +76,27 @@ const MobileDashboard = ({ data, filteredTransactions, selectedMonth, selectedYe
             if (val > topProdAmt) { topProdAmt = val; topProdName = name; }
         });
 
-        // Determine Top Customer
+        // Determine Top Customer (Prefer Desktop Logic passed via props)
         let topCustName = 'N/A';
         let topCustAmt = 0;
-        Object.entries(customerSales).forEach(([name, val]) => {
-            if (val > topCustAmt) { topCustAmt = val; topCustName = name; }
-        });
+
+        if (filteredCustomers && filteredCustomers.length > 0) {
+            // [FIX] Ensure we pick the highest revenue customer
+            const bestCust = filteredCustomers.reduce((prev, current) => (prev.revenue > current.revenue) ? prev : current);
+            topCustName = bestCust.name;
+            topCustAmt = bestCust.revenue;
+        } else {
+            // Fallback: Local Calculation
+            Object.entries(customerSales).forEach(([name, val]) => {
+                if (val > topCustAmt) { topCustAmt = val; topCustName = name; }
+            });
+        }
 
         // Receivables Calculation
         const totalReceivables = (receivables || []).reduce((sum, item) => sum + (parseFloat(item.balance || item.balanceDue) || 0), 0);
 
         return { sales, expenses, netProfit, materialCost, overheadCost, margin, topProdName, topProdAmt, topCustName, topCustAmt, totalReceivables };
-    }, [transactionsToUse, manualExpenses, receivables]);
+    }, [transactionsToUse, manualExpenses, receivables, filteredCustomers]);
 
     const { sales: totalSales, expenses: totalExpenses, netProfit, materialCost, overheadCost, margin, topProdName, topProdAmt, topCustName, topCustAmt, totalReceivables } = stats;
 

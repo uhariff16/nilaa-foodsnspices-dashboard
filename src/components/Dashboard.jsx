@@ -996,6 +996,7 @@ const Dashboard = (props) => {
             <MobileDashboard
                 data={data}
                 filteredTransactions={filteredTransactions} // [NEW] Pass pre-filtered data
+                filteredCustomers={filteredCustomers} // [NEW] Sync Top Customer Logic
                 selectedMonth={selectedMonth} // [NEW] Pass context
                 selectedYear={selectedYear} // [NEW] Pass context
                 productionData={props.productionData}

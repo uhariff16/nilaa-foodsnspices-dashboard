@@ -370,8 +370,12 @@ Click OK to proceed with uploading receivables.`);
 
                     try {
                         // Assuming simple insert for now. If table has constraints, handle them.
-                        // We might want to truncate first or upsert? 
-                        // For "Report", usually snapshot. Let's try simple insert.
+                        // Handling Receivables: REPLACE existing data (req: "load only latest")
+                        // 1. Delete all existing
+                        const { error: delError } = await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
+                        if (delError) console.warn("Failed to clear old receivables:", delError);
+
+                        // 2. Insert New
                         const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
                         if (recError) {
                             console.error("Receivables Insert Error:", recError);
@@ -484,6 +488,7 @@ Click OK to proceed with uploading receivables.`);
         let skipCount = 0;
         let failCount = 0;
         let newRecordsCount = 0;
+        let receivablesCleared = false; // [NEW] Track if we've cleared old data for this batch
         const errorLogs = [];
 
         // Helper to update status during loop
@@ -624,7 +629,14 @@ Click OK to proceed with uploading receivables.`);
                                 balance: r.balanceDue,
                                 updated_at: new Date()
                             }));
-                            // Receivables are usually snapshots, so we assume simple processing
+                            // 2. Receivables
+                            // [NEW] Logic: Replace existing data if new data found.
+                            // Only clear once per batch (on first file with receivables)
+                            if (!receivablesCleared) {
+                                await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
+                                receivablesCleared = true;
+                            }
+
                             const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
                             if (!recError) fileAddedCount += mappedReceivables.length;
                         }

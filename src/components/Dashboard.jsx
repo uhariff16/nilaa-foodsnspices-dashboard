@@ -17,6 +17,7 @@ import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
 import MobileDashboard from './mobile/MobileDashboard';
 import { supabase } from '../lib/supabaseClient';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -271,25 +272,68 @@ const Dashboard = (props) => {
 
     // Split Expenses Calculation
     let rawMaterialExpenses = 0;
+    let salaryExpenses = 0;
+    let packagingExpenses = 0;
     let otherExpenses = 0;
+    let waterExpenses = 0;
+    let billsAndRentExpenses = 0; // [NEW] Track Bills & Rent
+
+    // Keywords for categorization
     const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+    const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
+    const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG'];
+    const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
+    const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
 
     const recordedExpenses = expenseTransactions.reduce((sum, t) => {
         const amount = parseFloat(t.parsedAmount) || 0;
         const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
+
         // [FIX] Expanded Logic to match MaterialStats
         const hasPBill = t.invoiceNo && String(t.invoiceNo).trim().toUpperCase().startsWith('P-');
         const isMaterial = (t.parsedType === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
+        const isWater = waterKeywords.some(k => nameUpper.includes(k));
+        const isBill = billsKeywords.some(k => nameUpper.includes(k));
 
-        if (isMaterial) rawMaterialExpenses += amount;
-        else otherExpenses += amount;
+        // Categorize
+        if (isMaterial) {
+            rawMaterialExpenses += amount;
+        } else if (isWater) {
+            // Water is now considered a Raw Material but tracked separately for display
+            rawMaterialExpenses += amount;
+            waterExpenses += amount;
+        } else if (labourKeywords.some(k => nameUpper.includes(k))) {
+            salaryExpenses += amount;
+        } else if (packagingKeywords.some(k => nameUpper.includes(k))) {
+            packagingExpenses += amount;
+        } else if (isBill) {
+            billsAndRentExpenses += amount;
+        } else {
+            otherExpenses += amount;
+        }
 
         return sum + amount;
     }, 0);
     const manualSalaryCalc = parseFloat(manualExpenses.salary) || 0;
     const manualDailyCalc = parseFloat(manualExpenses.daily) || 0;
+
+    // Add Manual Components to their respective categories
+    const finalSalaryExpenses = salaryExpenses + manualSalaryCalc;
+    // Note: Manual Daily is still added to 'Other'. User might want a 'Manual Bills' field later?
+    // For now, let's assume 'Daily' is miscellaneous, so it stays in 'Other'.
+    const finalOtherExpenses = otherExpenses + manualDailyCalc;
+
     const totalManual = manualSalaryCalc + manualDailyCalc;
     const grandTotalExpenses = recordedExpenses + totalManual;
+
+    // [NEW] Prepare Chart Data
+    const expenseChartData = [
+        { name: 'Raw Material', value: rawMaterialExpenses, color: '#f97316' }, // Orange
+        { name: 'Salary & Wages', value: finalSalaryExpenses, color: '#3b82f6' }, // Blue
+        { name: 'Packaging', value: packagingExpenses, color: '#ec4899' }, // Pink
+        { name: 'Bills & Rent', value: billsAndRentExpenses, color: '#0ea5e9' }, // Cyan
+        { name: 'Other Expenses', value: finalOtherExpenses, color: '#a855f7' }, // Purple
+    ].filter(item => item.value > 0);
 
     const formatCurrency = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val);
 
@@ -1821,37 +1865,134 @@ const Dashboard = (props) => {
                             {/* Expense Metrics */}
                             <div style={{
                                 display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                                 gap: '1rem',
                                 marginBottom: '1.5rem'
                             }}>
+                                {/* Raw Material */}
                                 <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(249, 115, 22, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Material</div>
                                         <Leaf size={16} color="#f97316" />
                                     </div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
+                                    {waterExpenses > 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                            Includes {formatCurrency(waterExpenses)} Water
+                                        </div>
+                                    )}
                                 </div>
+
+                                {/* Salary + Manual Salary */}
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Salary & Wages</div>
+                                        <Users size={16} color="#3b82f6" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(finalSalaryExpenses)}</div>
+                                    {manualSalaryCalc > 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                            Includes {formatCurrency(manualSalaryCalc)} Manual
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Packaging Materials */}
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Packaging</div>
+                                        <Package size={16} color="#ec4899" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ec4899' }}>{formatCurrency(packagingExpenses)}</div>
+                                </div>
+
+                                {/* Bills & Rent [NEW] */}
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Bills & Rent</div>
+                                        <Wallet size={16} color="#0ea5e9" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0ea5e9' }}>{formatCurrency(billsAndRentExpenses)}</div>
+                                </div>
+
+                                {/* Other Expenses */}
                                 <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Other Expenses</div>
                                         <Tag size={16} color="#a855f7" />
                                     </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(otherExpenses)}</div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(finalOtherExpenses)}</div>
                                 </div>
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Manual (Salary/Daily)</div>
-                                        <Settings size={16} color="#f59e0b" />
+
+                            </div>
+
+                            {/* Total Outflow & Distribution Chart [NEW] */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                {/* Left: Total Summary */}
+                                <div style={{
+                                    flex: '1 1 300px',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    padding: '2rem',
+                                    borderRadius: '1rem',
+                                    border: '1px solid rgba(239, 68, 68, 0.5)',
+                                    boxShadow: '0 10px 15px -3px rgba(239, 68, 68, 0.1), 0 4px 6px -2px rgba(239, 68, 68, 0.05)',
+                                    display: 'flex', flexDirection: 'column', justifyContent: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                        <div>
+                                            <div style={{ color: '#fca5a5', fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem' }}>Total Outflow</div>
+                                            <div style={{ fontSize: '0.875rem', color: 'rgba(252, 165, 165, 0.8)' }}>Aggregated Expenses</div>
+                                        </div>
+                                        <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '0.5rem', borderRadius: '0.5rem' }}>
+                                            <IndianRupee size={24} color="#ef4444" />
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(totalManual)}</div>
+                                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#ef4444', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
+                                    <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#fca5a5' }}>
+                                        {expenseChartData.length} Categories Tracked
+                                    </div>
                                 </div>
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Total Outflow</div>
-                                        <IndianRupee size={16} color="var(--danger)" />
+
+                                {/* Right: Distribution Chart */}
+                                <div style={{
+                                    flex: '1 1 300px',
+                                    background: 'var(--glass-highlight)',
+                                    borderRadius: '1rem',
+                                    border: '1px solid var(--glass-border)',
+                                    height: '220px',
+                                    position: 'relative'
+                                }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={expenseChartData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                            >
+                                                {expenseChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip
+                                                formatter={(value) => formatCurrency(value)}
+                                                contentStyle={{ background: 'rgba(17, 24, 39, 0.9)', border: 'none', borderRadius: '0.5rem', color: '#fff' }}
+                                                itemStyle={{ color: '#fff' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    {/* Center Text Overlay */}
+                                    <div style={{
+                                        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                                        textAlign: 'center', pointerEvents: 'none'
+                                    }}>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Expenses</div>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Distribution</div>
                                     </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--danger)' }}>{formatCurrency(grandTotalExpenses)}</div>
                                 </div>
                             </div>
                             <div className="glass-panel" style={{

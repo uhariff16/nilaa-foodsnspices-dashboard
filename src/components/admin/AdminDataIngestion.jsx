@@ -4,6 +4,7 @@ import { parseExcelFile } from '../../utils/excelParser';
 import { parseProductionFile } from '../../utils/productionParser';
 import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X, Users, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { loadGapi, loadGis, createPicker, downloadDriveFile } from '../../utils/driveUtils';
 
 const AdminDataIngestion = () => {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
@@ -22,6 +23,93 @@ const AdminDataIngestion = () => {
     const prodFileRef = useRef(null);
     const prodFolderRef = useRef(null);
     const watcherIntervalRef = useRef(null);
+
+    // --- Google Drive Integration ---
+    const [tokenClient, setTokenClient] = useState(null);
+    const [driveConfig, setDriveConfig] = useState({
+        clientId: 'YOUR_CLIENT_ID_HERE',
+        apiKey: 'YOUR_API_KEY_HERE',
+    });
+    const [gapiLoaded, setGapiLoaded] = useState(false);
+    const [gisLoaded, setGisLoaded] = useState(false);
+
+    useEffect(() => {
+        // Load Google Scripts
+        loadGapi(() => setGapiLoaded(true));
+        loadGis(() => setGisLoaded(true));
+    }, []);
+
+    useEffect(() => {
+        if (gisLoaded && driveConfig.clientId !== 'YOUR_CLIENT_ID_HERE') {
+            try {
+                const client = window.google.accounts.oauth2.initTokenClient({
+                    client_id: driveConfig.clientId,
+                    scope: 'https://www.googleapis.com/auth/drive.readonly',
+                    callback: '', // defined at request time
+                });
+                setTokenClient(client);
+            } catch (e) {
+                console.error("Failed to init token client", e);
+            }
+        }
+    }, [gisLoaded, driveConfig.clientId]);
+
+    const handleDrivePick = (targetType) => {
+        if (!gapiLoaded || !gisLoaded) {
+            alert("Google API not loaded yet. Check internet connection.");
+            return;
+        }
+        if (driveConfig.clientId === 'YOUR_CLIENT_ID_HERE' || driveConfig.apiKey === 'YOUR_API_KEY_HERE') {
+            const newId = prompt("Enter Google Cloud Client ID:", driveConfig.clientId);
+            const newKey = prompt("Enter Google Cloud API Key:", driveConfig.apiKey);
+            if (newId && newKey) {
+                setDriveConfig({ clientId: newId, apiKey: newKey });
+                alert("Credentials saved temporarily. Try clicking again.");
+                return;
+            }
+            return;
+        }
+
+        const handleAuth = (resp) => {
+            if (resp && resp.access_token) {
+                createPicker({
+                    token: resp.access_token,
+                    apiKey: driveConfig.apiKey,
+                    onSelect: async ({ fileId, fileName, accessToken }) => {
+                        setStatus({ type: 'idle', message: `Downloading ${fileName} from Drive...` });
+                        setLoading(true);
+                        try {
+                            const blob = await downloadDriveFile(fileId, accessToken);
+                            const syntheticFile = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                            if (targetType === 'sales') {
+                                setSalesFile(syntheticFile);
+                                setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
+                            } else {
+                                setProductionFile(syntheticFile);
+                                setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
+                            }
+                        } catch (err) {
+                            setStatus({ type: 'error', message: "Drive Download Failed: " + err.message });
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                });
+            }
+        };
+
+        if (window.gapi.client.getToken() === null) {
+            // Prompt the user to select a Google Account and ask for consent to share their data
+            // when requesting a fresh access token.
+            tokenClient.callback = handleAuth;
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+            // Skip display of account chooser and consent dialog for an existing session.
+            tokenClient.callback = handleAuth;
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
+    };
 
     useEffect(() => {
         return () => {
@@ -824,6 +912,15 @@ Click OK to proceed with uploading receivables.`);
                     <div>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Sales & Expenses</h3>
                         <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
+                        <div style={{ marginTop: '0.5rem' }}>
+                            <button
+                                onClick={() => handleDrivePick('sales')}
+                                className="btn-secondary"
+                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            >
+                                <CloudLightning size={12} /> Drive
+                            </button>
+                        </div>
                     </div>
 
                     {uploadMode === 'file' ? (

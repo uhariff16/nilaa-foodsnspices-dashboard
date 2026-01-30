@@ -65,7 +65,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             setInputs(prev => ({
                 ...prev,
                 labourCost: Math.round(estLabour),
-                overheadCost: Math.round(estOverhead),
+                overheadCost: Math.round(estOverhead - estPackaging),
                 packagingCost: Math.round(estPackaging)
             }));
         }
@@ -113,10 +113,10 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         }
 
         // Operational Cost Logic
-        // Wholesale excludes Packaging Cost (which is part of Overhead)
+        // Wholesale excludes Packaging Cost
         let effectiveOverhead = Number(inputs.overheadCost);
-        if (inputs.salesChannel === 'wholesale') {
-            effectiveOverhead = Math.max(0, effectiveOverhead - Number(inputs.packagingCost));
+        if (inputs.salesChannel === 'retail') {
+            effectiveOverhead += Number(inputs.packagingCost);
         }
 
         const totalMfgCost = totalMaterialCost + Number(inputs.labourCost) + effectiveOverhead;
@@ -423,7 +423,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                 </div>
                                 {/* Packaging Component Input */}
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }} title="Included in Overhead">Pkg Cost</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Pkg Cost</label>
                                     <div style={{ position: 'relative' }}>
                                         <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
                                         <input
@@ -441,7 +441,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                         <input
                                             type="text"
                                             readOnly
-                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Math.max(0, Number(inputs.overheadCost) - Number(inputs.packagingCost))) : (Number(inputs.labourCost) + Number(inputs.overheadCost))).toFixed(0)}
+                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Number(inputs.overheadCost)) : (Number(inputs.labourCost) + Number(inputs.overheadCost) + Number(inputs.packagingCost))).toFixed(0)}
                                             style={{ ...inputStyle, background: 'rgba(167, 139, 250, 0.1)', borderColor: '#a78bfa', color: '#a78bfa', paddingLeft: '1.5rem' }}
                                         />
                                     </div>

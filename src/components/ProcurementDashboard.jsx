@@ -6,12 +6,12 @@ import garlicIcon from '../assets/garlic.png';
 
 const COLORS = ['#FCD34D', '#E0E7FF', '#34D399', '#F87171', '#60A5FA', '#A78BFA', '#F471B5'];
 
-const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, customIcon, image, CustomElement }) => (
+const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, customIcon, image, CustomElement, ...props }) => (
     <div style={{
-        background: 'var(--glass-highlight)',
+        background: props.background || 'var(--glass-highlight)',
         borderRadius: '1rem',
         padding: '1.5rem',
-        border: '1px solid var(--glass-border)',
+        border: `1px solid ${props.borderColor || 'var(--glass-border)'}`,
         display: 'flex',
         alignItems: 'center', // Center vertically
         justifyContent: 'space-between',
@@ -21,10 +21,29 @@ const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, custo
     }}>
         {CustomElement}
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', flex: 1 }}>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
-                {title}
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span>{title}</span>
+                {/* Title Badge (e.g., Bill Count) */}
+                {props.titleBadge && (
+                    <span style={{
+                        fontSize: '0.75rem',
+                        background: props.badgeColor || '#ffffff', // Default to bright white
+                        color: props.badgeTextColor || '#0f172a', // Dark text
+                        padding: '4px 10px', borderRadius: '20px', fontWeight: 800, // Larger padding/weight
+                        marginLeft: '0.5rem',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)', // Pop effect
+                        display: 'inline-block', minWidth: '60px', textAlign: 'center'
+                    }}>
+                        {props.titleBadge}
+                    </span>
+                )}
             </div>
-            <div style={{ fontSize: '1.875rem', fontWeight: 700, color: color || 'var(--text-primary)', marginBottom: '0.5rem' }}>
+            <div style={{
+                fontSize: '1.875rem', fontWeight: 700,
+                color: color || 'var(--text-primary)',
+                marginBottom: '0.5rem',
+                ...(props.valueHighlightStyle || {})
+            }}>
                 {value}
             </div>
             <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
@@ -95,7 +114,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
             // Whitelist: Only allow Ginger and Garlic related records OR explicit 'Purchase' type
             // Also explicit allow for 'jayakodi' as fallback if item name is missing
-            return item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi');
+            return item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || desc.includes('desi') || desc.includes('naatu');
         });
     }, [purchases, selectedMonth, selectedYear]);
 
@@ -118,7 +137,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             // Smart Mapping
             if (desc.includes('ginger') || desc.includes('jayakodi')) name = 'Ginger';
-            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu')) name = 'Garlic';
+            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu') || desc.includes('desi') || desc.includes('naatu')) name = 'Garlic';
             else {
                 // Fallback to extraction if possible or 'Others'
                 if (desc.includes('onion')) name = 'Onion';
@@ -184,13 +203,16 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     const materialStats = useMemo(() => {
         const stats = {};
         // Initialize with 0
-        materialGroups.forEach(g => stats[g.name] = { cost: 0, count: 0 });
+        materialGroups.forEach(g => stats[g.name] = { cost: 0, count: 0, invoices: new Set() });
 
-        filteredPurchases.forEach(p => {
+        filteredPurchases.forEach((p, idx) => {
             // Use originalDesc as supplier/remarks fallback
             // [FIX] Concatenate
             const str = ((p.originalDesc || '') + ' ' + (p.supplier || '') + ' ' + (p.remarks || '')).toLowerCase();
             const amt = p.parsedAmount || p.amount || 0;
+            // Use Invoice Number or fallback to unique ID if missing
+            const inv = p.invoiceNo || p.invoice_no || `__NO_INV_${idx}`;
+
             let matched = false;
 
             materialGroups.forEach(g => {
@@ -198,7 +220,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 const groupKey = g.name.toLowerCase();
                 if (str.includes(groupKey)) {
                     stats[g.name].cost += amt;
-                    stats[g.name].count += 1;
+                    stats[g.name].invoices.add(inv);
                     matched = true;
                 }
             });
@@ -207,13 +229,19 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 // Generous fallback if no direct match found
                 if (stats['Ginger'] && (str.includes('ginger') || str.includes('jayakodi'))) {
                     stats['Ginger'].cost += amt;
-                    stats['Ginger'].count += 1;
-                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu'))) {
+                    stats['Ginger'].invoices.add(inv);
+                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu') || str.includes('desi') || str.includes('naatu'))) {
                     stats['Garlic'].cost += amt;
-                    stats['Garlic'].count += 1;
+                    stats['Garlic'].invoices.add(inv);
                 }
             }
         });
+
+        // Convert Set size to count
+        Object.keys(stats).forEach(k => {
+            stats[k].count = stats[k].invoices.size;
+        });
+
         return stats;
     }, [filteredPurchases, materialGroups]);
 
@@ -270,72 +298,87 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             {/* Top Stats Grid - Compact Cards */}
             {/* Top Stats Grid - Compact Cards */}
+            {/* 1. FINANCIALS ROW: Material Costs + Total Spend */}
+            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>FINANCIAL OVERVIEW</h4>
             <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
-                {/* 1. Material Cards */}
                 {materialGroups.map((group, index) => {
                     const { cost, count } = materialStats[group.name] || { cost: 0, count: 0 };
+                    const cardColor = getColorForMaterial(group.name, index);
                     return (
-                        <div key={group.name} style={{
-                            background: 'var(--glass-highlight)',
-                            borderRadius: '1rem',
-                            padding: '1.25rem',
-                            border: '1px solid var(--glass-border)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            height: '100%',
-                            minHeight: '140px' // Reduced Height
-                        }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', flex: 1 }}>
-                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.25rem', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>{group.name}</span>
-                                    <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{count} Bills</span>
-                                </div>
-                                <div style={{ fontSize: '2rem', fontWeight: 800, color: getColorForMaterial(group.name, index), marginBottom: '0.25rem', lineHeight: 1 }}>
-                                    ₹{cost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                                </div>
-                                <div style={{ fontSize: '1.125rem', fontWeight: 600, color: '#e0f2fe' }}>
-                                    {group.weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>kg</span>
-                                </div>
-                            </div>
-                            <div style={{ marginLeft: '1rem' }}>
-                                {getImageForMaterial(group.name) ? (
-                                    <div style={{
-                                        width: '64px', height: '64px', // Reduced Icon
-                                        borderRadius: '50%',
-                                        background: 'linear-gradient(145deg, rgba(255,255,255,0.05), rgba(0,0,0,0.4))',
-                                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        border: `1px solid ${getColorForMaterial(group.name, index)}`,
-                                        overflow: 'hidden',
-                                        padding: '5px'
-                                    }}>
-                                        <img src={getImageForMaterial(group.name)} alt="icon" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    </div>
-                                ) : null}
-                            </div>
-                        </div>
+                        <MetricCard
+                            key={group.name}
+                            title={group.name}
+                            titleBadge={`${count} Bills`}
+                            badgeColor={cardColor}
+                            badgeTextColor="#1e293b" // Dark text for contrast
+                            value={`₹${cost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+                            subtext="" // No subtext needed as we have titleBadge
+                            color={cardColor}
+                            image={getImageForMaterial(group.name)}
+                        />
                     );
                 })}
 
-                {/* 2. Total Quantity Card */}
+                <MetricCard
+                    title="Total Spend"
+                    titleBadge={`${filteredPurchases.length} Bills`}
+                    badgeColor="#fda4af" // Pastel Red (Opaque)
+                    badgeTextColor="#881337" // Dark Red Text
+                    value={`₹${totalSpent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+                    subtext=""
+                    icon={IndianRupee}
+                    color="#F43F5E"
+                    background="linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(20, 20, 25, 0.6))"
+                    borderColor="rgba(244, 63, 94, 0.3)"
+                    iconColor="#F43F5E"
+                    valueHighlightStyle={{
+                        background: 'rgba(0, 0, 0, 0.3)', // Darker box behind the number
+                        padding: '4px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(244, 63, 94, 0.4)',
+                        width: 'fit-content',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
+                />
+            </div>
+
+            {/* 2. QUANTITY ROW: Material Quantities + Total Quantity (Last) */}
+            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>QUANTITY BREAKDOWN</h4>
+            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+                {materialGroups.map((group, index) => {
+                    const { count } = materialStats[group.name] || { count: 0 };
+                    return (
+                        <MetricCard
+                            key={`${group.name}-qty`}
+                            title={`${group.name} Qty`}
+                            titleBadge={`${count} Bills`}
+                            badgeColor="#ffffff" // Bright White
+                            badgeTextColor="#0f172a"
+                            value={`${group.weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`}
+                            color="#e0f2fe"
+                            image={getImageForMaterial(group.name)}
+                        />
+                    );
+                })}
+
+                {/* Total Quantity Card (Last in line) */}
                 <MetricCard
                     title="Total Quantity"
                     value={`${totalWeight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`}
                     subtext="All Materials"
                     icon={Truck}
                     color="#34D399"
+                    background="linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(20, 20, 25, 0.6))"
+                    borderColor="rgba(52, 211, 153, 0.3)"
                     iconColor="#34D399"
-                />
-
-                {/* 3. Total Spend Card */}
-                <MetricCard
-                    title="Total Spend"
-                    value={`₹${totalSpent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
-                    subtext={`${filteredPurchases.length} Bills`}
-                    icon={IndianRupee}
-                    color="#F43F5E"
-                    iconColor="#F43F5E"
+                    valueHighlightStyle={{
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        padding: '4px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        width: 'fit-content',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}
                 />
             </div>
 
@@ -411,7 +454,14 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 }}>
                     <div style={{ padding: '1rem', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid rgba(51, 65, 85, 0.5)', fontWeight: 600, color: '#f43f5e', display: 'flex', justifyContent: 'space-between' }}>
                         <span>Supplier Ledger</span>
-                        <span style={{ fontSize: '0.85rem', background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', padding: '0.1rem 0.5rem', borderRadius: '0.25rem' }}>{sortedPurchases.length} Recs</span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.85rem', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                {new Set(sortedPurchases.map(p => p.invoiceNo || p.invoice_no)).size} Bills
+                            </span>
+                            <span style={{ fontSize: '0.85rem', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                {sortedPurchases.length} Recs
+                            </span>
+                        </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                         <div>Date</div>
@@ -516,6 +566,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     })}
                 </div>
             )}
+
+
 
         </div>
     );

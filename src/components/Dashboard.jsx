@@ -129,6 +129,7 @@ const Dashboard = (props) => {
 
     // Sorting State for Expenses
     const [expenseSort, setExpenseSort] = useState({ key: 'total', direction: 'desc' });
+    const [expenseListView, setExpenseListView] = useState('detailed'); // 'detailed' | 'compact'
 
 
     // Persist manual expenses
@@ -1877,7 +1878,7 @@ const Dashboard = (props) => {
                                     </div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
                                     {waterExpenses > 0 && (
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem', fontWeight: 600 }}>
                                             Includes {formatCurrency(waterExpenses)} Water
                                         </div>
                                     )}
@@ -1973,6 +1974,12 @@ const Dashboard = (props) => {
                                                 paddingAngle={5}
                                                 dataKey="value"
                                                 stroke="none"
+                                                label={({ cx, x, y, name, percent }) => (
+                                                    <text x={x} y={y} fill="var(--text-secondary)" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" style={{ fontSize: '10px', fontWeight: 500 }}>
+                                                        {`${name} ${(percent * 100).toFixed(0)}%`}
+                                                    </text>
+                                                )}
+                                                labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}
                                             >
                                                 {expenseChartData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -2012,56 +2019,138 @@ const Dashboard = (props) => {
                                     display: 'flex', justifyContent: 'space-between'
                                 }}>
                                     <span>Expense Summary (Item Wise)</span>
-                                    <span style={{ fontSize: '0.75rem', background: 'var(--glass-border)', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', color: 'var(--text-secondary)' }}>
-                                        {Object.keys(
-                                            expenseTransactions.reduce((acc, t) => {
-                                                const k = t.originalDesc || 'Uncategorized';
-                                                acc[k] = 1;
-                                                return acc;
-                                            }, {})
-                                        ).length} Items
-                                    </span>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--glass-border)', padding: '0.2rem', borderRadius: '0.5rem' }}>
+                                            <button
+                                                onClick={() => setExpenseListView('detailed')}
+                                                style={{
+                                                    background: expenseListView === 'detailed' ? '#3b82f6' : 'transparent',
+                                                    border: 'none', color: expenseListView === 'detailed' ? '#fff' : 'var(--text-secondary)',
+                                                    padding: '0.25rem 0.5rem', borderRadius: '0.3rem', fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 500
+                                                }}
+                                            >
+                                                Detailed
+                                            </button>
+                                            <button
+                                                onClick={() => setExpenseListView('compact')}
+                                                style={{
+                                                    background: expenseListView === 'compact' ? '#3b82f6' : 'transparent',
+                                                    border: 'none', color: expenseListView === 'compact' ? '#fff' : 'var(--text-secondary)',
+                                                    padding: '0.25rem 0.5rem', borderRadius: '0.3rem', fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 500
+                                                }}
+                                            >
+                                                Compact
+                                            </button>
+                                        </div>
+                                        <span style={{ fontSize: '0.75rem', background: 'var(--glass-border)', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', color: 'var(--text-secondary)' }}>
+                                            {Object.keys(
+                                                expenseTransactions.reduce((acc, t) => {
+                                                    const k = t.originalDesc || 'Uncategorized';
+                                                    acc[k] = 1;
+                                                    return acc;
+                                                }, {})
+                                            ).length} Items
+                                        </span>
+                                    </div>
                                 </div>
                                 <div style={{
-                                    display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(150px, 1fr) 80px 120px', padding: '0.75rem',
+                                    display: 'grid', gridTemplateColumns: expenseListView === 'detailed' ? 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)' : 'minmax(250px, 2fr) 100px 120px', padding: '0.75rem',
                                     borderBottom: '1px solid var(--glass-border)',
                                     fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase'
                                 }}>
-                                    <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                        Type {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
-                                    </div>
-                                    <div onClick={() => setExpenseSort(p => ({ key: 'receiver', direction: p.key === 'receiver' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                        Paid To {expenseSort.key === 'receiver' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
-                                    </div>
-                                    <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
-                                        Count {expenseSort.key === 'count' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
-                                    </div>
-                                    <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
-                                        Total {expenseSort.key === 'total' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
-                                    </div>
+                                    {expenseListView === 'detailed' ? (
+                                        <>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                Item / Category {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                Stats {expenseSort.key === 'count' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div style={{ cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                                Impact
+                                            </div>
+                                            <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                                Total {expenseSort.key === 'total' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                Item Name {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                Count {expenseSort.key === 'count' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                                Total {expenseSort.key === 'total' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                                     {(() => {
                                         // Inline Aggregation Logic
                                         const summary = {};
+                                        let grandTotal = 0;
+
                                         expenseTransactions.forEach(t => {
+                                            const amount = Math.abs(t.parsedAmount || 0);
+                                            grandTotal += amount;
+
                                             const key = t.originalDesc || 'Uncategorized';
                                             if (!summary[key]) {
                                                 // Split Logic: "Type - Receiver"
                                                 const parts = key.split(' - ');
                                                 const type = parts[0];
                                                 const receiver = parts.length > 1 ? parts.slice(1).join(' - ') : '-';
-                                                summary[key] = { name: key, type, receiver, total: 0, count: 0 };
+
+                                                // Categorization for Badges
+                                                let category = 'Other';
+                                                let badgeColor = 'var(--text-secondary)';
+                                                let badgeBg = 'var(--glass-border)';
+
+                                                const nameUpper = key.toUpperCase();
+                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE'];
+                                                const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
+                                                const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
+                                                const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
+                                                const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
+
+                                                if (materialKeywords.some(k => nameUpper.includes(k))) { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
+                                                else if (waterKeywords.some(k => nameUpper.includes(k))) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
+                                                else if (labourKeywords.some(k => nameUpper.includes(k))) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
+                                                else if (packagingKeywords.some(k => nameUpper.includes(k))) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
+                                                else if (billsKeywords.some(k => nameUpper.includes(k))) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
+
+                                                summary[key] = {
+                                                    name: key, type, receiver, category, badgeColor, badgeBg,
+                                                    total: 0, count: 0, latestDate: ''
+                                                };
                                             }
-                                            summary[key].total += Math.abs(t.parsedAmount);
+
+                                            summary[key].total += amount;
                                             summary[key].count += 1;
+
+                                            // Track Latest Date
+                                            if (t.parsedDate) {
+                                                if (!summary[key].latestDate || t.parsedDate > summary[key].latestDate) {
+                                                    summary[key].latestDate = t.parsedDate;
+                                                }
+                                            }
                                         });
+
                                         let sortedItems = Object.values(summary);
 
                                         // Sorting Logic
                                         sortedItems.sort((a, b) => {
                                             let valA = a[expenseSort.key];
                                             let valB = b[expenseSort.key];
+
+                                            // Special handling for derived metrics
+                                            if (expenseSort.key === 'avg') {
+                                                valA = a.total / a.count;
+                                                valB = b.total / b.count;
+                                            }
 
                                             // Case insensitive for strings
                                             if (typeof valA === 'string') valA = valA.toLowerCase();
@@ -2076,26 +2165,96 @@ const Dashboard = (props) => {
                                             return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No expenses found.</div>;
                                         }
 
-                                        return sortedItems.map((item, i) => (
-                                            <div key={i} style={{
-                                                display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(150px, 1fr) 80px 120px', padding: '0.75rem',
-                                                borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
-                                                background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
-                                            }}>
-                                                <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.type}>
-                                                    {item.type}
+                                        return sortedItems.map((item, i) => {
+                                            const avgCost = item.total / item.count;
+                                            const contribution = (item.total / grandTotal) * 100;
+
+                                            if (expenseListView === 'compact') {
+                                                return (
+                                                    <div key={i} style={{
+                                                        display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 100px 120px', padding: '0.75rem',
+                                                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                                        background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                                                    }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
+                                                                {item.name}
+                                                            </div>
+                                                            {item.receiver !== '-' && (
+                                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                    Paid to: {item.receiver}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                                            {item.count}
+                                                        </div>
+                                                        <div style={{ textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>
+                                                            {formatCurrency(item.total)}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div key={i} style={{
+                                                    display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)', padding: '1rem',
+                                                    borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                                    background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                                                }}>
+                                                    {/* Item & Category */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                        <div style={{ color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
+                                                            {item.type}
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <span style={{
+                                                                fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem',
+                                                                background: item.badgeBg, color: item.badgeColor, fontWeight: 600
+                                                            }}>
+                                                                {item.category.toUpperCase()}
+                                                            </span>
+                                                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }} title={item.receiver}>
+                                                                {item.receiver !== '-' ? item.receiver : ''}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Stats (Count & Avg) */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                                            {item.count} txns
+                                                        </span>
+                                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                                                            Avg: {formatCurrency(avgCost)}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Contribution Bar */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', paddingRight: '1rem' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                            <span>Impact</span>
+                                                            <span>{contribution.toFixed(1)}%</span>
+                                                        </div>
+                                                        <div style={{ width: '100%', height: '4px', background: 'var(--glass-border)', borderRadius: '2px', overflow: 'hidden' }}>
+                                                            <div style={{ width: `${contribution}%`, height: '100%', background: item.badgeColor, borderRadius: '2px' }} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Total & Recency */}
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ color: '#ef4444', fontWeight: 600, fontSize: '1rem' }}>
+                                                            {formatCurrency(item.total)}
+                                                        </div>
+                                                        {item.latestDate && (
+                                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                                                                Last: {formatLastUpdated(item.latestDate)}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.receiver}>
-                                                    {item.receiver}
-                                                </div>
-                                                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                                                    {item.count}
-                                                </div>
-                                                <div style={{ textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>
-                                                    {formatCurrency(item.total)}
-                                                </div>
-                                            </div>
-                                        ));
+                                            );
+                                        });
                                     })()}
                                 </div>
                             </div>

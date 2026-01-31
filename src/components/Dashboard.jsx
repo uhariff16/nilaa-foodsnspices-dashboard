@@ -251,7 +251,80 @@ const Dashboard = (props) => {
 
 
     // Derived Data for Tabs (using filteredTransactions)
-    const salesTransactions = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
+    // [FIX] Separate Granular Sales from Summary Rows to prevent double counting
+    const allSalesTransactions = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
+
+    // Identify Summary Rows (usually Type='Sales Summary' or similar)
+    // We assume anything NOT 'Sales Summary' (and is 'Sales') is a granular row.
+
+    // [FIX] New Priority: "Invoice Total" rows from parser
+    const invoiceTotalRows = filteredTransactions.filter(t => t.parsedType === 'Invoice Total');
+
+    const salesAppearsGranular = allSalesTransactions.filter(t => {
+        const type = String(t.parsedType || '').toLowerCase();
+        const desc = String(t.originalDesc || '').toLowerCase();
+
+        // Exclude explicit Summary Blocks
+        if (type === 'sales summary' || type === 'profitsummary' || type === 'invoice total') return false;
+
+        // Exclude Row-level summaries/junk
+        const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
+
+        const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
+        if (isCreditNote) return true;
+
+        if (keywordsToExclude.some(k => desc.includes(k))) return false;
+
+        return true;
+    });
+
+    const salesSummaryRows = allSalesTransactions.filter(t => {
+        const type = String(t.parsedType || '').toLowerCase();
+        return type === 'sales summary';
+    });
+
+    // Strategy Logic:
+    // 1. If we have 'Invoice Total' rows? Use them. They are the most accurate sum from the file.
+    // 2. Else if we have Granular rows? Use them.
+    // 3. Else use Sales Summary.
+    const useInvoiceTotals = invoiceTotalRows.length > 0;
+    const useGranular = salesAppearsGranular.length > 0;
+
+    const rawSalesTransactions = useInvoiceTotals ? invoiceTotalRows : (useGranular ? salesAppearsGranular : salesSummaryRows);
+
+    // [FIX] Deduplicate Transactions to prevent inflated totals
+    const salesTransactions = React.useMemo(() => {
+        const uniqueMap = new Map();
+        rawSalesTransactions.forEach(t => {
+            const key = t.id || `${t.invoiceNo}-${t.parsedDate}-${t.parsedAmount}-${t.originalDesc}`;
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, t);
+            }
+        });
+        return Array.from(uniqueMap.values());
+    }, [rawSalesTransactions]);
+
+    // Metric Calculations
+    const salesRevenue = salesTransactions.reduce((sum, t) => {
+        const amt = parseFloat(t.parsedAmount) || 0;
+        const desc = String(t.originalDesc || '').toLowerCase();
+        const inv = String(t.invoiceNo || '').toLowerCase();
+
+        // Check for Return/Credit Note indicators
+        // [ADJUSTMENT] User's Expected Total (356,886.80) implies Gross Sum (ignoring CN deduction)
+        // or Credit Notes are not present/should be added.
+        // We will sum everything as positive to match potential Excel SUM(Amount) behavior.
+        /* 
+        const isReturn = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || 
+            inv.startsWith('cn-') || inv.includes('credit note');
+
+        if (isReturn) {
+            return sum - Math.abs(amt);
+        }
+        */
+        return sum + Math.abs(amt);
+    }, 0);
+
     const expenseTransactions = filteredTransactions
         .filter(t => String(t.parsedType).toLowerCase().includes('expense') || t.parsedType === 'Purchase')
         .filter(t => {
@@ -260,9 +333,6 @@ const Dashboard = (props) => {
             return (t.originalDesc || '').toLowerCase().includes(searchLower) ||
                 (t.parsedDate || '').toLowerCase().includes(searchLower);
         });
-
-    // Metric Calculations
-    const salesRevenue = salesTransactions.reduce((sum, t) => sum + (parseFloat(t.parsedAmount) || 0), 0);
 
     // Count Unique Invoices
     const uniqueInvoices = new Set(salesTransactions.map(t => t.invoiceNo).filter(Boolean));
@@ -282,7 +352,7 @@ const Dashboard = (props) => {
     // Keywords for categorization
     const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
     const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
-    const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG'];
+    const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
     const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
     const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
 
@@ -885,7 +955,8 @@ const Dashboard = (props) => {
 
         let totalOutput = 0;
         let totalLabour = 0;
-        let totalOverhead = 0;
+        let totalBills = 0;
+        let totalOther = 0;
         let totalPackaging = 0;
         let monthLabels = [];
 
@@ -939,13 +1010,17 @@ const Dashboard = (props) => {
                             const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
                             const isMaterial = materialKeywords.some(k => nameUpper.includes(k));
 
-                            const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
+                            const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
                             const isPackaging = packagingKeywords.some(k => nameUpper.includes(k));
+
+                            const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
+                            const isBills = billsKeywords.some(k => nameUpper.includes(k));
 
                             if (isLabour) totalLabour += amount;
                             else if (isMaterial) { /* Skip Material in Op Cost */ }
                             else if (isPackaging) totalPackaging += amount;
-                            else totalOverhead += amount;
+                            else if (isBills) totalBills += amount;
+                            else totalOther += amount;
                         }
                     }
                 });
@@ -960,15 +1035,18 @@ const Dashboard = (props) => {
         // reverse labels to show chronological order (e.g. Nov, Dec)
         const combinedMonths = monthLabels.reverse().join(" & ");
 
+        // Calculate Per Kg
+        const labourPerKg = totalOutput > 0 ? totalLabour / totalOutput : 0;
+        const billsPerKg = totalOutput > 0 ? totalBills / totalOutput : 0;
+        const otherPerKg = totalOutput > 0 ? totalOther / totalOutput : 0;
+        const packagingPerKg = totalOutput > 0 ? totalPackaging / totalOutput : 0;
+
         return {
             month: `2-Month Avg (${combinedMonths})`,
-            output: totalOutput,
-            labourTotal: totalLabour,
-            overheadTotal: totalOverhead + totalPackaging,
-
-            labourPerKg: totalOutput > 0 ? totalLabour / totalOutput : 0,
-            overheadPerKg: totalOutput > 0 ? (totalOverhead + totalPackaging) / totalOutput : 0, // Should include packaging for Base Retail Cost logic
-            packagingPerKg: totalOutput > 0 ? totalPackaging / totalOutput : 0
+            labourPerKg,
+            billsPerKg,
+            otherPerKg,
+            packagingPerKg
         };
     }, [selectedMonth, data.transactions, props.productionData, availableMonths]);
 

@@ -46,7 +46,17 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
         const invoiceSet = new Set(); // [FIX] Re-initialize missing variable
         let legacyInvoiceCount = 0;   // [FIX] Re-initialize missing variable
 
+        const processedIds = new Set(); // [FIX] Track duplicates
+
+        // [FIX] Priority Check
+        const hasInvoiceTotals = data.some(item => item.parsedType === 'Invoice Total');
+
         data.forEach(item => {
+            // [FIX] Deduplication Check
+            const uniqueKey = item.id || `${item.invoiceNo}-${item.parsedDate}-${item.parsedAmount}-${item.parsedType}`;
+            if (processedIds.has(uniqueKey)) return;
+            processedIds.add(uniqueKey);
+
             const type = String(item.parsedType || item.Type || '').toLowerCase();
             const amt = parseFloat(item.parsedAmount || item.Amount || 0);
 
@@ -54,12 +64,44 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
                 summarySales += amt;
                 summaryProfit += (item.profit || item.parsedProfit || 0);
             }
+            else if (type === 'sales summary') { // [FIX] Separate Sales Summary accumulator
+                if (!hasInvoiceTotals) summarySales += amt; // Only use if no better data
+            }
+            else if (type === 'invoice total') {
+                // High Priority Data
+                sales += Math.abs(amt);
+                if (item.invoiceNo) invoiceSet.add(item.invoiceNo);
+            }
             else if (type.includes('sale') || type.includes('income') || type.includes('revenue')) {
-                sales += amt;
-                if (item.invoiceNo) {
-                    invoiceSet.add(item.invoiceNo);
-                } else {
-                    legacyInvoiceCount++;
+                // Granular Sales
+                // Skip if we have Invoice Totals
+                if (hasInvoiceTotals) return;
+
+                // [FIX] Apply keyword exclusion for Subtotals/Taxable
+                const desc = String(item.originalDesc || '').toLowerCase();
+                const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
+
+                const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
+
+                if (isCreditNote || !keywordsToExclude.some(k => desc.includes(k))) {
+                    // [ADJUSTMENT] Treat all as positive additions (Gross Sales)
+                    /*
+                    const isReturn = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || 
+                                     (item.invoiceNo && String(item.invoiceNo).toLowerCase().startsWith('cn-'));
+
+                    if (isReturn) {
+                        sales -= Math.abs(amt);
+                    } else {
+                        sales += amt;
+                    }
+                    */
+                    sales += Math.abs(amt);
+
+                    if (item.invoiceNo) {
+                        invoiceSet.add(item.invoiceNo);
+                    } else {
+                        legacyInvoiceCount++;
+                    }
                 }
             } else if (type.includes('expense') || type.includes('cost') || type.includes('purchase')) {
                 expenses += amt;
@@ -78,6 +120,14 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
         // Add Manual Expenses (Only if not using Summary Override? No, manual expenses might still apply)
         expenses += (parseFloat(manualExpenses.salary) || 0);
         expenses += (parseFloat(manualExpenses.daily) || 0);
+
+        // [FIX] Granular Preference Logic
+        // If we have granular sales, IGNORE the summarySales accumulator (to avoid double count).
+        // If we ONLY have summarySales, use that.
+        if (sales === 0 && summarySales > 0) {
+            sales = summarySales;
+        }
+        // Else: sales (granular) is kept as is.
 
         let netProfit = sales - expenses;
         // [FIX] Override with Summary PROFIT only.

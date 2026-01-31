@@ -237,28 +237,46 @@ export const parseExcelFile = (files) => {
                         let qtyColIdx = -1;
                         let dateColIdx = -1;
 
-                        for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
-                            const row = jsonData[i] || [];
-                            const rowStr = JSON.stringify(row).toLowerCase();
-                            if (rowStr.includes('amount')) {
-                                headerRowIdx = i;
-                                row.forEach((cell, idx) => {
-                                    const str = String(cell).toLowerCase();
-                                    if (str.includes('amount')) amountColIdx = idx;
-                                    if (str.includes('particulars') || str.includes('description')) partColIdx = idx;
-                                    if (str.includes('quantity') || str.includes('qty')) qtyColIdx = idx;
-                                    if (str.includes('date')) dateColIdx = idx;
-                                });
-                                break;
+                        // [NEW] Find Customer Column - Enhanced Detection (Variables already declared above)
+                        let custColIdx = -1;
+                        // amountColIdx already declared at line 235
+
+                        // Heuristic for Amount Column
+                        let bestAmountScore = -1;
+
+                        headerRow.forEach((cell, idx) => {
+                            const str = String(cell).toLowerCase().trim();
+
+                            // Amount Column Logic
+                            if (str.includes('amount')) {
+                                let score = 0;
+                                if (str.includes('taxable')) score += 10;
+                                else if (str.includes('net')) score += 10;
+                                else if (str.includes('total')) score += 5;
+                                else score += 1;
+
+                                if (str.includes('cgst') || str.includes('sgst') || str.includes('igst') || str.includes('tax')) {
+                                    score = -10; // Penalize Tax columns
+                                }
+
+                                if (score > bestAmountScore) {
+                                    bestAmountScore = score;
+                                    amountColIdx = idx;
+                                    debugLog.push(`Found Amount Candidate: '${str}' (Score: ${score}) at idx ${idx}`);
+                                }
                             }
+
+                            if (str.includes('particulars') || str.includes('description')) partColIdx = idx;
+                            if (str.includes('quantity') || str.includes('qty')) qtyColIdx = idx;
+                            if (str.includes('date')) dateColIdx = idx;
+                        });
+
+                        // Fallback if no specific "amount" keyword found
+                        if (amountColIdx === -1) {
+                            amountColIdx = 7;
                         }
 
-                        if (headerRowIdx === -1) headerRowIdx = 0;
-                        if (amountColIdx === -1) amountColIdx = 7;
-                        if (partColIdx === -1) partColIdx = 1;
-
                         // [NEW] Find Customer Column - Enhanced Detection
-                        let custColIdx = -1;
                         headerRow.forEach((cell, idx) => {
                             const str = String(cell).toLowerCase().trim();
                             if (str.includes('party') || str.includes('customer') || str.includes('billed to') || str.includes('ledger') || str.includes('buyer') || str === 'name') {
@@ -317,11 +335,30 @@ export const parseExcelFile = (files) => {
                             // 2. Process Item Row
                             if (row[amountColIdx] !== undefined) {
                                 const desc = colParticulars.toLowerCase();
-                                if (desc.includes('total') || desc === '') return;
+                                // [FIX] Stronger Check for Total Rows (Check first few columns)
+                                const c0 = String(row[0] || '').toLowerCase().trim();
+                                const c1 = String(row[1] || '').toLowerCase().trim();
+
+                                const isStructureTotal = c0 === 'total' || c1 === 'total' || desc === 'total';
+
+                                // Determine parsedType based on row content
+                                // If it's a structural TOTAL row, we tag it specifically.
+                                let type = 'Sales';
+                                if (isStructureTotal) {
+                                    type = 'Invoice Total';
+                                } else {
+                                    // If it's NOT a total row, but has 'total' in description (e.g. 'sub total'), we might want to skip it?
+                                    // For now, let's keep it as 'Sales' and let Dashboard filter it out if needed.
+                                    // But previous logic aggressively skipped 'total' keywords.
+                                    // We should restore 'skip subtotal' but KEEP 'Structure Total'.
+                                    if (desc.includes('total') && !desc.includes('return') && !desc.includes('credit') && !desc.includes('cn')) {
+                                        return; // Skip 'Sub Total', 'Grand Total' inside description etc.
+                                    }
+                                }
 
                                 const amount = parseFloat(String(row[amountColIdx]).replace(/,/g, ''));
 
-                                if (!isNaN(amount) && amount > 0) {
+                                if (!isNaN(amount) && amount !== 0) { // Allow negative amounts too
                                     let finalDate = currentInvDate || currentDate || masterFileDate;
                                     if (dateColIdx !== -1 && row[dateColIdx]) finalDate = normalizeDate(row[dateColIdx]);
 
@@ -332,10 +369,10 @@ export const parseExcelFile = (files) => {
                                         mergedData.transactions.push({
                                             id: `txn-${finalDate}-${amount}-${index}`,
                                             parsedDate: finalDate, // DB Column: date
-                                            parsedAmount: amount, // DB Column: amount
+                                            parsedAmount: Math.abs(amount), // [FIX] Store absolute value for consistency
                                             parsedQty: qty, // DB Column: quantity
-                                            parsedType: 'Sales', // DB Column: payment_mode
-                                            originalDesc: colParticulars || 'Item', // DB Column: item_name
+                                            parsedType: type, // [FIX] Dynamic Type
+                                            originalDesc: colParticulars || (isStructureTotal ? 'Invoice Total' : 'Item'), // DB Column: item_name
                                             // Priority: 1. Stateful Customer (Header), 2. Column Customer
                                             customerName: currentCustomer || ((custColIdx !== -1 && row[custColIdx]) ? String(row[custColIdx]).trim() : null),
                                             invoiceNo: currentInvoiceNo || `INV-MISSING-${index}` // DB Column: invoice_no

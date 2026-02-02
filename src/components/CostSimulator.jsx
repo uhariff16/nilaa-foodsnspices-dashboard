@@ -676,53 +676,105 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     {/* Right Panel: Results */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         {/* Main Results Card */}
-                        <div className="glass-panel" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9))', border: '1px solid var(--glass-border)', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.3)', position: 'relative', overflow: 'hidden', flex: 1 }}>
+                        <div className="glass-panel" style={{
+                            padding: '2.5rem 2rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center',
+                            background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                            border: '1px solid var(--glass-border)',
+                            boxShadow: '0 20px 40px -10px rgba(0,0,0,0.5)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            borderRadius: '1.5rem'
+                        }}>
 
                             {/* Glow Effects */}
-                            <div style={{ position: 'absolute', top: '-20%', right: '-20%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(245, 158, 11, 0.1) 0%, transparent 70%)', borderRadius: '50%' }}></div>
-                            <div style={{ position: 'absolute', bottom: '-20%', left: '-20%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%)', borderRadius: '50%' }}></div>
+                            <div style={{ position: 'absolute', top: '-50%', left: '50%', transform: 'translateX(-50%)', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)', borderRadius: '50%', filter: 'blur(40px)' }}></div>
 
                             <div style={{ position: 'relative', zIndex: 10, width: '100%' }}>
-                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>PRODUCTION COST</div>
-                                <div style={{ fontSize: '3.5rem', fontWeight: '800', color: '#f8fafc', textShadow: '0 0 20px rgba(248, 250, 252, 0.1)', lineHeight: 1 }}>
-                                    <span style={{ fontSize: '2rem', color: '#64748b', fontWeight: '400', marginRight: '0.25rem' }}>₹</span>
-                                    {results.costPerKg.toFixed(2)}
+                                <div style={{ fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: '600', marginBottom: '1rem' }}>
+                                    Production Cost
                                 </div>
-                                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>per Kg Output</div>
 
-                                <div style={{ height: '1px', background: 'var(--glass-border)', width: '60%', margin: '2rem auto' }}></div>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', lineHeight: 1, marginBottom: '0.5rem' }}>
+                                    <span style={{ fontSize: '2.5rem', color: '#64748b', fontWeight: '400', marginTop: '0.5rem', marginRight: '0.25rem' }}>₹</span>
+                                    <span style={{ fontSize: '5rem', fontWeight: '800', color: '#f8fafc', letterSpacing: '-0.02em', textShadow: '0 0 30px rgba(248, 250, 252, 0.2)' }}>
+                                        {results.costPerKg.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '1rem', color: '#94a3b8' }}>per Kg Output</div>
+
+                                <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent)', width: '80%', margin: '2.5rem auto' }}></div>
 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', width: '100%' }}>
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.75rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Output</div>
-                                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{results.totalOutputKg.toFixed(1)} <span style={{ fontSize: '0.8rem', fontWeight: 'normal' }}>kg</span></div>
-                                        <div style={{ fontSize: '0.75rem', color: results.yieldPercent < 75 ? '#ef4444' : '#10b981', marginTop: '0.25rem' }}>{results.yieldPercent.toFixed(1)}% Yield</div>
+                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Total Output</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e2e8f0' }}>
+                                            {results.totalOutputKg.toFixed(1)} <span style={{ fontSize: '0.9rem', fontWeight: '500', color: '#64748b' }}>kg</span>
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: results.yieldPercent < 75 ? '#ef4444' : '#10b981', marginTop: '0.25rem', fontWeight: '500' }}>
+                                            {results.yieldPercent.toFixed(1)}% Yield
+                                        </div>
                                     </div>
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.75rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Spend</div>
-                                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>₹{results.totalCost.toLocaleString()}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>All Inclusive</div>
+                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Total Spend</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e2e8f0' }}>
+                                            ₹{Math.round(results.totalCost).toLocaleString()}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>All Inclusive</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Rec Price Card */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{
+                            padding: '1.5rem 2rem',
+                            background: 'rgba(5, 150, 105, 0.1)',
+                            border: '1px solid rgba(5, 150, 105, 0.3)',
+                            borderRadius: '1rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+                        }}>
                             <div>
-                                <div style={{ fontSize: '0.9rem', color: '#34d399', fontWeight: '600', textTransform: 'uppercase' }}>REC. SELLING PRICE <br />(INC. MARGIN)</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                    <input
-                                        type="number"
-                                        value={inputs.profitMargin}
-                                        onChange={(e) => handleInput('profitMargin', e.target.value)}
-                                        style={{ background: 'rgba(52, 211, 153, 0.1)', border: '1px solid #34d399', borderRadius: '4px', padding: '0.1rem 0.3rem', color: '#34d399', fontSize: '1rem', width: '50px', textAlign: 'center', outline: 'none' }}
-                                    />
-                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>% Margin</span>
+                                <div style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Rec. Selling Price
+                                    <br />
+                                    <span style={{ fontSize: '0.7rem', opacity: 0.8, fontWeight: 'normal' }}>(Inc. Margin)</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type="number"
+                                            value={inputs.profitMargin}
+                                            onChange={(e) => handleInput('profitMargin', e.target.value)}
+                                            style={{
+                                                background: 'rgba(6, 78, 59, 0.4)',
+                                                border: '1px solid rgba(52, 211, 153, 0.4)',
+                                                borderRadius: '0.5rem',
+                                                padding: '0.25rem 0.5rem',
+                                                color: '#34d399',
+                                                fontSize: '1.1rem',
+                                                width: '60px',
+                                                textAlign: 'center',
+                                                outline: 'none',
+                                                fontWeight: '600'
+                                            }}
+                                        />
+                                    </div>
+                                    <span style={{ fontSize: '0.9rem', color: '#d1fae5', fontWeight: '500' }}>% Margin</span>
                                 </div>
                             </div>
-                            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#34d399' }}>
-                                ₹{results.recPrice.toFixed(2)}
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '3rem', fontWeight: '800', color: '#34d399', lineHeight: 1, textShadow: '0 0 20px rgba(52, 211, 153, 0.3)' }}>
+                                    <span style={{ fontSize: '1.5rem', verticalAlign: 'top', marginRight: '0.25rem', opacity: 0.8 }}>₹</span>
+                                    {results.recPrice.toFixed(2)}
+                                </div>
                             </div>
                         </div>
                     </div>

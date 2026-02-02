@@ -128,8 +128,9 @@ const Dashboard = (props) => {
     });
 
     // Sorting State for Expenses
-    const [expenseSort, setExpenseSort] = useState({ key: 'total', direction: 'desc' });
-    const [expenseListView, setExpenseListView] = useState('detailed'); // 'detailed' | 'compact'
+    const [expenseSort, setExpenseSort] = React.useState({ key: 'total', direction: 'desc' });
+    const [expenseListView, setExpenseListView] = React.useState('compact'); // 'compact' or 'detailed'
+    const [selectedExpenseCategory, setSelectedExpenseCategory] = React.useState(null); // [NEW] Filter State
 
 
     // Persist manual expenses
@@ -347,14 +348,16 @@ const Dashboard = (props) => {
     let packagingExpenses = 0;
     let otherExpenses = 0;
     let waterExpenses = 0;
-    let billsAndRentExpenses = 0; // [NEW] Track Bills & Rent
+    let billsAndRentExpenses = 0;
+    let marketingExpenses = 0; // [NEW] Track Marketing
 
     // Keywords for categorization
-    const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+    const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A'];
     const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
     const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
     const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
     const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
+    const marketingKeywords = ['AD', 'PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN']; // [NEW]
 
     const recordedExpenses = expenseTransactions.reduce((sum, t) => {
         const amount = parseFloat(t.parsedAmount) || 0;
@@ -365,20 +368,27 @@ const Dashboard = (props) => {
         const isMaterial = (t.parsedType === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
         const isWater = waterKeywords.some(k => nameUpper.includes(k));
         const isBill = billsKeywords.some(k => nameUpper.includes(k));
+        const isMarketing = marketingKeywords.some(k => nameUpper.includes(k)); // [NEW]
+
+        // [FIX] Exclude ESSENTIAL and OTHER EXP items from Material (force to Other)
+        const isEssential = nameUpper.includes('ESSENTIAL');
+        const isExplicitOther = nameUpper.includes('OTHER EXP'); // [FIX]
 
         // Categorize
-        if (isMaterial) {
+        if (isMaterial && !isEssential && !isExplicitOther) {
             rawMaterialExpenses += amount;
         } else if (isWater) {
             // Water is now considered a Raw Material but tracked separately for display
             rawMaterialExpenses += amount;
             waterExpenses += amount;
-        } else if (labourKeywords.some(k => nameUpper.includes(k))) {
+        } else if (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) {
             salaryExpenses += amount;
         } else if (packagingKeywords.some(k => nameUpper.includes(k))) {
             packagingExpenses += amount;
         } else if (isBill) {
             billsAndRentExpenses += amount;
+        } else if (isMarketing && !isEssential && !nameUpper.includes('INVOICE DISCOUNT')) { // [FIX] Exclude Essential & Discount from Marketing
+            marketingExpenses += amount;
         } else {
             otherExpenses += amount;
         }
@@ -403,6 +413,7 @@ const Dashboard = (props) => {
         { name: 'Salary & Wages', value: finalSalaryExpenses, color: '#3b82f6' }, // Blue
         { name: 'Packaging', value: packagingExpenses, color: '#ec4899' }, // Pink
         { name: 'Bills & Rent', value: billsAndRentExpenses, color: '#0ea5e9' }, // Cyan
+        { name: 'Marketing', value: marketingExpenses, color: '#eab308' }, // Yellow [NEW]
         { name: 'Other Expenses', value: finalOtherExpenses, color: '#a855f7' }, // Purple
     ].filter(item => item.value > 0);
 
@@ -857,12 +868,13 @@ const Dashboard = (props) => {
                 const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
                 const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
                 const isMaterial = (type === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
+                const isEssential = nameUpper.includes('ESSENTIAL');
 
                 // 2. Direct Labour (Keywords)
                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
                 const isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
 
-                if (isMaterial) {
+                if (isMaterial && !isEssential) {
                     granularMaterial += amount;
                 } else if (isLabour) {
                     granularLabour += amount;
@@ -1948,71 +1960,7 @@ const Dashboard = (props) => {
                                 </div>
                             </div>
 
-                            {/* Expense Metrics */}
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                gap: '1rem',
-                                marginBottom: '1.5rem'
-                            }}>
-                                {/* Raw Material */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(249, 115, 22, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Material</div>
-                                        <Leaf size={16} color="#f97316" />
-                                    </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
-                                    {waterExpenses > 0 && (
-                                        <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem', fontWeight: 600 }}>
-                                            Includes {formatCurrency(waterExpenses)} Water
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Salary + Manual Salary */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Salary & Wages</div>
-                                        <Users size={16} color="#3b82f6" />
-                                    </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(finalSalaryExpenses)}</div>
-                                    {manualSalaryCalc > 0 && (
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                                            Includes {formatCurrency(manualSalaryCalc)} Manual
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Packaging Materials */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Packaging</div>
-                                        <Package size={16} color="#ec4899" />
-                                    </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ec4899' }}>{formatCurrency(packagingExpenses)}</div>
-                                </div>
-
-                                {/* Bills & Rent [NEW] */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Bills & Rent</div>
-                                        <Wallet size={16} color="#0ea5e9" />
-                                    </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0ea5e9' }}>{formatCurrency(billsAndRentExpenses)}</div>
-                                </div>
-
-                                {/* Other Expenses */}
-                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Other Expenses</div>
-                                        <Tag size={16} color="#a855f7" />
-                                    </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(finalOtherExpenses)}</div>
-                                </div>
-
-                            </div>
-
-                            {/* Total Outflow & Distribution Chart [NEW] */}
+                            {/* Total Outflow & Distribution Chart [MOVED UP] */}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.5rem' }}>
                                 {/* Left: Total Summary */}
                                 <div style={{
@@ -2087,6 +2035,127 @@ const Dashboard = (props) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Expense Metrics [MOVED DOWN] */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                gap: '1rem',
+                                marginBottom: '1.5rem'
+                            }}>
+                                {/* Raw Material */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Material' ? null : 'Material')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Material' ? 'rgba(249, 115, 22, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Material' ? '#f97316' : 'rgba(249, 115, 22, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Material</div>
+                                        <Leaf size={16} color="#f97316" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
+                                    {waterExpenses > 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem', fontWeight: 600 }}>
+                                            Includes {formatCurrency(waterExpenses)} Water
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Salary + Manual Salary */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Labour' ? null : 'Labour')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Labour' ? 'rgba(59, 130, 246, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Labour' ? '#3b82f6' : 'rgba(59, 130, 246, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Salary & Wages</div>
+                                        <Users size={16} color="#3b82f6" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(finalSalaryExpenses)}</div>
+                                    {manualSalaryCalc > 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                            Includes {formatCurrency(manualSalaryCalc)} Manual
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Packaging Materials */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Packaging' ? null : 'Packaging')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Packaging' ? 'rgba(236, 72, 153, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Packaging' ? '#ec4899' : 'rgba(236, 72, 153, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Packaging</div>
+                                        <Package size={16} color="#ec4899" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ec4899' }}>{formatCurrency(packagingExpenses)}</div>
+                                </div>
+
+                                {/* Bills & Rent [NEW] */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Bills' ? null : 'Bills')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Bills' ? 'rgba(14, 165, 233, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Bills' ? '#0ea5e9' : 'rgba(14, 165, 233, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Bills & Rent</div>
+                                        <Wallet size={16} color="#0ea5e9" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#0ea5e9' }}>{formatCurrency(billsAndRentExpenses)}</div>
+                                </div>
+
+                                {/* Marketing Expenses [NEW] */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Marketing' ? null : 'Marketing')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Marketing' ? 'rgba(234, 179, 8, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Marketing' ? '#eab308' : 'rgba(234, 179, 8, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Marketing</div>
+                                        <TrendingUp size={16} color="#eab308" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#eab308' }}>{formatCurrency(marketingExpenses)}</div>
+                                </div>
+
+                                {/* Other Expenses */}
+                                <div
+                                    onClick={() => setSelectedExpenseCategory(prev => prev === 'Other' ? null : 'Other')}
+                                    style={{
+                                        background: selectedExpenseCategory === 'Other' ? 'rgba(168, 85, 247, 0.15)' : 'var(--glass-highlight)',
+                                        padding: '1rem', borderRadius: '0.5rem',
+                                        border: `1px solid ${selectedExpenseCategory === 'Other' ? '#a855f7' : 'rgba(168, 85, 247, 0.2)'}`,
+                                        cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Other Expenses</div>
+                                        <Tag size={16} color="#a855f7" />
+                                    </div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(finalOtherExpenses)}</div>
+                                </div>
+
+                            </div>
                             <div className="glass-panel" style={{
                                 background: 'var(--glass-highlight)',
                                 border: '1px solid var(--glass-border)',
@@ -2104,6 +2173,24 @@ const Dashboard = (props) => {
                                     display: 'flex', justifyContent: 'space-between'
                                 }}>
                                     <span>Expense Summary (Item Wise)</span>
+                                    {selectedExpenseCategory && (
+                                        <button
+                                            onClick={() => setSelectedExpenseCategory(null)}
+                                            style={{
+                                                fontSize: '0.75rem',
+                                                background: 'rgba(255, 255, 255, 0.1)',
+                                                border: '1px solid var(--glass-border)',
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '0.25rem',
+                                                color: 'var(--text-primary)',
+                                                cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', gap: '0.25rem'
+                                            }}
+                                        >
+                                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }}></span>
+                                            Filter: {selectedExpenseCategory} ✕
+                                        </button>
+                                    )}
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                         <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--glass-border)', padding: '0.2rem', borderRadius: '0.5rem' }}>
                                             <button
@@ -2195,17 +2282,19 @@ const Dashboard = (props) => {
                                                 let badgeBg = 'var(--glass-border)';
 
                                                 const nameUpper = key.toUpperCase();
-                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE'];
+                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A'];
                                                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
                                                 const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
                                                 const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
                                                 const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
+                                                const marketingKeywords = ['AD', 'PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN']; // [NEW]
 
-                                                if (materialKeywords.some(k => nameUpper.includes(k))) { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
+                                                if (materialKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
                                                 else if (waterKeywords.some(k => nameUpper.includes(k))) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
-                                                else if (labourKeywords.some(k => nameUpper.includes(k))) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
+                                                else if (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
                                                 else if (packagingKeywords.some(k => nameUpper.includes(k))) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
                                                 else if (billsKeywords.some(k => nameUpper.includes(k))) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
+                                                else if (marketingKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('ESSENTIAL') && !nameUpper.includes('INVOICE DISCOUNT')) { category = 'Marketing'; badgeColor = '#eab308'; badgeBg = 'rgba(234, 179, 8, 0.1)'; } // [FIX]
 
                                                 summary[key] = {
                                                     name: key, type, receiver, category, badgeColor, badgeBg,
@@ -2245,6 +2334,15 @@ const Dashboard = (props) => {
                                             if (valA > valB) return expenseSort.direction === 'asc' ? 1 : -1;
                                             return 0;
                                         });
+
+                                        // 2. Filter by Selected Category
+                                        if (selectedExpenseCategory) {
+                                            sortedItems = sortedItems.filter(item => {
+                                                // Handle "Water" as part of Material visually if needed, but strictly it's a category
+                                                if (selectedExpenseCategory === 'Material') return item.category === 'Material' || item.category === 'Water';
+                                                return item.category === selectedExpenseCategory;
+                                            });
+                                        }
 
                                         if (sortedItems.length === 0) {
                                             return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No expenses found.</div>;
@@ -2344,79 +2442,12 @@ const Dashboard = (props) => {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Manual Adjustments Panel (Admin Only) */}
-                        {isAdmin && (
-                            <div>
-                                <div className="glass-panel" style={{ padding: '1.5rem', height: 'fit-content', position: 'sticky', top: '2rem' }}>
-                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                                        <Settings size={20} /> Manual Adjustments
-                                    </h3>
-                                    {/* ... (Manual Expense inputs remain same) */}
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                            Staff Salary (Monthly)
-                                        </label>
-                                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
-                                            <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
-                                            <input
-                                                type="text"
-                                                value={manualExpenses.salary}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                                        setManualExpenses({ ...manualExpenses, salary: val });
-                                                    }
-                                                }}
-                                                placeholder="0.00"
-                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                            Other Daily Expenses
-                                        </label>
-                                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
-                                            <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
-                                            <input
-                                                type="text"
-                                                value={manualExpenses.daily}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                                        setManualExpenses({ ...manualExpenses, daily: val });
-                                                    }
-                                                }}
-                                                placeholder="0.00"
-                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div style={{ padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '0.5rem', marginBottom: '1rem' }}>
-                                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#ef4444' }}>
-                                            These values will be added to your Total Expenses calculation immediately.
-                                        </p>
-                                    </div>
-
-                                    <button
-                                        onClick={() => {
-                                            localStorage.setItem('manualExpenses', JSON.stringify(manualExpenses));
-                                            alert("Settings Saved Successfully!");
-                                        }}
-                                        className="btn-primary"
-                                        style={{ width: '100%', justifyContent: 'center' }}
-                                    >
-                                        Save Configuration
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </div >
                 )
             }
+
+
+
 
             {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
             {

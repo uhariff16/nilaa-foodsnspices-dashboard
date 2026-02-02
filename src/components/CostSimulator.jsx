@@ -1,22 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Calculator, DollarSign, Info } from 'lucide-react';
+import { RefreshCw, Calculator, DollarSign, Info, Settings, Save, X } from 'lucide-react';
 
 const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
+    // [NEW] Presets Logic
+    const [showSettings, setShowSettings] = useState(false);
+    const [presets, setPresets] = useState(() => {
+        try {
+            const saved = localStorage.getItem('simulator_presets');
+            return saved ? JSON.parse(saved) : { gingerRate: 0, garlicRate: 0, waterRate: 0 };
+        } catch (e) {
+            return { gingerRate: 0, garlicRate: 0, waterRate: 0 };
+        }
+    });
+
     // State for inputs
     const [inputs, setInputs] = useState({
         salesChannel: 'retail', // 'retail', 'wholesale'
         productType: 'paste', // 'paste', 'ginger_peeled', 'garlic_peeled'
         pasteVariant: 'mix', // 'mix', 'ginger', 'garlic' (Only for productType === 'paste')
         gingerKg: 100,
-        gingerRate: 0,
+        gingerRate: presets.gingerRate || 0, // Load Preset
         garlicKg: 100,
-        garlicRate: 0,
-        labourCost: 0,
-        overheadCost: 0,
-        packagingCost: 0, // Portion of Overhead that is packaging
+        garlicRate: presets.garlicRate || 0, // Load Preset
+        labourCost: 15, // Default estimate
+        billsCost: 5,   // Portion of Overhead (Bills)
+        otherCost: 5,   // Portion of Overhead (Other)
+        packagingCost: 0, // Packaging Cost
         gingerWastage: 10,
         garlicWastage: 20,
-        waterPercentage: 20, // Default 20% water
+        waterLiters: 40, // Default ~20% of 200kg
+        waterRate: presets.waterRate || 0, // Load Preset
         profitMargin: 30, // Default 30% margin
         useSmartDefaults: true // Toggle to enable/disable auto-calc
     });
@@ -42,13 +55,13 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                 let baseWeight = 0;
                 if (inputs.pasteVariant === 'mix') {
                     baseWeight = inputs.gingerKg + inputs.garlicKg;
-                    projectedOutput = gingerNet + garlicNet + (baseWeight * (inputs.waterPercentage / 100));
+                    projectedOutput = gingerNet + garlicNet + Number(inputs.waterLiters);
                 } else if (inputs.pasteVariant === 'ginger') {
                     baseWeight = inputs.gingerKg;
-                    projectedOutput = gingerNet + (baseWeight * (inputs.waterPercentage / 100));
+                    projectedOutput = gingerNet + Number(inputs.waterLiters);
                 } else if (inputs.pasteVariant === 'garlic') {
                     baseWeight = inputs.garlicKg;
-                    projectedOutput = garlicNet + (baseWeight * (inputs.waterPercentage / 100));
+                    projectedOutput = garlicNet + Number(inputs.waterLiters);
                 }
 
             } else if (inputs.productType === 'ginger_peeled') {
@@ -58,18 +71,31 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             }
 
             // Apply Previous Month's Per-KG operational costs
-            const estLabour = projectedOutput * (previousMonthStats.labourPerKg || 0);
-            const estOverhead = projectedOutput * (previousMonthStats.overheadPerKg || 0);
+            // [FIX] Capped Logic for Labour as well
+            const capLabour = previousMonthStats.avgMonthlyLabour || Infinity;
+            const rateLabour = projectedOutput * (previousMonthStats.labourPerKg || 0);
+            const estLabour = Math.min(rateLabour, capLabour);
+
+            // [FIX] Capped Logic: Scale linearly but Cap at Monthly Average
+            // If output is small -> Use Rate. If output is huge -> Use Total Monthly Bill (Cap).
+            const capBills = previousMonthStats.avgMonthlyBills || Infinity;
+            const rateBills = projectedOutput * (previousMonthStats.billsPerKg || 0);
+            const estBills = Math.min(rateBills, capBills);
+
+            // [FIX] Other Expenses are VARIABLE (e.g. Fuel, repairs often scale) - User Request to Uncap
+            const estOther = projectedOutput * (previousMonthStats.otherPerKg || 0);
+
             const estPackaging = projectedOutput * (previousMonthStats.packagingPerKg || 0);
 
             setInputs(prev => ({
                 ...prev,
                 labourCost: Math.round(estLabour),
-                overheadCost: Math.round(estOverhead - estPackaging),
+                billsCost: Math.round(estBills),
+                otherCost: Math.round(estOther),
                 packagingCost: Math.round(estPackaging)
             }));
         }
-    }, [inputs.gingerKg, inputs.garlicKg, inputs.gingerWastage, inputs.garlicWastage, inputs.waterPercentage, inputs.useSmartDefaults, previousMonthStats, inputs.productType, inputs.pasteVariant]);
+    }, [inputs.gingerKg, inputs.garlicKg, inputs.gingerWastage, inputs.garlicWastage, inputs.waterLiters, inputs.useSmartDefaults, previousMonthStats, inputs.productType, inputs.pasteVariant]);
 
     // Calculation Logic
     useEffect(() => {
@@ -84,21 +110,20 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             const gingerNet = inputs.gingerKg * (1 - inputs.gingerWastage / 100);
             const garlicNet = inputs.garlicKg * (1 - inputs.garlicWastage / 100);
 
+            const waterCost = inputs.waterLiters * inputs.waterRate;
+
             if (inputs.pasteVariant === 'mix') {
-                totalMaterialCost = gingerCost + garlicCost;
-                const waterWeight = (Number(inputs.gingerKg) + Number(inputs.garlicKg)) * (inputs.waterPercentage / 100);
-                totalOutput = gingerNet + garlicNet + waterWeight;
-                totalInput = Number(inputs.gingerKg) + Number(inputs.garlicKg);
+                totalMaterialCost = gingerCost + garlicCost + waterCost;
+                totalOutput = gingerNet + garlicNet + Number(inputs.waterLiters);
+                totalInput = Number(inputs.gingerKg) + Number(inputs.garlicKg) + Number(inputs.waterLiters);
             } else if (inputs.pasteVariant === 'ginger') {
-                totalMaterialCost = gingerCost;
-                const waterWeight = Number(inputs.gingerKg) * (inputs.waterPercentage / 100);
-                totalOutput = gingerNet + waterWeight;
-                totalInput = Number(inputs.gingerKg);
+                totalMaterialCost = gingerCost + waterCost;
+                totalOutput = gingerNet + Number(inputs.waterLiters);
+                totalInput = Number(inputs.gingerKg) + Number(inputs.waterLiters);
             } else if (inputs.pasteVariant === 'garlic') {
-                totalMaterialCost = garlicCost;
-                const waterWeight = Number(inputs.garlicKg) * (inputs.waterPercentage / 100);
-                totalOutput = garlicNet + waterWeight;
-                totalInput = Number(inputs.garlicKg);
+                totalMaterialCost = garlicCost + waterCost;
+                totalOutput = garlicNet + Number(inputs.waterLiters);
+                totalInput = Number(inputs.garlicKg) + Number(inputs.waterLiters);
             }
 
         } else if (inputs.productType === 'ginger_peeled') {
@@ -113,24 +138,26 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         }
 
         // Operational Cost Logic
-        // Wholesale excludes Packaging Cost
-        let effectiveOverhead = Number(inputs.overheadCost);
+        let effectiveOverhead = Number(inputs.billsCost) + Number(inputs.otherCost);
+        // Retail: Add Packaging. Wholesale: Exclude Packaging (Separate line item in reality, but for cost calc per kg?)
+        // Logic: Retail Cost = Labour + (Bills + Other + Pkg)
+        //        Wholesale Cost = Labour + (Bills + Other) --> Pkg is separate usually? Or just excluded from "Overhead" bucket? 
+        // Based on previous logic: 
         if (inputs.salesChannel === 'retail') {
             effectiveOverhead += Number(inputs.packagingCost);
         }
 
         const totalMfgCost = totalMaterialCost + Number(inputs.labourCost) + effectiveOverhead;
         const costPerKg = totalOutput > 0 ? totalMfgCost / totalOutput : 0;
-        const recPrice = costPerKg * (1 + (inputs.profitMargin || 0) / 100);
-        const yieldPct = totalInput > 0 ? (totalOutput / totalInput) * 100 : 0;
+        const suggestedPrice = totalOutput > 0 ? (totalMfgCost * (1 + inputs.profitMargin / 100)) / totalOutput : 0;
 
         setResults({
             totalInputKg: totalInput,
             totalOutputKg: totalOutput,
             totalCost: totalMfgCost,
             costPerKg: costPerKg,
-            recPrice: recPrice,
-            yieldPercent: yieldPct
+            recPrice: suggestedPrice, // Renamed to suggestedPrice in calculation, but state key is recPrice
+            yieldPercent: totalInput > 0 ? (totalOutput / totalInput) * 100 : 0
         });
     }, [inputs]);
 
@@ -139,6 +166,24 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             ...prev,
             [key]: (key === 'productType' || key === 'pasteVariant' || key === 'salesChannel') ? value : (parseFloat(value) || 0)
         }));
+    };
+
+    // [NEW] Save Presets
+    const savePresets = (newPresets) => {
+        try {
+            localStorage.setItem('simulator_presets', JSON.stringify(newPresets));
+            setPresets(newPresets);
+            // Auto-update current inputs
+            setInputs(prev => ({
+                ...prev,
+                gingerRate: newPresets.gingerRate,
+                garlicRate: newPresets.garlicRate,
+                waterRate: newPresets.waterRate
+            }));
+            setShowSettings(false);
+        } catch (e) {
+            console.error("Failed to save presets", e);
+        }
     };
 
     const inputStyle = {
@@ -174,6 +219,23 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                         <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <Calculator size={24} color="#f59e0b" />
                             Production Cost Simulator
+                            {/* [NEW] Settings Button */}
+                            <button
+                                onClick={() => setShowSettings(true)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.5rem',
+                                    padding: '0.5rem',
+                                    color: 'var(--text-secondary)',
+                                    cursor: 'pointer',
+                                    marginLeft: '0.5rem',
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+                                }}
+                                title="Default Rates"
+                            >
+                                <Settings size={18} />
+                            </button>
                         </h2>
                         <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                             Forecasting for: <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>{selectedMonth}</span>
@@ -361,6 +423,41 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                             />
                                         </div>
                                     </div>
+
+                                )}
+
+                                {/* Water Row */}
+                                {showWater && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Water (Liters)</label>
+                                            <input
+                                                type="number"
+                                                value={inputs.waterLiters}
+                                                onChange={(e) => handleInput('waterLiters', e.target.value)}
+                                                style={{ ...inputStyle, color: '#60a5fa' }}
+                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                onBlur={(e) => {
+                                                    e.target.style.borderColor = 'var(--glass-border)';
+                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                                                }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Rate (₹/L)</label>
+                                            <input
+                                                type="number"
+                                                value={inputs.waterRate}
+                                                onChange={(e) => handleInput('waterRate', e.target.value)}
+                                                style={{ ...inputStyle, color: '#f59e0b', fontWeight: '500' }}
+                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                onBlur={(e) => {
+                                                    e.target.style.borderColor = 'var(--glass-border)';
+                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -390,7 +487,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem', alignItems: 'end' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', alignItems: 'start' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Labour</label>
                                     <div style={{ position: 'relative' }}>
@@ -405,22 +502,58 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                             style={{ ...inputStyle, paddingLeft: '1.5rem' }}
                                         />
                                     </div>
+                                    {previousMonthStats && inputs.useSmartDefaults && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
+                                            Rate: ₹{previousMonthStats.labourPerKg?.toFixed(2)}/kg <br />
+                                            Cap: ₹{Math.round(previousMonthStats.avgMonthlyLabour || 0)}<br />
+                                            <span style={{ color: '#60a5fa' }}>Eff: ₹{(results.totalOutputKg > 0 ? inputs.labourCost / results.totalOutputKg : 0).toFixed(2)}/kg</span>
+                                        </div>
+                                    )}
                                 </div>
+                                {/* Overhead Group: Bills & Other */}
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Overhead</label>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Bills & Rent</label>
                                     <div style={{ position: 'relative' }}>
                                         <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
                                         <input
                                             type="number"
-                                            value={inputs.overheadCost}
+                                            value={inputs.billsCost}
                                             onChange={(e) => {
-                                                handleInput('overheadCost', e.target.value);
+                                                handleInput('billsCost', e.target.value);
                                                 setInputs(prev => ({ ...prev, useSmartDefaults: false }));
                                             }}
                                             style={{ ...inputStyle, paddingLeft: '1.5rem' }}
                                         />
                                     </div>
+                                    {previousMonthStats && inputs.useSmartDefaults && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
+                                            Rate: ₹{previousMonthStats.billsPerKg?.toFixed(2)}/kg <br />
+                                            Cap: ₹{Math.round(previousMonthStats.avgMonthlyBills || 0)} <br />
+                                            <span style={{ color: '#60a5fa' }}>Eff: ₹{(results.totalOutputKg > 0 ? inputs.billsCost / results.totalOutputKg : 0).toFixed(2)}/kg</span>
+                                        </div>
+                                    )}
                                 </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Other Exp</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
+                                        <input
+                                            type="number"
+                                            value={inputs.otherCost}
+                                            onChange={(e) => {
+                                                handleInput('otherCost', e.target.value);
+                                                setInputs(prev => ({ ...prev, useSmartDefaults: false }));
+                                            }}
+                                            style={{ ...inputStyle, paddingLeft: '1.5rem' }}
+                                        />
+                                    </div>
+                                    {previousMonthStats && inputs.useSmartDefaults && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
+                                            Rate: ₹{previousMonthStats.otherPerKg?.toFixed(2)}/kg (Var)
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* Packaging Component Input */}
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Pkg Cost</label>
@@ -433,16 +566,21 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                             style={{ ...inputStyle, paddingLeft: '1.5rem', borderColor: inputs.salesChannel === 'wholesale' ? 'var(--accent-primary)' : 'var(--glass-border)' }}
                                         />
                                     </div>
+                                    {previousMonthStats && inputs.useSmartDefaults && (
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
+                                            Rate: ₹{previousMonthStats.packagingPerKg?.toFixed(2)}/kg
+                                        </div>
+                                    )}
                                 </div>
-                                <div>
+                                <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
                                     <label style={{ display: 'block', fontSize: '0.75rem', color: '#a78bfa', marginBottom: '0.35rem' }}>Total Op. Cost</label>
                                     <div style={{ position: 'relative' }}>
                                         <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: '0.9rem' }}>₹</span>
                                         <input
                                             type="text"
                                             readOnly
-                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Number(inputs.overheadCost)) : (Number(inputs.labourCost) + Number(inputs.overheadCost) + Number(inputs.packagingCost))).toFixed(0)}
-                                            style={{ ...inputStyle, background: 'rgba(167, 139, 250, 0.1)', borderColor: '#a78bfa', color: '#a78bfa', paddingLeft: '1.5rem' }}
+                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost)) : (Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost) + Number(inputs.packagingCost))).toFixed(0)}
+                                            style={{ ...inputStyle, background: 'rgba(167, 139, 250, 0.1)', borderColor: '#a78bfa', color: '#a78bfa', paddingLeft: '1.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}
                                         />
                                     </div>
                                 </div>
@@ -471,8 +609,20 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                                 <input
                                                     type="number"
-                                                    value={inputs.waterPercentage}
-                                                    onChange={(e) => handleInput('waterPercentage', e.target.value)}
+                                                    value={(() => {
+                                                        const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
+                                                            inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
+                                                                inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
+                                                        return totalSolid > 0 ? ((inputs.waterLiters / totalSolid) * 100).toFixed(0) : 0;
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        const pct = parseFloat(e.target.value) || 0;
+                                                        const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
+                                                            inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
+                                                                inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
+                                                        const newLiters = (totalSolid * pct) / 100;
+                                                        handleInput('waterLiters', newLiters.toFixed(2));
+                                                    }}
                                                     style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontWeight: 'bold', width: '50px', fontSize: '1.2rem', textAlign: 'right', outline: 'none' }}
                                                 />
                                                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>%</span>
@@ -578,8 +728,75 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     </div>
 
                 </div>
+
+                {/* [NEW] Settings Modal */}
+                {showSettings && (
+                    <div style={{
+                        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+                    }}>
+                        <div className="glass-panel" style={{ width: '350px', padding: '1.5rem', background: '#1e293b', border: '1px solid var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Settings size={18} />
+                                    Default Rates
+                                </h3>
+                                <button onClick={() => setShowSettings(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'grid', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Default Ginger Rate (₹/Kg)</label>
+                                    <input
+                                        type="number"
+                                        defaultValue={presets.gingerRate}
+                                        id="preset-ginger"
+                                        style={inputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Default Garlic Rate (₹/Kg)</label>
+                                    <input
+                                        type="number"
+                                        defaultValue={presets.garlicRate}
+                                        id="preset-garlic"
+                                        style={inputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Default Water Rate (₹/L)</label>
+                                    <input
+                                        type="number"
+                                        defaultValue={presets.waterRate}
+                                        id="preset-water"
+                                        style={inputStyle}
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const gRate = parseFloat(document.getElementById('preset-ginger').value) || 0;
+                                        const gaRate = parseFloat(document.getElementById('preset-garlic').value) || 0;
+                                        const wRate = parseFloat(document.getElementById('preset-water').value) || 0;
+                                        savePresets({ gingerRate: gRate, garlicRate: gaRate, waterRate: wRate });
+                                    }}
+                                    style={{
+                                        marginTop: '1rem', width: '100%', padding: '0.75rem',
+                                        background: 'var(--accent-primary)', color: 'white', border: 'none',
+                                        borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+                                    }}
+                                >
+                                    <Save size={18} />
+                                    Save & Apply
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </div >
     );
 };
 

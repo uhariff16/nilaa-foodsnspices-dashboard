@@ -1041,12 +1041,19 @@ const Dashboard = (props) => {
         const otherPerKg = totalOutput > 0 ? totalOther / totalOutput : 0;
         const packagingPerKg = totalOutput > 0 ? totalPackaging / totalOutput : 0;
 
+        const avgMonthlyBills = totalBills / 2;
+        const avgMonthlyOther = totalOther / 2;
+        const avgMonthlyLabour = totalLabour / 2;
+
         return {
             month: `2-Month Avg (${combinedMonths})`,
             labourPerKg,
             billsPerKg,
             otherPerKg,
-            packagingPerKg
+            packagingPerKg,
+            avgMonthlyBills, // Fixed Cap
+            avgMonthlyOther,  // Fixed Cap
+            avgMonthlyLabour // Fixed Cap
         };
     }, [selectedMonth, data.transactions, props.productionData, availableMonths]);
 

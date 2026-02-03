@@ -2455,7 +2455,7 @@ const Dashboard = (props) => {
                     <CustomerAnalysis data={filteredCustomers} receivables={props.data?.receivables || []} />
                 )
             } {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
-            {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
+            {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} isAdmin={isAdmin} />}
             {
                 activeTab === 'procurement' && (
                     <ProcurementDashboard

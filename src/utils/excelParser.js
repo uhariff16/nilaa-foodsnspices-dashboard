@@ -387,7 +387,7 @@ export const parseExcelFile = (files) => {
                         debugLog.push(`Type 3: Extracted ${extractedCount} transactions.`);
                     }
                     // --- TYPE 6: BILLWISE PURCHASE SUMMARY ---
-                    else if (((contentString.includes('unit price') && contentString.includes('quantity')) || (contentString.includes('particulars') && contentString.includes('amount') && contentString.includes('supplier'))) && !contentString.includes('client') && !contentString.includes('sale')) {
+                    else if (((contentString.includes('unit price') && contentString.includes('quantity')) || (contentString.includes('particulars') && contentString.includes('amount') && contentString.includes('supplier'))) && !contentString.includes('client')) {
                         debugLog.push("Matched Type 6 (Billwise Purchase Summary)");
                         const partIdx = headerRow.findIndex(h => /particulars/i.test(h));
                         const qtyIdx = headerRow.findIndex(h => /quantity|qty/i.test(h));
@@ -405,18 +405,27 @@ export const parseExcelFile = (files) => {
                                 if (!colPart) return;
 
                                 // 1. Header Row Detection
+                                // Format: "P-213 Date : 02-Feb-26 Supplier : SENTHIL GARLICS"
                                 const lowerPart = colPart.toLowerCase();
-                                const isHeaderRow = lowerPart.includes('date') && lowerPart.includes('supplier');
+                                // Check for common Invoice prefixes or "Date:" + "Supplier:" pattern
+                                const isHeaderRow = (lowerPart.startsWith('p-') || lowerPart.startsWith('inv')) && lowerPart.includes('date') && lowerPart.includes('supplier');
 
-                                if (isHeaderRow) {
+                                // Also allow just "Date: ... Supplier: ..." if P-xxx is missing/different
+                                const isAltHeader = lowerPart.includes('date') && lowerPart.includes('supplier');
+
+                                if (isHeaderRow || isAltHeader) {
+                                    // Extract Supplier
                                     const supMatch = colPart.match(/supplier\s*[:.-]?\s*(.+)$/i);
                                     if (supMatch) currentSupplier = supMatch[1].trim();
 
+                                    // Extract Date
                                     const dateMatch = colPart.match(/date\s*[:.-]?\s*([\w-]+)/i);
                                     if (dateMatch) currentDate = normalizeDate(dateMatch[1]);
 
-                                    const billPart = colPart.split(/date/i)[0].trim();
-                                    if (billPart && billPart.length > 0) currentBillNo = billPart;
+                                    // Extract Bill No
+                                    // Look for "P-xxx" at the start
+                                    const billMatch = colPart.match(/^([\w-]+)\s/);
+                                    if (billMatch) currentBillNo = billMatch[1];
 
                                     debugLog.push(`Header Row ${index}: Bill=${currentBillNo}, Date=${currentDate}, Sup=${currentSupplier}`);
                                     return;
@@ -436,8 +445,10 @@ export const parseExcelFile = (files) => {
                                 const rawAmount = String(row[amountIdx] || 0).replace(/,/g, '');
                                 const amount = parseFloat(rawAmount);
 
-                                const isTotal = colPart.toLowerCase() === 'total';
-                                if (!isTotal && (qty > 0 || amount > 0)) {
+                                const isTotal = lowerPart === 'total' || lowerPart.startsWith('total ');
+
+                                // Valid Item: Not Total, Has Amount, Has Description
+                                if (!isTotal && (amount > 0 || qty > 0)) {
                                     const desc = colPart;
 
                                     mergedData.transactions.push({
@@ -445,10 +456,10 @@ export const parseExcelFile = (files) => {
                                         parsedDate: rowDate,
                                         parsedAmount: amount,
                                         parsedQty: qty || 0,
-                                        parsedType: 'Purchase',
+                                        parsedType: 'Purchase', // Tag as Purchase
                                         originalDesc: desc,
-                                        customerName: currentSupplier,
-                                        invoiceNo: currentBillNo,
+                                        customerName: currentSupplier || 'Unknown Supplier',
+                                        invoiceNo: currentBillNo || `BIL-${index}`,
                                         remarks: currentSupplier
                                     });
                                 }

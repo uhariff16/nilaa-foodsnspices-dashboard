@@ -1,6 +1,6 @@
 
-import React, { useMemo } from 'react';
-import { Package, Factory, TrendingUp, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Package, Factory, TrendingUp, AlertCircle, Settings } from 'lucide-react';
 
 // Images (Relative paths assuming they are in the public/assets or accessible)
 // Since we generated them, we'll assume they are served. If not, we fall back to icons.
@@ -71,7 +71,22 @@ const MetricCard = ({ title, value, subtext, icon: Icon, trend, image, color, ba
     );
 };
 
-const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
+const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }) => {
+    // Wastage Settings State (Persisted in localStorage)
+    const [wastageSettings, setWastageSettings] = useState(() => {
+        const saved = localStorage.getItem('productionWastageSettings');
+        return saved ? JSON.parse(saved) : { ginger: 10, garlic: 3 };
+    });
+
+    const [showSettings, setShowSettings] = useState(false);
+
+    // Save handler
+    const saveSettings = () => {
+        localStorage.setItem('productionWastageSettings', JSON.stringify(wastageSettings));
+        setShowSettings(false);
+        // Force calculation update via state change is automatic
+        alert("Wastage Settings Saved & Calculations Updated!");
+    };
     // Data processing starts immediately (Hooks must be unconditional)
 
     // Filter data based on selection
@@ -238,32 +253,49 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
-            // Usage (Out)
-            const gingerOut = outItems.reduce((acc, i) => {
-                const norm = localNormalizeStr(i.material);
-                return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
-            }, 0);
-            const garlicOut = outItems.reduce((acc, i) => {
-                const norm = localNormalizeStr(i.material);
-                return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
-            }, 0);
-
-            // Calculate Opening for THIS month
-            // Logic Fix: Use Explicit OS (File Truth) if available. Else use Running Balance (Continuity).
+            // Calculate Opening for THIS month (Pre-calculation needed for Wastage Base)
+            // Logic Fix: Use Explicit OS (File Truth) if available. Else use Running Balance.
             const gingerOpening = explicitGingerOS > 0 ? explicitGingerOS : runningGinger;
             const garlicOpening = explicitGarlicOS > 0 ? explicitGarlicOS : runningGarlic;
 
-            // Calculate Closing
-            const gingerClosing = gingerOpening + gingerIn - gingerOut;
-            const garlicClosing = garlicOpening + garlicIn - garlicOut;
+            // Wastage Calculation: Option 2 (Stock-Based) -> (Opening + Purchases) * %
+            const gingerTotalIn = gingerOpening + gingerIn;
+            const garlicTotalIn = garlicOpening + garlicIn;
 
-            // Update running balance
+            const gingerWastage = gingerTotalIn * (wastageSettings.ginger / 100);
+            const garlicWastage = garlicTotalIn * (wastageSettings.garlic / 100);
+
+            // Usage (Out) - Strictly Raw Usage
+            const gingerRawUsage = outItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                if (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) {
+                    return acc + i.weight;
+                }
+                return acc;
+            }, 0);
+
+            const garlicRawUsage = outItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                if (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) {
+                    return acc + i.weight;
+                }
+                return acc;
+            }, 0);
+
+            const gingerOutTotal = gingerRawUsage + gingerWastage;
+            const garlicOutTotal = garlicRawUsage + garlicWastage;
+
+            // Calculate Closing
+            const gingerClosing = gingerTotalIn - gingerOutTotal;
+            const garlicClosing = garlicTotalIn - garlicOutTotal;
+
+            // Update running balance for next iteration
             runningGinger = gingerClosing;
             runningGarlic = garlicClosing;
 
             ledger[monthKey] = {
-                ginger: { opening: gingerOpening, in: gingerIn, out: gingerOut, closing: gingerClosing },
-                garlic: { opening: garlicOpening, in: garlicIn, out: garlicOut, closing: garlicClosing }
+                ginger: { opening: gingerOpening, in: gingerIn, out: gingerOutTotal, closing: gingerClosing, wastage: gingerWastage },
+                garlic: { opening: garlicOpening, in: garlicIn, out: garlicOutTotal, closing: garlicClosing, wastage: garlicWastage },
             };
         });
 
@@ -274,7 +306,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
         };
 
         return ledger;
-    }, [data]);
+    }, [data, wastageSettings]); // Re-calculate when settings change
 
     // Determine Stock Value based on Selection
     let gingerBalance = 0;
@@ -284,6 +316,8 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
 
     let gingerAvailable = 0;
     let garlicAvailable = 0;
+    let gingerWastageDisp = 0;
+    let garlicWastageDisp = 0;
 
     let gingerOpening = 0;
     let garlicOpening = 0;
@@ -326,6 +360,15 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
             if (monthlyStockLedger[lastMonthKey]) {
                 gingerAvailable = monthlyStockLedger[lastMonthKey].ginger.closing;
                 garlicAvailable = monthlyStockLedger[lastMonthKey].garlic.closing;
+                // Accumulate wastage for the whole year? No, maybe just show latest month's impact or N/A
+                // For Overall, showing total wastage might be confusing vs closing stock.
+                // Let's sum up wastage for the selected year for display
+                yearMonths.forEach(mKey => {
+                    if (monthlyStockLedger[mKey]) {
+                        gingerWastageDisp += monthlyStockLedger[mKey].ginger.wastage || 0;
+                        garlicWastageDisp += monthlyStockLedger[mKey].garlic.wastage || 0;
+                    }
+                });
             }
         } else {
             // No data for this year
@@ -346,6 +389,8 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
             garlicAvailable = monthlyStockLedger[key].garlic.closing;
             gingerOpening = monthlyStockLedger[key].ginger.opening;
             garlicOpening = monthlyStockLedger[key].garlic.opening;
+            gingerWastageDisp = monthlyStockLedger[key].ginger.wastage || 0;
+            garlicWastageDisp = monthlyStockLedger[key].garlic.wastage || 0;
         }
     }
 
@@ -465,6 +510,66 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
 
     return (
         <div className="animate-fade-in">
+            {/* Admin Settings Toggle */}
+            {isAdmin && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            background: showSettings ? 'var(--accent-color)' : 'var(--glass-highlight)',
+                            border: '1px solid var(--glass-border)',
+                            color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                            cursor: 'pointer', fontSize: '0.875rem'
+                        }}
+                    >
+                        <Settings size={16} /> Production Wastage Settings
+                    </button>
+                </div>
+            )}
+
+            {/* Admin Settings Panel */}
+            {isAdmin && showSettings && (
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', border: '1px solid var(--accent-color)' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <Settings size={18} /> Configure Production Wastage
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        Define the percentage of weight lost during pre-production (peeling/cleaning).
+                        This will reduce the "Available" stock by increasing the calculated usage.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Ginger Wastage (%)</label>
+                            <input
+                                type="number"
+                                value={wastageSettings.ginger}
+                                onChange={(e) => setWastageSettings({ ...wastageSettings, ginger: parseFloat(e.target.value) || 0 })}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'white' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Garlic Wastage (%)</label>
+                            <input
+                                type="number"
+                                value={wastageSettings.garlic}
+                                onChange={(e) => setWastageSettings({ ...wastageSettings, garlic: parseFloat(e.target.value) || 0 })}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'white' }}
+                            />
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={saveSettings}
+                        className="btn-primary"
+                        style={{ marginTop: '1.5rem', width: '100%', justifyContent: 'center' }}
+                    >
+                        Save & Recalculate Stocks
+                    </button>
+                </div>
+            )}
+
             {/* KPIs Grid */}
             <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'
@@ -484,15 +589,24 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 <span>{gingerBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>
-                                <span>Total:</span>
+                                <span>Total In:</span>
                                 <span>{(gingerOpening + gingerBalance).toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
+
+                            {/* Explicit Wastage Row */}
+                            {gingerWastageDisp > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#ff6b6b', fontWeight: 500 }}>
+                                    <span>Less: Wastage ({(wastageSettings.ginger)}%):</span>
+                                    <span>- {gingerWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                </div>
+                            )}
+
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: gingerAvailable < 0 ? '#ef4444' : 'white', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
                             }}>
                                 <span>Available:</span>
-                                <span title={`(Opening + Purchased) - Used`}>{gingerAvailable.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                <span title={`(Opening + Purchased) - Usage - Wastage`}>{gingerAvailable.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
                         </div>
                     }
@@ -516,15 +630,24 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 <span>{garlicBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>
-                                <span>Total:</span>
+                                <span>Total In:</span>
                                 <span>{(garlicOpening + garlicBalance).toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
+
+                            {/* Explicit Wastage Row */}
+                            {garlicWastageDisp > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#ff6b6b', fontWeight: 500 }}>
+                                    <span>Less: Wastage ({(wastageSettings.garlic)}%):</span>
+                                    <span>- {garlicWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                </div>
+                            )}
+
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: garlicAvailable < 0 ? '#ef4444' : 'white', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
                             }}>
                                 <span>Available:</span>
-                                <span title={`(Opening + Purchased) - Used`}>{garlicAvailable.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                <span title={`(Opening + Purchased) - Usage - Wastage`}>{garlicAvailable.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                             </div>
                         </div>
                     }
@@ -605,7 +728,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 icon={Package}
                                 color="#fbbf24"
                                 trend="neutral"
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><Package size={40} /></div>}
                             />
                             <MetricCard
                                 title="Previous Day Output"
@@ -614,7 +736,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 icon={Factory}
                                 color="#34d399"
                                 trend="neutral"
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><Factory size={40} /></div>}
                             />
                             <MetricCard
                                 title="Previous Day Efficiency"
@@ -627,8 +748,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 }
                                 icon={AlertCircle}
                                 color="#a78bfa" /* Violet */
-                                trend={parseFloat(yEfficiency) > 90 ? "up" : "down"}
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><AlertCircle size={40} /></div>}
+                                trend={parseFloat(yEfficiency) > 50 ? "up" : "down"}
                             />
 
                             <MetricCard
@@ -640,7 +760,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 trend="neutral"
                                 background="linear-gradient(145deg, rgba(37, 99, 235, 0.1), rgba(0,0,0,0.2))"
                                 borderColor="rgba(37, 99, 235, 0.3)"
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><Package size={40} /></div>}
+                                borderColor="rgba(37, 99, 235, 0.3)"
                             />
                             <MetricCard
                                 title="Today Output"
@@ -651,7 +771,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 trend="neutral"
                                 background="linear-gradient(145deg, rgba(219, 39, 119, 0.1), rgba(0,0,0,0.2))"
                                 borderColor="rgba(219, 39, 119, 0.3)"
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><Factory size={40} /></div>}
+                                borderColor="rgba(219, 39, 119, 0.3)"
                             />
                             <MetricCard
                                 title="Today Efficiency"
@@ -667,7 +787,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear }) => {
                                 trend={parseFloat(tEfficiency) > 90 ? "up" : "down"}
                                 background="linear-gradient(145deg, rgba(219, 39, 119, 0.1), rgba(0,0,0,0.2))"
                                 borderColor="rgba(219, 39, 119, 0.3)"
-                                CustomElement={<div style={{ position: 'absolute', top: '1rem', right: '1rem', opacity: 0.3 }}><AlertCircle size={40} /></div>}
+                                borderColor="rgba(219, 39, 119, 0.3)"
                             />
                         </>
                     );

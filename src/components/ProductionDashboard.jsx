@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Package, Factory, TrendingUp, AlertCircle, Settings } from 'lucide-react';
+import { Package, Factory, TrendingUp, AlertCircle, Settings, Clock, Zap } from 'lucide-react';
 
 // Images (Relative paths assuming they are in the public/assets or accessible)
 // Since we generated them, we'll assume they are served. If not, we fall back to icons.
@@ -476,6 +476,55 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
 
 
+    // Real-time stats for Today, Yesterday, and Weekly (Last 7 Days)
+    // Real-time stats for Today, Yesterday, and Weekly (Last 7 Days)
+    const realTimeStats = useMemo(() => {
+        // Use raw data to ensure stats are correct regardless of selected view
+        const rawPre = data.preProduction || [];
+        const rawPost = data.postProduction || [];
+
+        const getStatsForRange = (startDateStr, endDateStr, label) => {
+            const inRange = (dStr) => dStr >= startDateStr && dStr <= endDateStr;
+            const pProd = rawPre.filter(i => inRange(i.date));
+            const pPost = rawPost.filter(i => inRange(i.date));
+
+            const input = pProd.reduce((a, b) => a + b.weight, 0);
+            const output = pPost.reduce((a, b) => a + b.weight, 0);
+            const eff = input > 0 ? ((output / input) * 100).toFixed(1) : 0;
+
+            // Simple Breakdown for tooltip/display
+            const getBd = (list) => {
+                const bd = {};
+                list.forEach(i => {
+                    const name = i.material || i.name || 'Unknown';
+                    bd[name] = (bd[name] || 0) + i.weight;
+                });
+                return Object.entries(bd).sort((a, b) => b[1] - a[1]);
+            };
+
+            // Date Range Formatting
+            const startFmt = new Date(startDateStr).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+            const endFmt = new Date(endDateStr).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+            const dateRangeLabel = startDateStr === endDateStr ? `(${startFmt})` : `(${startFmt} - ${endFmt})`;
+
+            return { input, output, efficiency: eff, label, inputBreakdown: getBd(pProd), outputBreakdown: getBd(pPost), dateRangeLabel };
+        };
+
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - 6);
+
+        const toStr = (d) => d.toISOString().split('T')[0];
+
+        return {
+            today: getStatsForRange(toStr(today), toStr(today), "Today"),
+            yesterday: getStatsForRange(toStr(yesterday), toStr(yesterday), "Previous Day"),
+            weekly: getStatsForRange(toStr(weekStart), toStr(today), "Last 7 Days")
+        };
+    }, [data.preProduction, data.postProduction]);
+
     // Calculate Output Breakdown
     const outputBreakdown = useMemo(() => {
         const breakdown = {};
@@ -660,55 +709,22 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                 {/* Today's Production Card replaced by Daily Stats */}
             </div>
 
-            {/* Daily Production Stats (Yesterday vs Today) */}
-            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>DAILY PRODUCTION STATS</h4>
-            <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'
-            }}>
+            {/* Unified Production Performance (Today, Previous, Weekly, Overall) */}
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1.5rem', marginBottom: '0', fontWeight: 700 }}>
+                    <TrendingUp size={24} color="#fbbf24" /> Production Performance
+                </h3>
+
                 {(() => {
-                    const todayObj = new Date();
-                    const yesterdayObj = new Date(todayObj);
-                    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-
-                    const todayStr = todayObj.toISOString().split('T')[0];
-                    const yesterdayStr = yesterdayObj.toISOString().split('T')[0];
-
-                    // Helper to calc sum for a date
-                    const calcSum = (list, dateStr) => (list || []).filter(i => i.date === dateStr).reduce((a, b) => a + b.weight, 0);
-
-                    // Helper to get breakdown
-                    const getBreakdown = (list, dateStr) => {
-                        const items = (list || []).filter(i => i.date === dateStr);
-                        const bd = {};
-                        items.forEach(i => {
-                            const key = i.material || i.name || 'Unknown';
-                            bd[key] = (bd[key] || 0) + i.weight;
-                        });
-                        return Object.entries(bd).sort((a, b) => b[1] - a[1]);
-                    };
-
-                    const yPreProdBreakdown = getBreakdown(preProd, yesterdayStr);
-                    const yPostProdBreakdown = getBreakdown(postProd, yesterdayStr);
-                    const tPreProdBreakdown = getBreakdown(preProd, todayStr);
-                    const tPostProdBreakdown = getBreakdown(postProd, todayStr);
-
-                    const yPreProdTotal = calcSum(preProd, yesterdayStr);
-                    const yPostProdTotal = calcSum(postProd, yesterdayStr);
-                    const tPreProdTotal = calcSum(preProd, todayStr);
-                    const tPostProdTotal = calcSum(postProd, todayStr);
-
-                    const yEfficiency = yPreProdTotal > 0 ? ((yPostProdTotal / yPreProdTotal) * 100).toFixed(1) : 0;
-                    const tEfficiency = tPreProdTotal > 0 ? ((tPostProdTotal / tPreProdTotal) * 100).toFixed(1) : 0;
-
                     const renderBreakdownValue = (breakdown, total, colorStr) => (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
-                            {breakdown.length > 0 ? breakdown.slice(0, 3).map(([name, weight]) => (
+                            {breakdown && breakdown.length > 0 ? breakdown.slice(0, 3).map(([name, weight]) => (
                                 <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: colorStr, fontWeight: 500 }}>
                                     <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={name}>{name}:</span>
                                     <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                                 </div>
                             )) : <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No data</div>}
-                            {breakdown.length > 3 && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>+ {breakdown.length - 3} more</div>}
+                            {breakdown && breakdown.length > 3 && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>+ {breakdown.length - 3} more</div>}
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
@@ -719,139 +735,99 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                         </div>
                     );
 
-                    return (
-                        <>
-                            <MetricCard
-                                title="Previous Day Input"
-                                value={renderBreakdownValue(yPreProdBreakdown, yPreProdTotal, '#fbbf24')}
-                                subtext={new Date(yesterdayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
-                                icon={Package}
-                                color="#fbbf24"
-                                trend="neutral"
-                            />
-                            <MetricCard
-                                title="Previous Day Output"
-                                value={renderBreakdownValue(yPostProdBreakdown, yPostProdTotal, '#34d399')}
-                                subtext={new Date(yesterdayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
-                                icon={Factory}
-                                color="#34d399"
-                                trend="neutral"
-                            />
-                            <MetricCard
-                                title="Previous Day Efficiency"
-                                value={`${yEfficiency}%`}
-                                subtext={
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                        <span>Conversion Rate</span>
-                                        <span>{new Date(yesterdayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
-                                    </div>
-                                }
-                                icon={AlertCircle}
-                                color="#a78bfa" /* Violet */
-                                trend={parseFloat(yEfficiency) > 50 ? "up" : "down"}
-                            />
+                    const renderSection = (stats, title, icon, color, bgColor = 'rgba(255, 255, 255, 0.02)') => (
+                        <div style={{ backgroundColor: bgColor, borderRadius: '1rem', padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
+                            <h5 style={{ fontSize: '0.9rem', color: color, marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase' }}>
+                                {icon} {title}
+                                {stats.label && <span style={{ opacity: 0.7, fontWeight: 400 }}>({stats.label})</span>}
+                                {stats.dateRangeLabel && <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: '0.25rem' }}>{stats.dateRangeLabel}</span>}
+                            </h5>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                                <MetricCard
+                                    title="Input"
+                                    value={renderBreakdownValue(stats.inputBreakdown, stats.input, color)}
+                                    subtext="Raw Material Used"
+                                    icon={Package}
+                                    color={color}
+                                    trend="neutral"
+                                />
+                                <MetricCard
+                                    title="Output"
+                                    value={renderBreakdownValue(stats.outputBreakdown, stats.output, color === '#fbbf24' ? '#34d399' : '#f472b6')} // Dynamic output color
+                                    subtext="Finished Goods"
+                                    icon={Factory}
+                                    color={color === '#fbbf24' ? '#34d399' : '#f472b6'}
+                                    trend="neutral"
+                                />
+                                <MetricCard
+                                    title="Efficiency"
+                                    value={`${stats.efficiency}%`}
+                                    subtext="Conversion Rate"
+                                    icon={AlertCircle}
+                                    color="#a78bfa"
+                                    trend={parseFloat(stats.efficiency) > 50 ? "up" : "down"}
+                                />
+                            </div>
+                        </div>
+                    );
 
-                            <MetricCard
-                                title="Today Input"
-                                value={renderBreakdownValue(tPreProdBreakdown, tPreProdTotal, '#60a5fa')}
-                                subtext={new Date(todayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
-                                icon={Package}
-                                color="#60a5fa"
-                                trend="neutral"
-                                background="linear-gradient(145deg, rgba(37, 99, 235, 0.1), rgba(0,0,0,0.2))"
-                                borderColor="rgba(37, 99, 235, 0.3)"
-                                borderColor="rgba(37, 99, 235, 0.3)"
-                            />
-                            <MetricCard
-                                title="Today Output"
-                                value={renderBreakdownValue(tPostProdBreakdown, tPostProdTotal, '#f472b6')}
-                                subtext={new Date(todayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}
-                                icon={Factory}
-                                color="#f472b6" /* Pink */
-                                trend="neutral"
-                                background="linear-gradient(145deg, rgba(219, 39, 119, 0.1), rgba(0,0,0,0.2))"
-                                borderColor="rgba(219, 39, 119, 0.3)"
-                                borderColor="rgba(219, 39, 119, 0.3)"
-                            />
-                            <MetricCard
-                                title="Today Efficiency"
-                                value={`${tEfficiency}%`}
-                                subtext={
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                        <span>Conversion Rate</span>
-                                        <span>{new Date(todayStr).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
-                                    </div>
-                                }
-                                icon={AlertCircle}
-                                color="#f472b6" /* Pinkish */
-                                trend={parseFloat(tEfficiency) > 90 ? "up" : "down"}
-                                background="linear-gradient(145deg, rgba(219, 39, 119, 0.1), rgba(0,0,0,0.2))"
-                                borderColor="rgba(219, 39, 119, 0.3)"
-                                borderColor="rgba(219, 39, 119, 0.3)"
-                            />
-                        </>
+                    // Logic to calculate Overall Date Range from the filtered data
+                    const getOverallRange = () => {
+                        const allDates = [...preProd, ...postProd].map(i => i.date).filter(Boolean);
+                        if (allDates.length === 0) return "";
+                        allDates.sort();
+                        const start = allDates[0];
+                        const end = allDates[allDates.length - 1];
+                        const sFmt = new Date(start).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+                        const eFmt = new Date(end).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+                        return start === end ? `(${sFmt})` : `(${sFmt} - ${eFmt})`;
+                    };
+                    const overallRange = getOverallRange();
+
+                    return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                            {/* Today - Prioritized First */}
+                            {renderSection(realTimeStats.today, "Today's Performance", <Zap size={18} />, '#60a5fa', 'rgba(37, 99, 235, 0.05)')}
+
+                            {/* Previous Day */}
+                            {renderSection(realTimeStats.yesterday, "Previous Day's Performance", <Clock size={18} />, '#fbbf24')}
+
+                            {/* Weekly - Last 7 Days */}
+                            {renderSection(realTimeStats.weekly, "Weekly Performance", <Factory size={18} />, '#34d399')}
+
+                            {/* Overall Performance (Using Stats from props/main scope) */}
+                            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: '1rem', padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
+                                <h5 style={{ fontSize: '0.9rem', color: '#a78bfa', marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase' }}>
+                                    <TrendingUp size={18} /> Overall Performance
+                                    {overallRange && <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: '0.25rem' }}>{overallRange}</span>}
+                                </h5>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                                    <MetricCard
+                                        title="Production Input"
+                                        value={renderBreakdownValue(inputBreakdown, totalPreProd, '#a78bfa')}
+                                        subtext="Used in Production"
+                                        icon={Package}
+                                        trend="neutral"
+                                    />
+                                    <MetricCard
+                                        title="Total Output"
+                                        value={renderBreakdownValue(outputBreakdown, totalOutput, '#34d399')}
+                                        subtext="Finished Goods"
+                                        icon={Factory}
+                                        trend="up"
+                                    />
+                                    <MetricCard
+                                        title="Efficiency"
+                                        value={`${efficiency}%`}
+                                        subtext="Conversion Rate"
+                                        icon={AlertCircle}
+                                        trend={parseFloat(efficiency) > 90 ? "up" : "down"}
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     );
                 })()}
-            </div>
-
-            {/* Overall Efficiency & Total Output */}
-            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>OVERALL PERFORMANCE</h4>
-            <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'
-            }}>
-                <MetricCard
-                    title="Production Input"
-                    value={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
-                            {inputBreakdown.map(([name, weight]) => (
-                                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#f59e0b', fontWeight: 500 }}>
-                                    <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</span>
-                                    <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                                </div>
-                            ))}
-                            <div style={{
-                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
-                                borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
-                            }}>
-                                <span>Total:</span>
-                                <span>{totalPreProd.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                            </div>
-                        </div>
-                    }
-                    subtext="Used in Production"
-                    icon={Factory}
-                    trend="neutral"
-                />
-                <MetricCard
-                    title="Total Output"
-                    value={
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
-                            {outputBreakdown.map(([name, weight]) => (
-                                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#34d399', fontWeight: 500 }}>
-                                    <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}:</span>
-                                    <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                                </div>
-                            ))}
-                            <div style={{
-                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
-                                borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
-                            }}>
-                                <span>Total:</span>
-                                <span>{totalOutput.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                            </div>
-                        </div>
-                    }
-                    subtext="Finished Goods"
-                    icon={TrendingUp}
-                    trend="up"
-                />
-                <MetricCard
-                    title="Efficiency"
-                    value={`${efficiency}%`}
-                    subtext="Conversion Rate"
-                    icon={AlertCircle}
-                    trend={parseFloat(efficiency) > 90 ? "up" : "down"}
-                />
             </div>
 
             {/* Data Tables - 3 Column Layout */}

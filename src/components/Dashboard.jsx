@@ -403,7 +403,7 @@ const Dashboard = (props) => {
     let marketingExpenses = 0; // [NEW] Track Marketing
 
     // Keywords for categorization
-    const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A'];
+    const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
     const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
     const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
     const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
@@ -916,7 +916,7 @@ const Dashboard = (props) => {
                 const nameUpper = (item.originalDesc || item.name || '').toUpperCase();
 
                 // 1. Material Cost (Whitelist)
-                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
                 const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
                 const isMaterial = (type === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
                 const isEssential = nameUpper.includes('ESSENTIAL');
@@ -1070,7 +1070,7 @@ const Dashboard = (props) => {
                             const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
                             const isLabour = labourKeywords.some(k => nameUpper.includes(k));
 
-                            const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK'];
+                            const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
                             const isMaterial = materialKeywords.some(k => nameUpper.includes(k));
 
                             const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
@@ -2096,26 +2096,44 @@ const Dashboard = (props) => {
                                 gap: '1rem',
                                 marginBottom: '1.5rem'
                             }}>
-                                {/* Raw Material */}
+                                {/* Raw Material & Water Combined Box */}
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Material' ? null : 'Material')}
                                     style={{
                                         background: selectedExpenseCategory === 'Material' ? 'rgba(249, 115, 22, 0.15)' : 'var(--glass-highlight)',
-                                        padding: '1rem', borderRadius: '0.5rem',
+                                        borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Material' ? '#f97316' : 'rgba(249, 115, 22, 0.2)'}`,
-                                        cursor: 'pointer', transition: 'all 0.2s'
+                                        cursor: 'pointer', transition: 'all 0.2s',
+                                        overflow: 'hidden'
                                     }}
                                 >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Material</div>
+                                    {/* Header */}
+                                    <div style={{ padding: '1rem 1rem 0.5rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Raw Materials</div>
                                         <Leaf size={16} color="#f97316" />
                                     </div>
-                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
-                                    {waterExpenses > 0 && (
-                                        <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '0.25rem', fontWeight: 600 }}>
-                                            Includes {formatCurrency(waterExpenses)} Water
+
+                                    {/* Content Split */}
+                                    <div style={{ display: 'flex', borderTop: '1px solid rgba(249, 115, 22, 0.1)' }}>
+                                        {/* Core Material */}
+                                        <div style={{ flex: 1, padding: '0.75rem 1rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#fca5a5', marginBottom: '0.25rem' }}>Core Material</div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f97316' }}>
+                                                {formatCurrency(rawMaterialExpenses - waterExpenses)}
+                                            </div>
                                         </div>
-                                    )}
+
+                                        {/* Water (Separator Line) */}
+                                        <div style={{ width: '1px', background: 'rgba(249, 115, 22, 0.1)' }}></div>
+
+                                        {/* Water */}
+                                        <div style={{ flex: 1, padding: '0.75rem 1rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '0.25rem' }}>Water</div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                                                {formatCurrency(waterExpenses)}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Salary + Manual Salary */}
@@ -2335,7 +2353,7 @@ const Dashboard = (props) => {
                                                 let badgeBg = 'var(--glass-border)';
 
                                                 const nameUpper = key.toUpperCase();
-                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A'];
+                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A', 'DESI 4A'];
                                                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
                                                 const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
                                                 const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];

@@ -339,7 +339,11 @@ export const parseExcelFile = (files) => {
                                 const c0 = String(row[0] || '').toLowerCase().trim();
                                 const c1 = String(row[1] || '').toLowerCase().trim();
 
-                                const isStructureTotal = c0 === 'total' || c1 === 'total' || desc === 'total';
+                                // Allow "Total", "Grand Total", "Total:"
+                                const isStructureTotal =
+                                    c0 === 'total' || c0 === 'grand total' || c0.startsWith('total:') ||
+                                    c1 === 'total' || c1 === 'grand total' || c1.startsWith('total:') ||
+                                    desc === 'total' || desc === 'grand total' || desc.startsWith('total:');
 
                                 // Determine parsedType based on row content
                                 // If it's a structural TOTAL row, we tag it specifically.

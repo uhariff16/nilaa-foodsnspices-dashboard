@@ -285,25 +285,76 @@ const Dashboard = (props) => {
     });
 
     // Strategy Logic:
-    // 1. If we have 'Invoice Total' rows? Use them. They are the most accurate sum from the file.
-    // 2. Else if we have Granular rows? Use them.
-    // 3. Else use Sales Summary.
-    const useInvoiceTotals = invoiceTotalRows.length > 0;
-    const useGranular = salesAppearsGranular.length > 0;
+    // [FIX] Per-Invoice Aggregation Strategy
+    // Instead of choosing "All Totals" vs "All Granular" (which fails if some totals are missing),
+    // we now group by Invoice Number and choose the best available data for EACH invoice.
 
-    const rawSalesTransactions = useInvoiceTotals ? invoiceTotalRows : (useGranular ? salesAppearsGranular : salesSummaryRows);
-
-    // [FIX] Deduplicate Transactions to prevent inflated totals
     const salesTransactions = React.useMemo(() => {
+        const totals = invoiceTotalRows;
+        const granular = salesAppearsGranular;
+
+        // Fallback: If no invoiced data at all, use Sales Summaries (Legacy)
+        if (totals.length === 0 && granular.length === 0) {
+            return salesSummaryRows;
+        }
+
+        // Grouping
+        const invoiceMap = new Map(); // Key -> { totals: [], granular: [] }
+
+        // Helper to get key
+        const getKey = (t) => {
+            if (!t.invoiceNo) return 'NO_INVOICE_' + t.id;
+            return String(t.invoiceNo).trim().toUpperCase();
+        };
+
+        // 1. Add Granular
+        granular.forEach(t => {
+            const k = getKey(t);
+            if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
+            invoiceMap.get(k).granular.push(t);
+        });
+
+        // 2. Add Totals
+        totals.forEach(t => {
+            const k = getKey(t);
+            if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
+            invoiceMap.get(k).totals.push(t);
+        });
+
+        // 3. Select Best Rows
+        let selectedRows = [];
+        invoiceMap.forEach((group, key) => {
+            if (group.totals.length > 0) {
+                // If we have explicit Total rows, use them.
+                // [FIX] Deduplicate: If multiple Total rows exist (e.g. revisions), pick the LATEST one.
+                if (group.totals.length === 1) {
+                    selectedRows.push(group.totals[0]);
+                } else {
+                    // Sort by createdAt descending (if available), else by ID or assumed order
+                    const sorted = [...group.totals].sort((a, b) => {
+                        const tA = new Date(a.createdAt || 0).getTime();
+                        const tB = new Date(b.createdAt || 0).getTime();
+                        return tB - tA;
+                    });
+                    selectedRows.push(sorted[0]);
+                }
+            } else {
+                // Otherwise sum the granular items
+                selectedRows.push(...group.granular);
+            }
+        });
+
+        // 4. Deduplicate (Final Safety - should be redundant now for Totals, but good for items)
         const uniqueMap = new Map();
-        rawSalesTransactions.forEach(t => {
+        selectedRows.forEach(t => {
             const key = t.id || `${t.invoiceNo}-${t.parsedDate}-${t.parsedAmount}-${t.originalDesc}`;
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, t);
             }
         });
         return Array.from(uniqueMap.values());
-    }, [rawSalesTransactions]);
+
+    }, [invoiceTotalRows, salesAppearsGranular, salesSummaryRows]);
 
     // Metric Calculations
     const salesRevenue = salesTransactions.reduce((sum, t) => {
@@ -1508,6 +1559,8 @@ const Dashboard = (props) => {
                         <SummaryCards
                             data={filteredTransactions}
                             manualExpenses={manualExpenses}
+                            overrideSales={salesRevenue}
+                            overrideInvoiceCount={salesCount}
                         />
 
                         {/* Material Flow Analysis Section */}

@@ -37,7 +37,7 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
     </div>
 );
 
-const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
+const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, overrideSales, overrideInvoiceCount }) => {
     const stats = useMemo(() => {
         let summarySales = 0;
         let summaryProfit = 0;
@@ -129,6 +129,11 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
         }
         // Else: sales (granular) is kept as is.
 
+        // [FIX] Use overrides if provided (from Dashboard's deduplicated logic)
+        if (overrideSales !== undefined) {
+            sales = overrideSales;
+        }
+
         let netProfit = sales - expenses;
         // [FIX] Override with Summary PROFIT only.
         // User Logic: Total Sales should be from INVOICES (calculated above in 'sales' var).
@@ -143,10 +148,10 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 } }) => {
         const margin = sales > 0 ? (netProfit / sales) * 100 : 0;
 
         // Total Invoices
-        const invoiceCount = invoiceSet.size + legacyInvoiceCount;
+        const invoiceCount = (overrideInvoiceCount !== undefined) ? overrideInvoiceCount : (invoiceSet.size + legacyInvoiceCount);
 
         return { sales, expenses, netProfit, margin, invoiceCount };
-    }, [data, manualExpenses]);
+    }, [data, manualExpenses, overrideSales, overrideInvoiceCount]);
 
     return (
         <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>

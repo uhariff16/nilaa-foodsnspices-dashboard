@@ -6,12 +6,13 @@ import Charts from './Charts';
 import ItemAnalysis from './ItemAnalysis';
 import CustomerAnalysis from './CustomerAnalysis';
 import ProductionDashboard from './ProductionDashboard';
+import TimeAttendance from './TimeAttendance';
 import ProcurementDashboard from './ProcurementDashboard';
 import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
@@ -59,6 +60,7 @@ const Dashboard = (props) => {
 
     // Theme State
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+    const [showAttendance, setShowAttendance] = useState(false); // [NEW] Time & Attendance Toggle
 
     // Mobile State
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -131,6 +133,13 @@ const Dashboard = (props) => {
     const [expenseSort, setExpenseSort] = React.useState({ key: 'total', direction: 'desc' });
     const [expenseListView, setExpenseListView] = React.useState('compact'); // 'compact' or 'detailed'
     const [selectedExpenseCategory, setSelectedExpenseCategory] = React.useState(null); // [NEW] Filter State
+
+    // [NEW] Load T&A Stats for preview
+    const [attendanceStats, setAttendanceStats] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('last_attendance_stats')) || null;
+        } catch (e) { return null; }
+    });
 
 
     // Persist manual expenses
@@ -446,16 +455,28 @@ const Dashboard = (props) => {
 
         return sum + amount;
     }, 0);
+    // [NEW] Calculate Attendance Salary from Supabase
+    const attendancePayroll = (data.attendance || []).reduce((sum, record) => {
+        // Filter by selected period if not 'Overall'
+        if (selectedMonth !== 'Overall') {
+            const [m, y] = selectedMonth.split(' ');
+            const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+            const targetPrefix = y + '-' + monthMap[m];
+            if (!record.date.startsWith(targetPrefix)) return sum;
+        }
+        return sum + (parseFloat(record.daily_wage) || 0);
+    }, 0);
+
     const manualSalaryCalc = parseFloat(manualExpenses.salary) || 0;
     const manualDailyCalc = parseFloat(manualExpenses.daily) || 0;
 
     // Add Manual Components to their respective categories
-    const finalSalaryExpenses = salaryExpenses + manualSalaryCalc;
+    const finalSalaryExpenses = salaryExpenses + manualSalaryCalc + attendancePayroll;
     // Note: Manual Daily is still added to 'Other'. User might want a 'Manual Bills' field later?
     // For now, let's assume 'Daily' is miscellaneous, so it stays in 'Other'.
     const finalOtherExpenses = otherExpenses + manualDailyCalc;
 
-    const totalManual = manualSalaryCalc + manualDailyCalc;
+    const totalManual = manualSalaryCalc + manualDailyCalc + attendancePayroll;
     const grandTotalExpenses = recordedExpenses + totalManual;
 
     // [NEW] Prepare Chart Data
@@ -500,7 +521,14 @@ const Dashboard = (props) => {
 
             const manualSalary = parseFloat(manualExpenses.salary) || 0;
             const manualDaily = parseFloat(manualExpenses.daily) || 0;
-            const totalExpenses = parsedExpenses + manualSalary + manualDaily;
+            const attendPay = (data.attendance || []).filter(r => {
+                if (selectedMonth === 'Overall') return true;
+                const [m, y] = selectedMonth.split(' ');
+                const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+                return r.date.startsWith(y + '-' + monthMap[m]);
+            }).reduce((s, r) => s + (parseFloat(r.daily_wage) || 0), 0);
+
+            const totalExpenses = parsedExpenses + manualSalary + manualDaily + attendPay;
             const netProfit = sales - totalExpenses;
 
             const overviewData = [
@@ -510,6 +538,7 @@ const Dashboard = (props) => {
                 ["Total Expenses", totalExpenses],
                 ["  - Parsed Expenses", parsedExpenses],
                 ["  - Staff Salary (Est)", manualSalary],
+                ["  - Attendance (Actual)", attendPay],
                 ["  - Other Daily (Est)", manualDaily],
                 ["Net Profit", netProfit],
                 ["Profit Margin", sales > 0 ? (netProfit / sales * 100).toFixed(2) + "%" : "0%"]
@@ -1183,6 +1212,11 @@ const Dashboard = (props) => {
         return `${d}-${m}-${y}`;
     };
 
+    // [NEW] Time & Attendance View
+    if (showAttendance) {
+        return <TimeAttendance onBack={() => setShowAttendance(false)} />;
+    }
+
     // --- Mobile View Render (Safe Position: After all Hooks) ---
     if (isMobile && mobileLayoutEnabled) {
         return (
@@ -1343,6 +1377,22 @@ const Dashboard = (props) => {
                         >
                             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                             {theme === 'dark' ? 'Light' : 'Dark'}
+                        </button>
+
+                        {/* [NEW] Time & Attendance Toggle */}
+                        <button
+                            className="btn-primary"
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                background: 'transparent',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)',
+                                boxShadow: 'none'
+                            }}
+                            onClick={() => setShowAttendance(true)}
+                        >
+                            <Clock size={18} />
+                            Time & Attendance
                         </button>
 
                         {/* Removed Add Files/Folder Buttons as per request */}
@@ -1845,6 +1895,36 @@ const Dashboard = (props) => {
                                             background: 'linear-gradient(90deg, #f59e0b, #3b82f6)',
                                             borderRadius: '4px'
                                         }}></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* [NEW] Time & Attendance Summary Card (Main Dashboard) */}
+                            {attendanceStats && (
+                                <div style={{
+                                    background: 'rgba(59, 130, 246, 0.05)',
+                                    padding: '1.25rem',
+                                    borderRadius: '1rem',
+                                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                                    marginBottom: '1rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    cursor: 'pointer'
+                                }}
+                                    onClick={() => setShowAttendance(true)}
+                                >
+                                    <div>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 0.25rem 0' }}>Payroll Preview</p>
+                                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(attendanceStats.totalCost)}
+                                        </div>
+                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
+                                            {attendanceStats.totalEmployees} Employees • {attendanceStats.totalHours.toFixed(1)} Hrs
+                                        </p>
+                                    </div>
+                                    <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.5rem' }}>
+                                        <Clock size={20} color="#3b82f6" />
                                     </div>
                                 </div>
                             )}

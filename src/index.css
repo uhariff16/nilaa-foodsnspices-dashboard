@@ -402,13 +402,53 @@ h3 {
 }
 
 .btn-toggle.active.emerald {
-  background: #ea580c;
-  /* Orange for manual entry */
+  background: #10b981;
+}
+
+.btn-toggle.active.orange {
+  background: #f97316;
+}
+
+.btn-toggle.active.violet {
+  background: #a855f7;
+}
+
+.btn-toggle.active[style*="--accent-color"] {
+  background: var(--accent-color);
 }
 
 .btn-toggle:hover:not(.active) {
   color: white;
   background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-outline {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+}
+
+.btn-outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-icon {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
 }
 
 .btn-action {

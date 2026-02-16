@@ -60,7 +60,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
 // Main App Logic (Dashboard + Data Loading)
 const DashboardLayout = () => {
-    const [data, setData] = useState({ transactions: [], items: [], customers: [], receivables: [] });
+    const [data, setData] = useState({ transactions: [], items: [], customers: [], receivables: [], attendance: [] });
     const [productionData, setProductionData] = useState({ stockIn: [], preProduction: [], postProduction: [] });
     const [purchaseData, setPurchaseData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -161,7 +161,23 @@ const DashboardLayout = () => {
                 createdAt: c.created_at // Pass timestamp
             }));
 
-            // 4. Fetch Customer Receivables (Provision)
+            // 4. Fetch Attendance Data
+            let allAttendance = [];
+            try {
+                let aFrom = 0;
+                while (true) {
+                    const { data: aData, error: aError } = await supabase.from('employee_attendance')
+                        .select('*').order('date', { ascending: false }).range(aFrom, aFrom + batchSize - 1);
+                    if (aError) break;
+                    allAttendance = [...allAttendance, ...aData];
+                    if (aData.length < batchSize) break;
+                    aFrom += batchSize;
+                }
+            } catch (e) {
+                console.warn("employee_attendance table might be empty or missing:", e);
+            }
+
+            // 5. Fetch Customer Receivables (Provision)
             let allReceivables = [];
             try {
                 const { data: recData, error: recError } = await supabase.from('customer_receivables').select('*');
@@ -182,7 +198,13 @@ const DashboardLayout = () => {
             });
 
             // Update State
-            setData(prev => ({ ...prev, transactions: mappedTransactions, customers: mappedCustomers, receivables: allReceivables }));
+            setData(prev => ({
+                ...prev,
+                transactions: mappedTransactions,
+                customers: mappedCustomers,
+                receivables: allReceivables,
+                attendance: allAttendance // [NEW] Pass attendance to Dashboard
+            }));
             setProductionData(newProdData);
             setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense' || t.parsedType === 'Purchase'));
 

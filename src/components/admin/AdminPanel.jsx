@@ -7,6 +7,7 @@ import AdminUserAccess from './AdminUserAccess';
 import AdminCleanup from './AdminCleanup';
 import ManualEntry from './ManualEntry';
 import AdminSystemSettings from './AdminSystemSettings';
+import HumanResources from './HumanResources';
 
 const AdminPanel = () => {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ const AdminPanel = () => {
         { id: 'upload', label: 'Data Ingestion', icon: Upload },
         { id: 'manager', label: 'Data Manager', icon: Database },
         { id: 'manual', label: 'Manual Entry', icon: PlusCircle },
+        { id: 'hr', label: 'Human Resources', icon: Users },
         { id: 'users', label: 'User Access', icon: Users },
         { id: 'cleanup', label: 'Cleanup', icon: Trash2 },
         { id: 'settings', label: 'Settings', icon: Settings },
@@ -90,6 +92,7 @@ const AdminPanel = () => {
                         {activeTab === 'upload' && <AdminDataIngestion />}
                         {activeTab === 'manager' && <DataManager />}
                         {activeTab === 'manual' && <ManualEntry />}
+                        {activeTab === 'hr' && <HumanResources />}
                         {activeTab === 'users' && <AdminUserAccess />}
                         {activeTab === 'cleanup' && <AdminCleanup />}
                         {activeTab === 'settings' && <AdminSystemSettings />}

@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { parseExcelFile } from '../../utils/excelParser';
 import { parseProductionFile } from '../../utils/productionParser';
-import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File, PlayCircle, StopCircle, Radio, X, Users, ArrowRight } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File as FileIcon, PlayCircle, StopCircle, Radio, X, Users, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { loadGapi, loadGis, createPicker, downloadDriveFile } from '../../utils/driveUtils';
 
@@ -24,12 +24,54 @@ const AdminDataIngestion = () => {
     const prodFolderRef = useRef(null);
     const watcherIntervalRef = useRef(null);
 
+    // --- Google Drive Auto-Sync State ---
+    const [watchConfig, setWatchConfig] = useState(() => {
+        const saved = localStorage.getItem('driveDetails');
+        return saved ? JSON.parse(saved) : {
+            folderId: '',
+            folderName: '',
+            intervalMinutes: 15,
+            isActive: false,
+            lastSync: null
+        };
+    });
+    const [processedFileIds, setProcessedFileIds] = useState(() => {
+        const saved = localStorage.getItem('processedDriveFiles');
+        return saved ? new Set(JSON.parse(saved)) : new Set();
+    });
+
+    // Refs for Auto-Sync (Fix Stale Closure)
+    const watchConfigRef = useRef(watchConfig);
+    const processedIdsRef = useRef(processedFileIds);
+
+    useEffect(() => { watchConfigRef.current = watchConfig; }, [watchConfig]);
+    useEffect(() => { processedIdsRef.current = processedFileIds; }, [processedFileIds]);
+
+    useEffect(() => {
+        localStorage.setItem('driveDetails', JSON.stringify(watchConfig));
+    }, [watchConfig]);
+
+    useEffect(() => {
+        localStorage.setItem('processedDriveFiles', JSON.stringify([...processedFileIds]));
+    }, [processedFileIds]);
+
+    // --- Google Drive Integration ---
     // --- Google Drive Integration ---
     const [tokenClient, setTokenClient] = useState(null);
-    const [driveConfig, setDriveConfig] = useState({
-        clientId: 'YOUR_CLIENT_ID_HERE',
-        apiKey: 'YOUR_API_KEY_HERE',
+    const [driveConfig, setDriveConfig] = useState(() => {
+        const saved = localStorage.getItem('googleDriveConfig');
+        return saved ? JSON.parse(saved) : {
+            clientId: 'YOUR_CLIENT_ID_HERE',
+            apiKey: 'YOUR_API_KEY_HERE',
+        };
     });
+
+    useEffect(() => {
+        if (driveConfig.clientId !== 'YOUR_CLIENT_ID_HERE') {
+            localStorage.setItem('googleDriveConfig', JSON.stringify(driveConfig));
+        }
+    }, [driveConfig]);
+
     const [gapiLoaded, setGapiLoaded] = useState(false);
     const [gisLoaded, setGisLoaded] = useState(false);
 
@@ -59,40 +101,63 @@ const AdminDataIngestion = () => {
             alert("Google API not loaded yet. Check internet connection.");
             return;
         }
+
         if (driveConfig.clientId === 'YOUR_CLIENT_ID_HERE' || driveConfig.apiKey === 'YOUR_API_KEY_HERE') {
             const newId = prompt("Enter Google Cloud Client ID:", driveConfig.clientId);
-            const newKey = prompt("Enter Google Cloud API Key:", driveConfig.apiKey);
+            const newKey = prompt("Enter Google Cloud API Key (Starts with 'AIza...'):", driveConfig.apiKey);
             if (newId && newKey) {
-                setDriveConfig({ clientId: newId, apiKey: newKey });
-                alert("Credentials saved temporarily. Try clicking again.");
-                return;
+                const trimmedId = newId.trim();
+                const trimmedKey = newKey.trim();
+
+                if (!trimmedKey.startsWith('AIza')) {
+                    alert("⚠️ That doesn't look like an API Key.\n\nAPI Keys usually start with 'AIza'.\nDid you paste the Client Secret by mistake?");
+                    return;
+                }
+
+                setDriveConfig({ clientId: trimmedId, apiKey: trimmedKey });
+                alert("Credentials saved! Please click the button again.");
             }
+            return;
+        }
+
+        if (!tokenClient) {
+            console.error("Token Client not initialized. Credentials might be invalid or not set.");
+            alert("Internal Error: Google Token Client not ready. Please reload page or check console.");
             return;
         }
 
         const handleAuth = (resp) => {
             if (resp && resp.access_token) {
+                const appId = driveConfig.clientId.split('-')[0]; // Extract Project Number
+                console.log("Initializing Picker with App ID:", appId); // DEBUG
                 createPicker({
                     token: resp.access_token,
                     apiKey: driveConfig.apiKey,
+                    appId: appId,
+                    selectFolder: targetType === 'folder',
                     onSelect: async ({ fileId, fileName, accessToken }) => {
-                        setStatus({ type: 'idle', message: `Downloading ${fileName} from Drive...` });
-                        setLoading(true);
-                        try {
-                            const blob = await downloadDriveFile(fileId, accessToken);
-                            const syntheticFile = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                        if (targetType === 'folder') {
+                            setWatchConfig(prev => ({ ...prev, folderId: fileId, folderName: fileName, isActive: true })); // Auto-activate on select
+                            setStatus({ type: 'success', message: `Selected Watch Folder: ${fileName}` });
+                        } else {
+                            setStatus({ type: 'idle', message: `Downloading ${fileName} from Drive...` });
+                            setLoading(true);
+                            try {
+                                const blob = await downloadDriveFile(fileId, accessToken);
+                                const syntheticFile = new File([blob], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-                            if (targetType === 'sales') {
-                                setSalesFile(syntheticFile);
-                                setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
-                            } else {
-                                setProductionFile(syntheticFile);
-                                setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
+                                if (targetType === 'sales') {
+                                    setSalesFile(syntheticFile);
+                                    setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
+                                } else {
+                                    setProductionFile(syntheticFile);
+                                    setStatus({ type: 'success', message: `Loaded ${fileName} from Drive.` });
+                                }
+                            } catch (err) {
+                                setStatus({ type: 'error', message: "Drive Download Failed: " + err.message });
+                            } finally {
+                                setLoading(false);
                             }
-                        } catch (err) {
-                            setStatus({ type: 'error', message: "Drive Download Failed: " + err.message });
-                        } finally {
-                            setLoading(false);
                         }
                     }
                 });
@@ -116,6 +181,129 @@ const AdminDataIngestion = () => {
             if (watcherIntervalRef.current) clearInterval(watcherIntervalRef.current);
         };
     }, []);
+
+    // --- Auto-Sync Logic ---
+    const runDriveSync = useCallback(async () => {
+        const currentConfig = watchConfigRef.current;
+        const currentProcessed = processedIdsRef.current;
+
+        if (!currentConfig.folderId || !tokenClient) return;
+
+        // wrapper to get token
+        const performSync = async (accessToken) => {
+            try {
+                setLoading(true);
+                // Only show status if we actually find files or on error, to reduce noise?
+                // Or just show idle.
+                setStatus({ type: 'idle', message: 'Syncing with Drive...' });
+
+                const { listDriveFiles } = await import('../../utils/driveUtils');
+                const files = await listDriveFiles(currentConfig.folderId, accessToken);
+
+                // Filter files: New ID OR Newer Modified Time
+                const lastSyncDate = currentConfig.lastSync ? new Date(currentConfig.lastSync) : new Date(0);
+
+                console.log("--- Sync Debug ---");
+                console.log("Last Sync:", lastSyncDate.toISOString());
+                console.log("Total Drive Files:", files.length);
+
+                const filesToProcess = files.filter(f => {
+                    const isNew = !currentProcessed.has(f.id);
+                    const fileTime = new Date(f.modifiedTime);
+                    const isModified = fileTime > lastSyncDate;
+
+                    console.log(`File: ${f.name} | Mod: ${f.modifiedTime} | New: ${isNew} | Modified: ${isModified}`);
+
+                    return isNew || isModified;
+                });
+
+                if (filesToProcess.length === 0) {
+                    setWatchConfig(prev => ({ ...prev, lastSync: new Date().toISOString() }));
+                    setStatus({ type: 'success', message: 'Sync Complete: No new or updated files found.' });
+                    setLoading(false);
+                    return;
+                }
+
+                setStatus({ type: 'idle', message: `Found ${filesToProcess.length} files to sync...` });
+                let successCount = 0;
+
+                for (const fileMeta of filesToProcess) {
+                    try {
+                        const blob = await downloadDriveFile(fileMeta.id, accessToken);
+                        const file = new File([blob], fileMeta.name, { type: fileMeta.mimeType });
+
+                        let result = { success: false };
+
+                        // Try Sales First
+                        try {
+                            result = await processSalesData(file);
+                        } catch (e) { /* ignore */ }
+
+                        // If not sales, Try Production
+                        if (!result.success) {
+                            // Reset file stream? JS File object is readable multiple times usually
+                            try {
+                                result = await processProductionData(file);
+                            } catch (e) {
+                                console.warn("Prod Parse Failed", e);
+                            }
+                        }
+
+                        if (result.success || (result.message && !result.message.includes('No valid'))) {
+                            successCount++;
+                            // Mark as processed (add to Set)
+                            // We add to set, but for updates it's already there. That's fine.
+                            setProcessedFileIds(prev => {
+                                const next = new Set(prev);
+                                next.add(fileMeta.id);
+                                return next;
+                            });
+                        }
+
+                    } catch (err) {
+                        console.error(`Sync Error for ${fileMeta.name}:`, err);
+                    }
+                }
+
+                setWatchConfig(prev => ({ ...prev, lastSync: new Date().toISOString() }));
+                setStatus({ type: 'success', message: `Auto-Sync: Processed ${successCount}/${filesToProcess.length} files.` });
+                checkDbStatus(true);
+
+            } catch (err) {
+                console.error("Auto Sync Error", err);
+                setStatus({ type: 'error', message: "Auto-Sync Failed: " + err.message });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // Trigger Auth if needed
+        const client = window.google.accounts.oauth2.initTokenClient({
+            client_id: driveConfig.clientId,
+            scope: 'https://www.googleapis.com/auth/drive.readonly',
+            callback: (resp) => {
+                if (resp.access_token) performSync(resp.access_token);
+            },
+        });
+        // Try silent first?
+        // Actually for "Auto" we assume we have a token or need to prompt.
+        // If we are 'isActive', we should probably prompt once and keep token?
+        // Token expires in 1hr.
+        // effectively we need to request it.
+        client.requestAccessToken({ prompt: '' }); // Try silent
+    }, [driveConfig.clientId, tokenClient]); // minimal deps
+
+    // Effect for Interval
+    useEffect(() => {
+        if (watchConfig.isActive && watchConfig.folderId) {
+            // Run immediately on first active
+            runDriveSync();
+
+            const ms = watchConfig.intervalMinutes * 60 * 1000;
+            const interval = setInterval(runDriveSync, ms);
+            return () => clearInterval(interval);
+        }
+    }, [watchConfig.isActive, watchConfig.folderId, watchConfig.intervalMinutes, runDriveSync]);
 
     const checkDbStatus = async (silent = false) => {
         setLoading(true);
@@ -227,6 +415,148 @@ const AdminDataIngestion = () => {
     };
 
 
+    const processSalesData = async (file) => {
+        const result = await parseExcelFile([file]);
+        const data = result.transactions || [];
+        const receivablesData = result.receivables || [];
+        const hasTransactions = data && data.length > 0;
+        const hasReceivables = receivablesData.length > 0;
+
+        if (!hasTransactions && !hasReceivables) {
+            return { success: false, message: 'No valid records found' };
+        }
+
+        let uniqueTransactions = [];
+        let updates = [];
+        let addedRec = 0;
+
+        // 1. Transactions
+        if (hasTransactions) {
+            // Filter valid rows
+            const formattedData = data.map(record => ({
+                date: record.parsedDate,
+                amount: record.parsedAmount,
+                payment_mode: record.parsedType,
+                item_name: record.originalDesc,
+                customer_name: record.customerName,
+                invoice_no: record.invoiceNo,
+                quantity: record.parsedQty || 1,
+                profit: record.parsedProfit || 0
+            })).filter(r => r.date && r.amount && r.item_name);
+
+            if (formattedData.length > 0) {
+                const allDates = formattedData.map(d => d.date).sort();
+                const minDate = allDates[0];
+                const maxDate = allDates[allDates.length - 1];
+
+                const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
+
+                const createTxSig = (t) => {
+                    let d = String(t.date || '').trim();
+                    if (d.includes('T')) d = d.split('T')[0];
+                    const a = Number(t.amount || 0).toFixed(2);
+                    const i = String(t.item_name || '').trim().toLowerCase();
+                    const inv = String(t.invoice_no || '').trim().toLowerCase();
+                    return `${d}|${a}|${i}|${inv}`;
+                };
+
+                const existingTxMap = new Map();
+                existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
+
+                formattedData.forEach(t => {
+                    const sig = createTxSig(t);
+                    const existing = existingTxMap.get(sig);
+
+                    if (!existing) {
+                        uniqueTransactions.push(t);
+                    } else if (
+                        existing.payment_mode !== t.payment_mode ||
+                        (t.customer_name && existing.customer_name !== t.customer_name)
+                    ) {
+                        updates.push({ ...t, id: existing.id });
+                    }
+                });
+
+                if (uniqueTransactions.length > 0) await supabase.from('transactions').insert(uniqueTransactions);
+                if (updates.length > 0) await supabase.from('transactions').upsert(updates);
+            }
+        }
+
+        // 2. Receivables (Replace Strategy)
+        if (hasReceivables) {
+            const mappedReceivables = receivablesData.map(r => ({
+                customer_name: r.customerName,
+                address: r.address,
+                city: r.city,
+                contact: r.contact,
+                balance: r.balanceDue,
+                updated_at: new Date()
+            }));
+
+            await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
+            const { error } = await supabase.from('customer_receivables').insert(mappedReceivables);
+            if (!error) addedRec = mappedReceivables.length;
+        }
+
+        return {
+            success: true,
+            newTxns: uniqueTransactions.length,
+            updatedTxns: updates.length,
+            receivables: addedRec,
+            message: `Processed: ${uniqueTransactions.length} new txns, ${updates.length} updated, ${addedRec} receivables.`
+        };
+    };
+
+    const processProductionData = async (file) => {
+        const data = await parseProductionFile([file]);
+        if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
+            return { success: false, message: "No valid production logs found." };
+        }
+
+        const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
+        if (allDates.length === 0) return { success: false, message: "No dates found in data." };
+
+        const minDate = allDates[0];
+        const maxDate = allDates[allDates.length - 1];
+
+        const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
+
+        const createSig = (d) => {
+            let dateStr = String(d.date || '').trim();
+            if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
+            return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
+        };
+        const existingSet = new Set(existingLogs.map(createSig));
+
+        const filterNew = (items, type) => {
+            return items
+                .map(i => ({ ...i, type }))
+                .filter(i => {
+                    const sig = createSig(i);
+                    return !existingSet.has(sig);
+                })
+                .map(({ id, source_sheet, ...rest }) => rest);
+        };
+
+        const newStockIn = filterNew(data.stockIn, 'stock_in');
+        const newPreProd = filterNew(data.preProduction, 'usage');
+        const newPostProd = filterNew(data.postProduction, 'production');
+        const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
+
+        if (totalNew > 0) {
+            if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
+            if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
+            if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
+        }
+
+        return {
+            success: true,
+            totalNew,
+            details: `Stock-In: ${newStockIn.length}, Pre-Prod: ${newPreProd.length}, Post-Prod: ${newPostProd.length}`,
+            message: `Added ${totalNew} new records.`
+        };
+    };
+
     const executeUpload = async (type) => {
         const file = type === 'sales' ? salesFile : productionFile;
         if (!file) return;
@@ -235,318 +565,24 @@ const AdminDataIngestion = () => {
         setStatus({ type: 'idle', message: `Processing ${file.name}...` });
 
         try {
-            let data = [];
             if (type === 'sales') {
-                const result = await parseExcelFile([file]);
-                data = result.transactions || [];
-                const totalParsed = data.reduce((sum, t) => sum + (t.parsedAmount || 0), 0);
-
-                // Check if we have any valid data (Transactions OR Receivables)
-                const hasTransactions = data && data.length > 0;
-                const receivablesData = result.receivables || [];
-                const hasReceivables = receivablesData.length > 0;
-
-                if (!hasTransactions && !hasReceivables) {
-                    const debugInfo = result.debugLog ? result.debugLog.join('\n') : 'No debug info available.';
-                    throw new Error(`No valid records (Sales or Receivables) found in file.\n\nDebug Info:\n${debugInfo}`);
+                const result = await processSalesData(file);
+                if (!result.success) {
+                    throw new Error(result.message);
                 }
-
-                // Parser Verification Alert
-                if (hasTransactions) {
-                    const first = data[0] || {};
-                    alert(`Parser Verification:
-Found ${data.length} transactions.
-Total Sales Amount: ${totalParsed.toFixed(2)}
-
-Sample Record (Row 1):
-Item: ${first.originalDesc}
-Qty: ${first.parsedQty}
-Inv: ${first.invoiceNo}
-Cost: ${first.parsedAmount}
-
-If this matches your file, the upload is correct.`);
-                } else if (hasReceivables) {
-                    alert(`Parser Verification:
-Found ${receivablesData.length} receivable records.
-No sales transactions found.
-
-Click OK to proceed with uploading receivables.`);
-                }
-
-
-                let uniqueTransactions = [];
-                let updates = [];
-                let addedCust = 0;
-
-                // --- 1. PROCESS TRANSACTIONS ---
-                if (hasTransactions) {
-                    const formattedData = data.map(record => ({
-                        date: record.parsedDate,
-                        amount: record.parsedAmount,
-                        payment_mode: record.parsedType,
-                        item_name: record.originalDesc,
-                        customer_name: record.customerName,
-                        invoice_no: record.invoiceNo,
-                        quantity: record.parsedQty || 1,
-                        profit: record.parsedProfit || 0
-                    })).filter(r => r.date && r.amount && r.item_name);
-
-                    if (formattedData.length === 0 && !hasReceivables) {
-                        throw new Error(`No valid records found after filtering.`);
-                    }
-
-                    if (formattedData.length > 0) {
-                        // 2025-01-05: Deduplication Logic
-                        const allDates = formattedData.map(d => d.date).sort();
-                        const minDate = allDates[0];
-                        const maxDate = allDates[allDates.length - 1];
-
-                        // Fetch Existing Transactions
-                        const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
-
-                        console.log(`[Dedup] Range: ${minDate} to ${maxDate}`);
-                        console.log(`[Dedup] Fetched ${existingTxns.length} existing records.`);
-
-                        // Create Signatures
-                        const createTxSig = (t) => {
-                            let d = String(t.date || '').trim();
-                            if (d.includes('T')) d = d.split('T')[0];
-                            const a = Number(t.amount || 0).toFixed(2);
-                            const i = String(t.item_name || '').trim().toLowerCase();
-                            const inv = String(t.invoice_no || '').trim().toLowerCase();
-                            return `${d}|${a}|${i}|${inv}`;
-                        };
-
-                        const existingTxMap = new Map();
-                        existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
-
-                        // Separate New vs Updates
-                        // Separate New vs Updates
-
-                        uniqueTransactions = [];
-
-                        formattedData.forEach((t, index) => {
-                            const sig = createTxSig(t);
-                            const existing = existingTxMap.get(sig);
-
-                            if (!existing) {
-                                uniqueTransactions.push(t);
-                            } else {
-                                // Debug Logic
-                                if (t.item_name.toLowerCase().includes('ginger') || index < 3) {
-                                    console.log(`[Dedup Check] Item: ${t.item_name} | Existing: ${existing.payment_mode} | New: ${t.payment_mode} | Match: ${existing.payment_mode === t.payment_mode}`);
-                                }
-
-                                if (
-                                    existing.payment_mode !== t.payment_mode ||
-                                    (t.customer_name && (!existing.customer_name || existing.customer_name !== t.customer_name))
-                                ) {
-                                    // Smart Update:
-                                    // 1. Type Mismatch (e.g. Expense -> Purchase)
-                                    // 2. Missing/Wrong Supplier (e.g. was NULL, now found)
-                                    updates.push({ ...t, id: existing.id });
-                                }
-                            }
-                        });
-
-
-                        console.log(`[Dedup] New: ${uniqueTransactions.length}, Updates: ${updates.length}, Existing: ${existingTxMap.size}, Total Upload: ${formattedData.length}`);
-
-                        if (uniqueTransactions.length > 0) {
-                            const { error } = await supabase.from('transactions').insert(uniqueTransactions);
-                            if (error) throw error;
-                        }
-
-                        if (updates.length > 0) {
-                            const { error } = await supabase.from('transactions').upsert(updates);
-                            if (error) throw error;
-                            console.log(`[Dedup] Updated ${updates.length} records with new type.`);
-                        }
-                    }
-                }
-
-                // --- 2. PROCESS CUSTOMERS (From Sales) ---
-                if (hasTransactions) {
-                    const customerData = result.customers || [];
-                    if (customerData.length > 0) {
-                        // ... (keep logic but verify context availability)
-                        // Re-defining variables needed if block was split? 
-                        // Actually better to just wrap the existing block or let it run conditionally.
-                        // For simplicity in tool usage, I'll assume context variables.
-                        // But wait, 'minDate' might not be defined if no transactions.
-
-                        // Let's just simplify: Only run stats update if txns were processed.
-                        // Or if we have data. 
-                        // The original code used minDate/maxDate from transactions for fetching existing stats.
-                        // If no transactions, we can't easily deduce range for customer stats unless we scan customers.
-                        // So skipping customer stats if no transactions is acceptable for "Receivables Only" file.
-                    }
-                }
-
-                // (Block replaced above)
-
-                if (uniqueTransactions.length > 0) {
-                    const { error } = await supabase.from('transactions').insert(uniqueTransactions);
-                    if (error) throw error;
-                } else {
-                    console.log("No new transactions to insert.");
-                }
-
-                const customerData = result.customers || [];
-                // Only process customer stats if we have transaction data to derive dates/revenues
-                if (hasTransactions && customerData.length > 0 && uniqueTransactions.length > 0) {
-                    // ... (Customer Stats Logic - Simplified for this context via reference or re-implementation if needed)
-                    // Since I removed the 'formattedData' scope in previous block, I need to be careful.
-                    // IMPORTANT: The original code relied on 'minDate' and 'maxDate' which were defined in the transaction block.
-                    // I should probably skip this detailed stats update for now or re-calculate.
-                    // Given the complexity of splitting variables, I will skip Customer Stats update for now if it's too tangled, 
-                    // OR I can re-scope.
-
-                    // Let's defer full stats implementation here to avoid variable scope errors, 
-                    // assuming Receivables is the priority.
-                    // However, to keep existing functionality:
-                    try {
-                        // We need minDate/maxDate from transactions.
-                        // Let's grab them from uniqueTransactions if available.
-                        const txDates = uniqueTransactions.map(t => t.date).sort();
-                        if (txDates.length > 0) {
-                            const minD = txDates[0];
-                            const maxD = txDates[txDates.length - 1];
-
-                            const mappedCustomers = customerData.map(c => ({
-                                customer_name: c.name,
-                                revenue: c.revenue,
-                                profit: c.profit,
-                                date: c.parsedDate
-                            }));
-
-                            const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', minD, maxD);
-                            if (existingCusts) {
-                                const createCustSig = (c) => {
-                                    let d = String(c.date || '').trim();
-                                    if (d.includes('T')) d = d.split('T')[0];
-                                    return `${d}|${String(c.customer_name).trim().toUpperCase()}|${Number(c.revenue).toFixed(2)}`;
-                                };
-                                const existingCustSet = new Set(existingCusts.map(createCustSig));
-
-                                const uniqueCustomers = mappedCustomers.filter(c => !existingCustSet.has(createCustSig(c)));
-
-                                if (uniqueCustomers.length > 0) {
-                                    const { error: custError } = await supabase.from('customer_stats').insert(uniqueCustomers);
-                                    if (!custError) {
-                                        addedCust = uniqueCustomers.length;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.warn("Skipping customer stats update:", err);
-                    }
-                }
-
-                // Handle Receivables (Reuse variables from top scope)
-                let addedRec = 0;
-                if (receivablesData.length > 0) {
-                    const mappedReceivables = receivablesData.map(r => ({
-                        customer_name: r.customerName,
-                        address: r.address,
-                        city: r.city,
-                        contact: r.contact,
-                        balance: r.balanceDue,
-                        updated_at: new Date()
-                    }));
-
-                    try {
-                        // Assuming simple insert for now. If table has constraints, handle them.
-                        // Handling Receivables: REPLACE existing data (req: "load only latest")
-                        // 1. Delete all existing
-                        const { error: delError } = await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
-                        if (delError) console.warn("Failed to clear old receivables:", delError);
-
-                        // 2. Insert New
-                        const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
-                        if (recError) {
-                            console.error("Receivables Insert Error:", recError);
-                            alert("Warning: Receivables data failed to upload: " + recError.message);
-                        } else {
-                            addedRec = mappedReceivables.length;
-                        }
-                    } catch (e) {
-                        console.warn("Receivables upload failed (Table missing?):", e);
-                    }
-                }
-
-                if (uniqueTransactions.length === 0 && updates.length === 0 && addedCust === 0 && addedRec === 0) {
-                    setStatus({ type: 'success', message: `Upload Skipped: All records already exist.` });
-                    setLoading(false);
-                    return; // Early return to avoid overwriting success message
-                }
-
-                const statsMsg = (uniqueTransactions.length > 0 || updates.length > 0)
-                    ? `Uploaded ${uniqueTransactions.length} new, ${updates.length} updated txns${addedRec > 0 ? ` & ${addedRec} receivables` : ''}.`
-                    : `All txns existed${addedRec > 0 ? `, but added ${addedRec} receivables` : ''}.`;
-
-                setStatus({ type: 'success', message: `Success! ${statsMsg}` });
-
-            } else if (type === 'production') {
-                data = await parseProductionFile([file]);
-                if (data.preProduction.length === 0) {
-                    const debugInfo = data.debugLog ? data.debugLog.join('\n') : 'No debug info';
-                    throw new Error(`DEBUG MODE: Stock-in found (${data.stockIn.length}), but Pre-Production is empty.\n\nDebug Info:\n${debugInfo}`);
-                }
-                if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) throw new Error("No valid production logs found.");
-
-                const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
-                if (allDates.length === 0) throw new Error("No dates found in data.");
-                const minDate = allDates[0];
-                const maxDate = allDates[allDates.length - 1];
-
-                const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
-
-                const createSig = (d) => {
-                    let dateStr = String(d.date || '').trim();
-                    if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
-                    return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
-                };
-                const existingSet = new Set(existingLogs.map(createSig));
-
-                const filterNew = (items, type) => {
-                    return items
-                        .map(i => ({ ...i, type }))
-                        .filter(i => {
-                            const sig = createSig(i);
-                            return !existingSet.has(sig);
-                        })
-                        .map(({ id, source_sheet, ...rest }) => rest);
-                };
-
-                const newStockIn = filterNew(data.stockIn, 'stock_in');
-                const newPreProd = filterNew(data.preProduction, 'usage');
-                const newPostProd = filterNew(data.postProduction, 'production');
-                const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
-
-                if (totalNew === 0) {
-                    setStatus({ type: 'success', message: `Upload Skipped: All ${allDates.length} records already exist.` });
-                    setLoading(false);
-                    return;
-                }
-
-                if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
-                if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
-                if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
-
-                let successMsg = `Synced ${file.name}. Added ${totalNew} new records.`;
-                if (type === 'production') {
-                    successMsg += ` (Stock-In: ${newStockIn.length}, Pre-Prod: ${newPreProd.length}, Post-Prod: ${newPostProd.length})`;
-                }
-                setStatus({ type: 'success', message: successMsg });
-            }
-
-            if (type === 'sales') {
+                setStatus({ type: 'success', message: result.message });
                 setSalesFile(null);
-                setStatus({ type: 'success', message: `Successfully uploaded ${file.name}` });
+            } else if (type === 'production') {
+                const result = await processProductionData(file);
+                if (!result.success && !result.totalNew) { // Allow success with 0 new if just deduped
+                    if (result.message.includes('No valid')) throw new Error(result.message);
+                    setStatus({ type: 'success', message: "All records already exist." });
+                } else {
+                    setStatus({ type: 'success', message: result.message });
+                }
+                setProductionFile(null);
             }
-            if (type === 'production') setProductionFile(null);
+
             checkDbStatus();
 
         } catch (error) {
@@ -871,7 +907,7 @@ Click OK to proceed with uploading receivables.`);
                 <div className="flex-center" style={{ marginTop: '1.5rem' }}>
                     <div className="btn-toggle-group">
                         <button onClick={() => setUploadMode('file')} disabled={isWatching} className={`btn-toggle ${uploadMode === 'file' ? 'active blue' : ''}`}>
-                            <File size={16} /> Single File
+                            <FileIcon size={16} /> Single File
                         </button>
                         <button onClick={() => setUploadMode('folder')} className={`btn-toggle ${uploadMode === 'folder' ? 'active blue' : ''}`}>
                             <FolderInput size={16} /> Folder Mode
@@ -903,6 +939,142 @@ Click OK to proceed with uploading receivables.`);
             {/* Upload Areas */}
             <div className="admin-grid">
 
+                {/* Google Drive Integration Panel */}
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--accent-primary)', gridColumn: '1 / -1' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#3b82f6' }}>
+                        <CloudLightning size={24} /> Google Drive Auto-Sync
+                        <button
+                            onClick={() => {
+                                setDriveConfig({ clientId: 'YOUR_CLIENT_ID_HERE', apiKey: 'YOUR_API_KEY_HERE' });
+                                alert("Credentials reset. Click Browse to enter them again.");
+                            }}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.75rem', textDecoration: 'underline', cursor: 'pointer', marginLeft: 'auto' }}
+                        >
+                            (Reset Credentials)
+                        </button>
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '600px' }}>
+                        Automatically pull new Excel files from a specific Google Drive folder.
+                        files will be processed and added to the database.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'end' }}>
+
+                        {/* Folder Selection */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Watch Folder</label>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <input
+                                    type="text"
+                                    value={watchConfig.folderName || 'No Folder Selected'}
+                                    readOnly
+                                    style={{
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--glass-border)',
+                                        padding: '0.75rem',
+                                        borderRadius: '0.5rem',
+                                        color: 'var(--text-primary)',
+                                        flex: 1,
+                                        height: '42px',
+                                        minWidth: 0 // Allow shrinking
+                                    }}
+                                />
+                                <button
+                                    className="btn-secondary"
+                                    onClick={() => handleDrivePick('folder')}
+                                    style={{
+                                        whiteSpace: 'nowrap',
+                                        height: '42px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '0 1.5rem',
+                                        flexShrink: 0
+                                    }}
+                                >
+                                    <FolderInput size={18} style={{ marginRight: '0.5rem' }} /> Browse
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Interval Config & Manual Sync */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Sync Interval (Minutes)</label>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={watchConfig.intervalMinutes}
+                                    onChange={(e) => setWatchConfig(prev => ({ ...prev, intervalMinutes: parseInt(e.target.value) || 15 }))}
+                                    style={{
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--glass-border)',
+                                        padding: '0.75rem',
+                                        borderRadius: '0.5rem',
+                                        color: 'var(--text-primary)',
+                                        height: '42px',
+                                        flex: 1,
+                                        minWidth: 0
+                                    }}
+                                />
+                                <button
+                                    className="btn-secondary"
+                                    onClick={() => runDriveSync()}
+                                    disabled={loading || !watchConfig.folderId}
+                                    style={{
+                                        whiteSpace: 'nowrap',
+                                        height: '42px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '0 1.5rem',
+                                        flexShrink: 0,
+                                        opacity: (loading || !watchConfig.folderId) ? 0.5 : 1
+                                    }}
+                                >
+                                    <RefreshCw size={18} style={{ marginRight: '0.5rem' }} className={loading ? 'spin' : ''} /> Sync Now
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Toggle */}
+                        <button
+                            className={`btn-primary ${watchConfig.isActive ? 'active' : ''}`}
+                            onClick={() => {
+                                if (!watchConfig.folderId) return alert("Please select a folder first.");
+                                setWatchConfig(prev => ({ ...prev, isActive: !prev.isActive }));
+                                if (!watchConfig.isActive) runDriveSync(); // Trigger immediate on start
+                            }}
+                            style={{
+                                background: watchConfig.isActive ? '#10b981' : 'var(--bg-secondary)',
+                                border: watchConfig.isActive ? 'none' : '1px solid var(--text-secondary)',
+                                height: '42px', // Match others
+                                marginTop: '1.75rem' // Align with inputs roughly? Or just let grid handle it.
+                                // Actually in a grid with alignItems: end, it should align bottom.
+                            }}
+                        >
+                            {watchConfig.isActive ? (
+                                <> <RefreshCw size={18} className="spin" style={{ marginRight: '0.5rem' }} /> Auto-Sync Active </>
+                            ) : (
+                                <> <PlayCircle size={18} style={{ marginRight: '0.5rem' }} /> Enable Auto-Sync </>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Status Bar */}
+                    {watchConfig.folderId && (
+                        <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>
+                                Status: <span style={{ color: watchConfig.isActive ? '#10b981' : '#f59e0b' }}>{watchConfig.isActive ? 'Running' : 'Paused'}</span>
+                            </span>
+                            <span>
+                                Last Sync: {watchConfig.lastSync ? new Date(watchConfig.lastSync).toLocaleTimeString() : 'Never'}
+                            </span>
+                            <span>
+                                Processed Files: {processedFileIds.size}
+                            </span>
+                        </div>
+                    )}
+                </div>
+
                 {/* Sales Upload */}
                 <div className={`upload-card sales group ${isWatching ? 'style={{ opacity: 0.3, pointerEvents: "none", filter: "grayscale(1)" }}' : ''}`}>
                     <div className="upload-icon-box icon-sales">
@@ -912,15 +1084,7 @@ Click OK to proceed with uploading receivables.`);
                     <div>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Sales & Expenses</h3>
                         <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
-                        <div style={{ marginTop: '0.5rem' }}>
-                            <button
-                                onClick={() => handleDrivePick('sales')}
-                                className="btn-secondary"
-                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                            >
-                                <CloudLightning size={12} /> Drive
-                            </button>
-                        </div>
+
                     </div>
 
                     {uploadMode === 'file' ? (
@@ -1005,23 +1169,12 @@ Click OK to proceed with uploading receivables.`);
                             </div>
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '200px', marginTop: '1rem' }}>
-                            {!isWatching ? (
-                                <>
-                                    <label className="file-label" style={{ justifyContent: 'center' }}>
-                                        <input type="file" ref={prodFolderRef} webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'production')} disabled={loading} className="hidden-input" />
-                                        <FolderInput size={16} /> Scan Once
-                                    </label>
-                                    <button onClick={startWatcher} className="btn-action btn-prod" style={{ justifyContent: 'center' }}>
-                                        <PlayCircle size={16} /> Start Auto-Sync
-                                    </button>
-                                </>
-                            ) : (
-                                <button onClick={stopWatcher} className="btn-action" style={{ background: '#ef4444', justifyContent: 'center' }}>
-                                    <StopCircle size={16} /> Stop Watching
-                                </button>
-                            )}
-                        </div>
+                        <label style={{ marginTop: '1rem', width: '100%', maxWidth: '200px', cursor: 'pointer' }}>
+                            <input type="file" ref={prodFolderRef} webkitdirectory="" directory="" multiple onChange={(e) => handleFolderUpload(e, 'production')} disabled={loading} style={{ display: 'none' }} />
+                            <div className="btn-action btn-prod" style={{ justifyContent: 'center', width: '100%' }}>
+                                <FolderInput size={18} /> Upload Folder
+                            </div>
+                        </label>
                     )}
                 </div>
             </div>
@@ -1043,7 +1196,7 @@ Click OK to proceed with uploading receivables.`);
             {/* Status Toast */}
             {status.message && !isWatching && (
                 <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '1rem', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', zIndex: 50, backdropFilter: 'blur(12px)', border: status.type === 'error' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', background: status.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: status.type === 'error' ? '#fca5a5' : '#6ee7b7' }} className="animate-fade-in">
-                    {status.type === 'error' ? <AlertCircle size={24} /> : <CheckCircle size={24} />}
+                    {status.type === 'success' ? <CheckCircle size={20} /> : (status.type === 'error' ? <AlertCircle size={20} /> : <FileIcon size={20} className="spin-slow" />)}
                     <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{status.message}</span>
                 </div>
             )}

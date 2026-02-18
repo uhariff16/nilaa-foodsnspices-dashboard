@@ -22,10 +22,12 @@ const MetricCard = ({ title, value, subtext, icon: Icon, trend, image, color, ba
             borderRadius: '1rem',
             padding: '1.5rem',
             position: 'relative',
-            overflow: 'hidden',
+            // Overflow hidden removed to allow tooltips/popups if needed, but mainly to avoid clipping.
+            // box-sizing border-box is default.
             display: 'flex',
             flexDirection: 'column',
-            minHeight: '200px'
+            minHeight: '200px',
+            height: '100%' // Ensure it stretches fills the grid cell for alignment
         }}>
             <div style={{
                 position: 'absolute', top: 0, right: 0, padding: '1rem', opacity: 0.1, color: themeColor
@@ -717,14 +719,14 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
                 {(() => {
                     const renderBreakdownValue = (breakdown, total, colorStr) => (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem' }}>
-                            {breakdown && breakdown.length > 0 ? breakdown.slice(0, 3).map(([name, weight]) => (
-                                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: colorStr, fontWeight: 500 }}>
-                                    <span style={{ marginRight: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100px' }} title={name}>{name}:</span>
-                                    <span style={{ whiteSpace: 'nowrap' }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.5rem', width: '100%' }}>
+                            {breakdown && breakdown.length > 0 ? breakdown.map(([name, weight]) => (
+                                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: colorStr, fontWeight: 500 }}>
+                                    <span style={{ marginRight: '0.5rem', whiteSpace: 'normal', wordBreak: 'break-word' }}>{name}:</span>
+                                    <span style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                                 </div>
                             )) : <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No data</div>}
-                            {breakdown && breakdown.length > 3 && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>+ {breakdown.length - 3} more</div>}
+                            {/* Removed slice limit to show ALL data */}
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'

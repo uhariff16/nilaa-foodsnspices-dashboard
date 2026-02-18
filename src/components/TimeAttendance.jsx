@@ -230,13 +230,37 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         const dateIdx = headers.findIndex(h => h.includes('date'));
         const idIdx = headers.findIndex(h => h.includes('id'));
 
+        // Helper to find column index with strict matching
+        const findCol = (keywords, exact = false) => {
+            return headers.findIndex(h => {
+                if (exact) return keywords.some(k => h === k);
+                return keywords.some(k => h.includes(k) && !h.includes('reason') && !h.includes('id') && !h.includes('name'));
+            });
+        };
+
         // Find all In/Out indices
         const shiftIndices = [];
         for (let s = 1; s <= 4; s++) {
+            const suffix = s === 1 ? '' : ` ${s}`;
+            const sStr = String(s);
+
             shiftIndices.push({
-                in: headers.findIndex(h => h.includes(`in ${s}`) || (s === 1 && h === 'in')),
-                out: headers.findIndex(h => h.includes(`out ${s}`) || (s === 1 && h === 'out'))
+                in: findCol([`in ${s}`, `in${s}`, `start ${s}`, `start${s}`], true) !== -1
+                    ? findCol([`in ${s}`, `in${s}`, `start ${s}`, `start${s}`], true)
+                    : (s === 1 ? findCol(['time in', 'check in', 'clock in', 'in'], true) : -1),
+
+                out: findCol([`out ${s}`, `out${s}`, `end ${s}`, `end${s}`], true) !== -1
+                    ? findCol([`out ${s}`, `out${s}`, `end ${s}`, `end${s}`], true)
+                    : (s === 1 ? findCol(['time out', 'check out', 'clock out', 'out'], true) : -1)
             });
+
+            // Fallback: If strictly failed, try slightly broader but safe matching
+            if (shiftIndices[s - 1].in === -1) {
+                shiftIndices[s - 1].in = headers.findIndex(h => (h.includes(`in`) && h.includes(`${s}`)) || (s === 1 && (h === 'in' || h === 'check in')));
+            }
+            if (shiftIndices[s - 1].out === -1) {
+                shiftIndices[s - 1].out = headers.findIndex(h => (h.includes(`out`) && h.includes(`${s}`)) || (s === 1 && (h === 'out' || h === 'check out')));
+            }
         }
         const breakIdx = headers.findIndex(h => h.includes('break'));
         const deductionIdx = headers.findIndex(h => h.includes('deduction') && !h.includes('reason'));

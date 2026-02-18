@@ -726,7 +726,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                     <span style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
                                 </div>
                             )) : <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No data</div>}
-                            {/* Removed slice limit to show ALL data */}
                             <div style={{
                                 display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
@@ -773,8 +772,16 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                         </div>
                     );
 
-                    // Logic to calculate Overall Date Range from the filtered data
+                    // Logic to calculate Overall Date Range - FIXED to show full month if selected
                     const getOverallRange = () => {
+                        if (selectedMonth !== 'Overall') {
+                            const [selMonth, selYear] = selectedMonth.split(' ');
+                            const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+                            const lastDay = new Date(selYear, parseInt(monthMap[selMonth]), 0).getDate(); // Get last day of month
+                            return `(01 ${selMonth} - ${lastDay} ${selMonth})`;
+                        }
+
+                        // Fallback for 'Overall' view (show min-max from data)
                         const allDates = [...preProd, ...postProd].map(i => i.date).filter(Boolean);
                         if (allDates.length === 0) return "";
                         allDates.sort();
@@ -785,6 +792,72 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                         return start === end ? `(${sFmt})` : `(${sFmt} - ${eFmt})`;
                     };
                     const overallRange = getOverallRange();
+
+                    // [NEW] Calculate Previous Month Efficiency for Comparison (Date Aligned)
+                    let efficiencyDiff = null;
+                    let prevEfficiencyVal = null; // New variable to store prev value
+                    let prevDateRangeLabel = ""; // New variable for date label
+                    if (selectedMonth !== 'Overall') {
+                        const [selMonth, selYear] = selectedMonth.split(' ');
+                        const monthMap = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+
+                        const currentMonthIndex = monthMap[selMonth];
+                        const currentYear = parseInt(selYear);
+
+                        // Calculate Prev Month Year/Index
+                        let prevMonthIndex = currentMonthIndex - 1;
+                        let prevYear = currentYear;
+                        if (prevMonthIndex < 0) {
+                            prevMonthIndex = 11;
+                            prevYear--;
+                        }
+
+                        // Format: YYYY-MM
+                        const prevMonthPrefix = `${prevYear}-${String(prevMonthIndex + 1).padStart(2, '0')}`;
+
+                        // Find Max Day in Current Month Data to align comparison
+                        let maxDay = 31; // Default to full month
+                        const currentMonthPrefix = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`;
+
+                        // Combine dates to find max
+                        const currentDates = [
+                            ...(data.preProduction || []).filter(i => i.date && i.date.startsWith(currentMonthPrefix)).map(i => i.date),
+                            ...(data.postProduction || []).filter(i => i.date && i.date.startsWith(currentMonthPrefix)).map(i => i.date)
+                        ];
+
+                        if (currentDates.length > 0) {
+                            currentDates.sort();
+                            const lastDate = currentDates[currentDates.length - 1]; // YYYY-MM-DD
+                            maxDay = parseInt(lastDate.split('-')[2]);
+                        }
+
+                        // Construct Date Range Label for Previous Month
+                        const prevMonthName = Object.keys(monthMap).find(key => monthMap[key] === prevMonthIndex);
+                        prevDateRangeLabel = `(01 ${prevMonthName} - ${String(maxDay).padStart(2, '0')} ${prevMonthName})`;
+
+                        // Filter Data for Prev Month (Up to maxDay)
+                        const prevPreProd = data.preProduction ? data.preProduction.filter(i => {
+                            if (!i.date || !i.date.startsWith(prevMonthPrefix)) return false;
+                            const day = parseInt(i.date.split('-')[2]);
+                            return day <= maxDay;
+                        }) : [];
+
+                        const prevPostProd = data.postProduction ? data.postProduction.filter(i => {
+                            if (!i.date || !i.date.startsWith(prevMonthPrefix)) return false;
+                            const day = parseInt(i.date.split('-')[2]);
+                            return day <= maxDay;
+                        }) : [];
+
+                        if (prevPreProd.length > 0 && prevPostProd.length > 0) {
+                            const prevInput = prevPreProd.reduce((sum, item) => sum + item.weight, 0);
+                            const prevOutput = prevPostProd.reduce((sum, item) => sum + item.weight, 0);
+                            const prevEff = prevInput > 0 ? (prevOutput / prevInput) * 100 : 0;
+                            const currEff = parseFloat(efficiency); // Assuming 'efficiency' is string from main scope
+
+                            prevEfficiencyVal = prevEff.toFixed(1);
+                            efficiencyDiff = (currEff - prevEff).toFixed(1);
+                        }
+                    }
 
                     return (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -821,7 +894,19 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                     <MetricCard
                                         title="Efficiency"
                                         value={`${efficiency}%`}
-                                        subtext="Conversion Rate"
+                                        subtext={
+                                            efficiencyDiff !== null
+                                                ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: parseFloat(efficiencyDiff) >= 0 ? '#34d399' : '#f43f5e', fontWeight: 700, fontSize: '0.9rem' }}>
+                                                        {parseFloat(efficiencyDiff) > 0 ? <TrendingUp size={14} /> : <TrendingUp size={14} style={{ transform: 'scaleY(-1)' }} />}
+                                                        {parseFloat(efficiencyDiff) > 0 ? '+' : ''}{efficiencyDiff}% vs Last Month
+                                                    </span>
+                                                    <span style={{ opacity: 0.6, fontSize: '0.75rem', fontWeight: 400 }}>
+                                                        {prevDateRangeLabel} : {prevEfficiencyVal}%
+                                                    </span>
+                                                </div>
+                                                : "Conversion Rate"
+                                        }
                                         icon={AlertCircle}
                                         trend={parseFloat(efficiency) > 90 ? "up" : "down"}
                                     />

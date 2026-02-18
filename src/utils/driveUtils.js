@@ -83,39 +83,35 @@ const listFilesInFolder = async (folderId, accessToken) => {
     // 1. Spreadsheets in this folder
     // 2. Subfolders in this folder
 
-    // We can do this in parallel or two requests. 
-    // Let's do two requests to be clean, or one request with OR.
-    // mimeType = 'application/vnd.google-apps.folder'
-
     const q = `'${folderId}' in parents and trashed=false and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel' or mimeType='application/vnd.google-apps.folder')`;
 
-    try {
-        let allItems = [];
-        let pageToken = null;
+    // Removed Try/Catch to allow errors (like 401) to propagate to caller
+    let allItems = [];
+    let pageToken = null;
 
-        do {
-            const url = new URL('https://www.googleapis.com/drive/v3/files');
-            url.searchParams.append('q', q);
-            url.searchParams.append('fields', 'nextPageToken, files(id, name, modifiedTime, mimeType)');
-            url.searchParams.append('pageSize', '1000'); // Max page size
-            if (pageToken) url.searchParams.append('pageToken', pageToken);
+    do {
+        const url = new URL('https://www.googleapis.com/drive/v3/files');
+        url.searchParams.append('q', q);
+        url.searchParams.append('fields', 'nextPageToken, files(id, name, modifiedTime, mimeType)');
+        url.searchParams.append('pageSize', '1000'); // Max page size
+        if (pageToken) url.searchParams.append('pageToken', pageToken);
 
-            const response = await fetch(url.toString(), {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-            });
+        const response = await fetch(url.toString(), {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
 
-            if (!response.ok) throw new Error('Failed to list files');
-            const data = await response.json();
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Failed to list files: ${response.status} ${response.statusText} - ${errText}`);
+        }
 
-            if (data.files) allItems = [...allItems, ...data.files];
-            pageToken = data.nextPageToken;
-        } while (pageToken);
+        const data = await response.json();
 
-        return allItems;
-    } catch (error) {
-        console.error("List Error:", error);
-        return [];
-    }
+        if (data.files) allItems = [...allItems, ...data.files];
+        pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    return allItems;
 };
 
 export const listDriveFiles = async (folderId, accessToken) => {

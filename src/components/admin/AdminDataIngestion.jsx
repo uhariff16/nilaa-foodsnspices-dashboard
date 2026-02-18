@@ -278,20 +278,45 @@ const AdminDataIngestion = () => {
         };
 
         // Trigger Auth if needed
-        const client = window.google.accounts.oauth2.initTokenClient({
-            client_id: driveConfig.clientId,
-            scope: 'https://www.googleapis.com/auth/drive.readonly',
-            callback: (resp) => {
-                if (resp.access_token) performSync(resp.access_token);
-            },
-        });
-        // Try silent first?
-        // Actually for "Auto" we assume we have a token or need to prompt.
-        // If we are 'isActive', we should probably prompt once and keep token?
-        // Token expires in 1hr.
-        // effectively we need to request it.
-        client.requestAccessToken({ prompt: '' }); // Try silent
-    }, [driveConfig.clientId, tokenClient]); // minimal deps
+        // Use existing token client
+        if (tokenClient) {
+            tokenClient.callback = (resp) => {
+                if (resp.error) {
+                    console.error("Auto-Sync Auth Error:", resp);
+                    // Pause Auto-Sync
+                    setWatchConfig(prev => ({ ...prev, isActive: false }));
+                    setStatus({
+                        type: 'error',
+                        message: "Auto-Sync Paused: Session Expired. Please click 'Enable Auto-Sync' to sign in again."
+                    });
+                    return;
+                }
+                if (resp.access_token) {
+                    // [NEW] Persist Token
+                    const expiresIn = resp.expires_in || 3599; // Default 1hr
+                    const expiryTime = Date.now() + (expiresIn * 1000);
+                    localStorage.setItem('g_access_token', resp.access_token);
+                    localStorage.setItem('g_token_expiry', expiryTime);
+
+                    performSync(resp.access_token);
+                }
+            };
+
+            // Check for valid cached token first
+            const cachedToken = localStorage.getItem('g_access_token');
+            const cachedExpiry = localStorage.getItem('g_token_expiry');
+
+            if (cachedToken && cachedExpiry && Date.now() < parseInt(cachedExpiry)) {
+                // Token is valid, use it directly
+                console.log("Using cached Google Access Token");
+                performSync(cachedToken);
+            } else {
+                // Token expired or missing, request new one
+                // Try silent auth. If it fails, callback gets an error, we pause.
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+    }, [tokenClient]); // minimal deps
 
     // Effect for Interval
     useEffect(() => {

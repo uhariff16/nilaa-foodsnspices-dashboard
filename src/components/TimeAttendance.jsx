@@ -912,12 +912,9 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
         date: initialData?.date || new Date().toISOString().split('T')[0],
         empId: initialData?.empId || '',
         empName: initialData?.name || '',
-        shifts: initialData?.shifts?.length > 0 ? [...initialData.shifts, ...Array(Math.max(0, 4 - initialData.shifts.length)).fill({ in: '', out: '' })].slice(0, 4) : [
-            { in: '', out: '' },
-            { in: '', out: '' },
-            { in: '', out: '' },
-            { in: '', out: '' }
-        ],
+        shifts: initialData?.shifts?.length > 0
+            ? [...initialData.shifts, ...Array.from({ length: Math.max(0, 4 - initialData.shifts.length) }, () => ({ in: '', out: '' }))].slice(0, 4)
+            : Array.from({ length: 4 }, () => ({ in: '', out: '' })),
         breakMins: initialData?.break_hours ? initialData.break_hours * 60 : 0,
         rate: initialData?.rate || config.default_hourly_rate,
         deductions: initialData?.deductions || 0,

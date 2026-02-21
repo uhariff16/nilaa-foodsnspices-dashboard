@@ -401,28 +401,67 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         const presentCount = dailyLogs.filter(r => (r.attendance_status || 'Present') === 'Present').length;
         const leaveCount = dailyLogs.filter(r => ['Casual Leave', 'Medical Leave'].includes(r.attendance_status)).length;
 
+        // Staff type specific counts
+        const tempPresentCount = dailyLogs.filter(r => {
+            const emp = employees.find(e => e.emp_id === r.empId);
+            return (r.attendance_status || 'Present') === 'Present' && emp?.staff_type === 'Temporary';
+        }).length;
+
         // Absent count logic: Total - (Present + Leave) for that specific date
         // This accounts for both manual "Absent" logs and inferred absences
         const absentCount = Math.max(0, totalEmployees - (presentCount + leaveCount));
 
-        // General metrics for the current table view (filteredAttendance)
-        const currentLogs = filteredAttendance;
-        const totalHours = currentLogs.reduce((sum, r) => sum + (parseFloat(r.hoursWorked) || 0), 0);
-
+        // staff type metrics for current view
+        let totalHours = 0;
+        let totalOTHours = 0;
         let totalOTPay = 0;
-        const totalOTHours = currentLogs.reduce((sum, r) => {
-            const rowOT = parseFloat(r.otHours) || Math.max(0, (parseFloat(r.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-            const rowRate = parseFloat(r.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-            const rowOTPay = rowOT * rowRate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-            totalOTPay += rowOTPay;
-            return sum + rowOT;
-        }, 0);
-        const totalCost = currentLogs.reduce((sum, r) => sum + (parseFloat(r.daily_wage || r.dailyWage) || 0), 0);
+        let totalCost = 0;
+        let totalDeductions = 0;
 
-        const totalDeductions = currentLogs.reduce((sum, r) => sum + (parseFloat(r.deductions) || 0), 0);
+        let tempTotalHours = 0;
+        let tempTotalOTHours = 0;
+        let tempTotalOTPay = 0;
+        let tempTotalCost = 0;
+        let tempTotalDeductions = 0;
+
+        const currentLogs = filteredAttendance;
+        currentLogs.forEach(r => {
+            const emp = employees.find(e => e.emp_id === r.empId);
+            const isTemp = emp?.staff_type === 'Temporary';
+
+            const hours = parseFloat(r.hoursWorked) || 0;
+            const ot = parseFloat(r.otHours) || Math.max(0, hours - parseFloat(payrollConfig.standard_daily_hours || 8));
+            const rate = parseFloat(r.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+            const otPay = ot * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+            const cost = parseFloat(r.daily_wage || r.dailyWage) || 0;
+            const deductions = parseFloat(r.deductions) || 0;
+
+            // Add to totals
+            totalHours += hours;
+            totalOTHours += ot;
+            totalOTPay += otPay;
+            totalCost += cost;
+            totalDeductions += deductions;
+
+            // Add to temp if applicable
+            if (isTemp) {
+                tempTotalHours += hours;
+                tempTotalOTHours += ot;
+                tempTotalOTPay += otPay;
+                tempTotalCost += cost;
+                tempTotalDeductions += deductions;
+            }
+        });
+
         const netPayout = totalCost - totalDeductions;
+        const tempNetPayout = tempTotalCost - tempTotalDeductions;
 
-        const s = { totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, presentCount, leaveCount, absentCount, contextDate, totalDeductions };
+        const s = {
+            totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout,
+            presentCount, leaveCount, absentCount, contextDate, totalDeductions,
+            tempPresentCount,
+            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout
+        };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
     }, [filteredAttendance, attendanceData, employees, payrollConfig, dateFilter]);
@@ -451,9 +490,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         masterSheet.columns = [
             { header: 'Emp ID', key: 'id', width: 15 },
             { header: 'Emp Name', key: 'name', width: 25 },
-            { header: 'Hourly Rate', key: 'rate', width: 15 }
+            { header: 'Hourly Rate', key: 'rate', width: 15 },
+            { header: 'Staff Type', key: 'type', width: 15 }
         ];
-        masterSheet.addRows(employees.map(e => ({ id: e.emp_id, name: e.name, rate: e.hourly_rate || payrollConfig.default_hourly_rate })));
+        masterSheet.addRows(employees.map(e => ({ id: e.emp_id, name: e.name, rate: e.hourly_rate || payrollConfig.default_hourly_rate, type: e.staff_type || 'Permanent' })));
 
         // 2. Reference Lists Sheet (Hidden)
         const listSheet = workbook.addWorksheet('Lists');
@@ -642,10 +682,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                        Incl. {employees.filter(e => e.staff_type === 'Temporary').length} Temporary
+                    </div>
                 </div>
                 <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
                     <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Present ({stats.contextDate})</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{stats.presentCount}</div>
+                    {stats.tempPresentCount > 0 && (
+                        <div style={{ fontSize: '0.65rem', color: '#10b981', opacity: 0.8, marginTop: '0.25rem' }}>
+                            {stats.tempPresentCount} Temporary
+                        </div>
+                    )}
                 </div>
                 <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
                     <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>On Leave ({stats.contextDate})</div>
@@ -657,41 +705,57 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 </div>
             </div>
 
-            {/* Metrics & Impact */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '2rem', marginBottom: '2rem' }}>
-                <div>
-                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Clock size={16} /> Workload Metrics
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Hours</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                            <div style={{ color: '#f97316', fontSize: '0.75rem', marginBottom: '0.5rem' }}>OT Hours</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
-                        </div>
-                    </div>
+            {/* Overall Summary */}
+            <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                Overall Summary (All Staff)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                <div className="glass-panel" style={{ padding: '1rem' }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
                 </div>
-                <div>
-                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <DollarSign size={16} /> Financial Impact
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                            <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total OT Pay</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                            <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Pay</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.totalCost)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '4px solid #3b82f6' }}>
-                            <div style={{ color: '#3b82f6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Pay</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
-                        </div>
-                    </div>
+                <div className="glass-panel" style={{ padding: '1rem' }}>
+                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem' }}>
+                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem' }}>
+                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.totalCost)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                </div>
+            </div>
+
+            {/* Temporary Staff Specifics */}
+            <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                Temporary Staff Metrics
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Hours</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp OT Hours</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp OT Pay</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Pay (Gross)</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempTotalCost)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
+                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Net Pay</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
                 </div>
             </div>
 
@@ -780,106 +844,130 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredAttendance.map((row, i) => (
-                                <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                                    <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
-                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
-                                    <td style={{ padding: '1rem', fontWeight: 500 }}>{row.name}</td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{
-                                            padding: '0.25rem 0.5rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            display: 'inline-block',
-                                            background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                            color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                            border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
-                                        }}>
-                                            {row.attendance_status || 'Present'}
-                                        </div>
-                                        {row.leave_reason && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.leave_reason}>{row.leave_reason}</div>}
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div>
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div>
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div>
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div>
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div>
-                                        {(row.attendance_status === 'Present' || !row.attendance_status) && row.hoursWorked < payrollConfig.standard_daily_hours && <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>Short Shift</span>}
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        {(() => {
-                                            const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                            return displayOT > 0 ? (
-                                                <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
-                                                    +{displayOT.toFixed(2)}h
-                                                </span>
-                                            ) : '-';
-                                        })()}
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        {(() => {
-                                            const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                            const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                            const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                            return otPay > 0 ? (
-                                                <span style={{ color: '#f59e0b' }}>{formatCurrency(otPay)}</span>
-                                            ) : '-';
-                                        })()}
-                                    </td>
-                                    <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444' }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>{formatCurrency((row.daily_wage || row.dailyWage) - (row.deductions || 0))}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                            <button
-                                                onClick={() => { setEditingRecord(row); setShowManualEntry(true); }}
-                                                style={{
-                                                    padding: '0.4rem',
-                                                    background: 'rgba(59, 130, 246, 0.1)',
-                                                    border: 'none',
-                                                    borderRadius: '0.4rem',
-                                                    color: '#3b82f6',
-                                                    cursor: 'pointer',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                                title="Edit Log"
-                                            >
-                                                <Pencil size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(row)}
-                                                style={{
-                                                    padding: '0.4rem',
-                                                    background: 'rgba(239, 68, 68, 0.1)',
-                                                    border: 'none',
-                                                    borderRadius: '0.4rem',
-                                                    color: '#ef4444',
-                                                    cursor: 'pointer',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                                title="Delete Log"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {filteredAttendance.map((row, i) => {
+                                const emp = employees.find(e => e.emp_id === row.empId);
+                                const isTemp = emp?.staff_type === 'Temporary';
+                                return (
+                                    <tr key={i} style={{
+                                        borderBottom: '1px solid var(--glass-border)',
+                                        background: isTemp
+                                            ? 'rgba(245, 158, 11, 0.05)'
+                                            : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                    }}>
+                                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
+                                        <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
+                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                {row.name}
+                                                {isTemp && (
+                                                    <span style={{
+                                                        fontSize: '0.65rem',
+                                                        padding: '0.1rem 0.3rem',
+                                                        background: 'rgba(245, 158, 11, 0.1)',
+                                                        color: '#f59e0b',
+                                                        border: '1px solid rgba(245, 158, 11, 0.2)',
+                                                        borderRadius: '0.25rem',
+                                                        fontWeight: 700
+                                                    }}>TEMP</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '0.25rem',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600,
+                                                display: 'inline-block',
+                                                background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                            }}>
+                                                {row.attendance_status || 'Present'}
+                                            </div>
+                                            {row.leave_reason && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.leave_reason}>{row.leave_reason}</div>}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div>
+                                            {(row.attendance_status === 'Present' || !row.attendance_status) && row.hoursWorked < payrollConfig.standard_daily_hours && <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>Short Shift</span>}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {(() => {
+                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                return displayOT > 0 ? (
+                                                    <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
+                                                        +{displayOT.toFixed(2)}h
+                                                    </span>
+                                                ) : '-';
+                                            })()}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {(() => {
+                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                return otPay > 0 ? (
+                                                    <span style={{ color: '#f59e0b' }}>{formatCurrency(otPay)}</span>
+                                                ) : '-';
+                                            })()}
+                                        </td>
+                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444' }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>{formatCurrency((row.daily_wage || row.dailyWage) - (row.deductions || 0))}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                                                <button
+                                                    onClick={() => { setEditingRecord(row); setShowManualEntry(true); }}
+                                                    style={{
+                                                        padding: '0.4rem',
+                                                        background: 'rgba(59, 130, 246, 0.1)',
+                                                        border: 'none',
+                                                        borderRadius: '0.4rem',
+                                                        color: '#3b82f6',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title="Edit Log"
+                                                >
+                                                    <Pencil size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(row)}
+                                                    style={{
+                                                        padding: '0.4rem',
+                                                        background: 'rgba(239, 68, 68, 0.1)',
+                                                        border: 'none',
+                                                        borderRadius: '0.4rem',
+                                                        color: '#ef4444',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title="Delete Log"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                             {filteredAttendance.length === 0 && (
                                 <tr>
                                     <td colSpan={13} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -897,7 +985,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             {(showManualEntry || editingRecord) && (
                 <ManualEntryModal
                     onClose={() => { setShowManualEntry(false); setEditingRecord(null); }}
-                    onSave={fetchAttendance}
+                    onSave={() => { fetchAttendance(); fetchEmployees(); }}
                     config={payrollConfig}
                     employees={employees}
                     initialData={editingRecord}
@@ -920,7 +1008,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
         deductions: initialData?.deductions || 0,
         deductionReason: initialData?.deduction_reason || '',
         attendance_status: initialData?.attendance_status || 'Present',
-        leave_reason: initialData?.leave_reason || ''
+        leave_reason: initialData?.leave_reason || '',
+        isNewTemp: false
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -948,6 +1037,29 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
 
 
             const isPresent = formData.attendance_status === 'Present';
+
+            // --- Quick Entry: Auto-create Temporary Employee ---
+            if (formData.isNewTemp && !initialData) {
+                const { data: existingEmp } = await supabase
+                    .from('employees')
+                    .select('id')
+                    .eq('emp_id', formData.empId)
+                    .single();
+
+                if (!existingEmp) {
+                    const { error: empError } = await supabase
+                        .from('employees')
+                        .insert([{
+                            emp_id: formData.empId,
+                            name: formData.empName,
+                            hourly_rate: parseFloat(formData.rate),
+                            staff_type: 'Temporary',
+                            is_active: true
+                        }]);
+                    if (empError) throw new Error("Could not create temporary employee: " + empError.message);
+                }
+            }
+
             let totalH = 0;
             let regH = 0;
             let otH = 0;
@@ -1037,6 +1149,27 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Name</label>
                             <input type="text" required value={formData.empName} onChange={e => setFormData({ ...formData, empName: e.target.value })} placeholder="Full Name" style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem' }} />
+                            {!initialData && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    marginTop: '0.5rem',
+                                    padding: formData.isNewTemp ? '0.4rem' : '0',
+                                    background: formData.isNewTemp ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                                    borderRadius: '0.25rem',
+                                    border: formData.isNewTemp ? '1px solid rgba(245, 158, 11, 0.2)' : 'none'
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        id="isNewTemp"
+                                        checked={formData.isNewTemp}
+                                        onChange={e => setFormData({ ...formData, isNewTemp: e.target.checked })}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="isNewTemp" style={{ fontSize: '0.75rem', color: '#f59e0b', cursor: 'pointer', fontWeight: 700 }}>New Temporary Staff</label>
+                                </div>
+                            )}
                         </div>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Hourly Rate (₹)</label>
@@ -1066,18 +1199,46 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
                         </div>
                     </div>
 
-                    {(employees || []).find(e => e.emp_id === formData.empId) && (
-                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.4rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Role / Designation</div>
-                                <div style={{ fontSize: '0.9rem' }}>{employees.find(e => e.emp_id === formData.empId).role || 'Not specified'}</div>
+                    {(() => {
+                        const existingEmp = (employees || []).find(e => e.emp_id === formData.empId);
+                        const empToDisplay = existingEmp || null;
+                        const isTemp = empToDisplay?.staff_type === 'Temporary' || formData.isNewTemp;
+
+                        return (
+                            <div style={{
+                                marginBottom: '1.5rem',
+                                padding: '1rem',
+                                background: isTemp ? 'rgba(245, 158, 11, 0.05)' : 'rgba(255,255,255,0.02)',
+                                borderRadius: '0.4rem',
+                                border: isTemp ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid rgba(255,255,255,0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Details</h4>
+                                    {isTemp && (
+                                        <span style={{
+                                            fontSize: '0.65rem',
+                                            padding: '0.1rem 0.4rem',
+                                            background: '#f59e0b',
+                                            color: '#000',
+                                            borderRadius: '1rem',
+                                            fontWeight: 800,
+                                            textTransform: 'uppercase'
+                                        }}>Temporary Staff</span>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Role / Designation</div>
+                                        <div style={{ fontSize: '0.9rem' }}>{empToDisplay?.role || (formData.isNewTemp ? 'Casual Worker' : 'Not specified')}</div>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Department</div>
+                                        <div style={{ fontSize: '0.9rem' }}>{empToDisplay?.department || (formData.isNewTemp ? 'Production' : 'Not specified')}</div>
+                                    </div>
+                                </div>
                             </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Department</div>
-                                <div style={{ fontSize: '0.9rem' }}>{employees.find(e => e.emp_id === formData.empId).department || 'Not specified'}</div>
-                            </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {formData.attendance_status === 'Present' ? (
                         <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>

@@ -24,6 +24,7 @@ const EmployeeMaster = () => {
         account_no: '',
         ifsc_code: '',
         hourly_rate: '',
+        staff_type: 'Permanent',
         is_active: true
     });
 
@@ -86,6 +87,7 @@ const EmployeeMaster = () => {
                 account_no: emp.account_no || '',
                 ifsc_code: emp.ifsc_code || '',
                 hourly_rate: emp.hourly_rate,
+                staff_type: emp.staff_type || 'Permanent',
                 is_active: emp.is_active ?? true
             });
         } else {
@@ -105,6 +107,7 @@ const EmployeeMaster = () => {
                 account_no: '',
                 ifsc_code: '',
                 hourly_rate: '',
+                staff_type: 'Permanent',
                 is_active: true
             });
         }
@@ -128,6 +131,7 @@ const EmployeeMaster = () => {
                 account_no: formData.account_no,
                 ifsc_code: formData.ifsc_code,
                 hourly_rate: parseFloat(formData.hourly_rate),
+                staff_type: formData.staff_type,
                 is_active: formData.is_active
             };
 
@@ -219,6 +223,7 @@ const EmployeeMaster = () => {
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Contact info</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Hourly Rate</th>
+                            <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Type</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>Actions</th>
                         </tr>
                     </thead>
@@ -262,6 +267,19 @@ const EmployeeMaster = () => {
                                         <span style={{ color: '#fff', fontWeight: 600, fontSize: '1rem' }}>₹{emp.hourly_rate}</span>
                                         <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>/ hr</span>
                                     </div>
+                                </td>
+                                <td style={{ padding: '1rem' }}>
+                                    <span style={{
+                                        padding: '0.2rem 0.6rem',
+                                        borderRadius: '0.5rem',
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600,
+                                        background: emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(168, 85, 247, 0.1)',
+                                        color: emp.staff_type === 'Temporary' ? '#f59e0b' : '#a855f7',
+                                        border: `1px solid ${emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(168, 85, 247, 0.2)'}`
+                                    }}>
+                                        {emp.staff_type || 'Permanent'}
+                                    </span>
                                 </td>
                                 <td style={{ padding: '1rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -474,27 +492,41 @@ const EmployeeMaster = () => {
                                         </div>
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                        <input
-                                            type="checkbox"
-                                            id="is_active"
-                                            checked={formData.is_active}
-                                            onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
-                                            style={{ width: '1.25rem', height: '1.25rem' }}
-                                        />
-                                        <label htmlFor="is_active" style={{ fontSize: '0.875rem', cursor: 'pointer' }}>Employee is currently Active</label>
+                                    <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Staff Type</label>
+                                            <select
+                                                required
+                                                value={formData.staff_type}
+                                                onChange={e => setFormData({ ...formData, staff_type: e.target.value })}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                            >
+                                                <option value="Permanent" style={{ background: '#1e293b' }}>Permanent Staff</option>
+                                                <option value="Temporary" style={{ background: '#1e293b' }}>Temporary Staff</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1.25rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                id="is_active"
+                                                checked={formData.is_active}
+                                                onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
+                                                style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer' }}
+                                            />
+                                            <label htmlFor="is_active" style={{ fontSize: '0.875rem', color: '#fff', cursor: 'pointer' }}>Active Employee</label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <button type="submit" disabled={loading} className="btn-action btn-primary" style={{ width: '100%', background: '#3b82f6', justifyContent: 'center' }}>
+                            <button type="submit" disabled={loading} className="btn-action btn-primary" style={{ width: '100%', background: '#3b82f6', justifyContent: 'center', marginTop: '2rem' }}>
                                 {loading ? 'Saving...' : <><Save size={18} /> Save Employee Details</>}
                             </button>
                         </form>
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 };
 

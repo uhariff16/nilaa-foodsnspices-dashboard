@@ -424,10 +424,17 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         let tempTotalCost = 0;
         let tempTotalDeductions = 0;
 
+        let permTotalHours = 0;
+        let permTotalOTHours = 0;
+        let permTotalOTPay = 0;
+        let permTotalCost = 0;
+        let permTotalDeductions = 0;
+
         const currentLogs = filteredAttendance;
         currentLogs.forEach(r => {
             const emp = employees.find(e => e.emp_id === r.empId);
             const isTemp = emp?.staff_type === 'Temporary';
+            const isPerm = !emp || emp.staff_type === 'Permanent' || !emp.staff_type;
 
             const hours = parseFloat(r.hoursWorked) || 0;
             const ot = parseFloat(r.otHours) || Math.max(0, hours - parseFloat(payrollConfig.standard_daily_hours || 8));
@@ -443,24 +450,32 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             totalCost += cost;
             totalDeductions += deductions;
 
-            // Add to temp if applicable
+            // Add to staff type specific metrics
             if (isTemp) {
                 tempTotalHours += hours;
                 tempTotalOTHours += ot;
                 tempTotalOTPay += otPay;
                 tempTotalCost += cost;
                 tempTotalDeductions += deductions;
+            } else {
+                permTotalHours += hours;
+                permTotalOTHours += ot;
+                permTotalOTPay += otPay;
+                permTotalCost += cost;
+                permTotalDeductions += deductions;
             }
         });
 
         const netPayout = totalCost - totalDeductions;
         const tempNetPayout = tempTotalCost - tempTotalDeductions;
+        const permNetPayout = permTotalCost - permTotalDeductions;
 
         const s = {
             totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout,
             presentCount, leaveCount, absentCount, contextDate, totalDeductions,
             tempPresentCount,
-            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout
+            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout,
+            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permNetPayout
         };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
@@ -732,30 +747,57 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 </div>
             </div>
 
-            {/* Temporary Staff Specifics */}
-            <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                Temporary Staff Metrics
+            {/* Temporary Staff Metrics */}
+            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                Temporary Staff (Field Metrics)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempTotalCost)}</div>
+                </div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
+                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
+                </div>
+            </div>
+
+            {/* Permanent Staff Metrics */}
+            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                Permanent Staff (Core Team)
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Hours</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                    <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
                 </div>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp OT Hours</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                    <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
                 </div>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp OT Pay</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
                 </div>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Pay (Gross)</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempTotalCost)}</div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permTotalCost)}</div>
                 </div>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Temp Net Pay</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
+                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
                 </div>
             </div>
 
@@ -821,18 +863,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         )}
                     </div>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                        <thead>
-                            <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', whiteSpace: 'nowrap' }}>Date</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 4</th>
+                <div style={{ overflowY: 'auto', maxHeight: '500px', borderBottomLeftRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0f172a' }}>
+                            <tr style={{ textAlign: 'left' }}>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', whiteSpace: 'nowrap' }}>Date</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Emp ID</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Employee</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Status</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 1</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 2</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 3</th>
+                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 4</th>
                                 <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
                                 <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
                                 <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>

@@ -10,6 +10,7 @@ const AdminUserAccess = () => {
     // Add User Form State
     const [newUserEmail, setNewUserEmail] = useState('');
     const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin'
+    const [canAccessAttendance, setCanAccessAttendance] = useState(false);
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -39,13 +40,15 @@ const AdminUserAccess = () => {
 
             const { error } = await supabase.from('user_roles').insert([{
                 email: newUserEmail,
-                role: newUserRole
+                role: newUserRole,
+                can_access_attendance: newUserRole === 'admin' || canAccessAttendance
             }]);
 
             if (error) throw error;
 
-            setStatus({ type: 'success', message: `Full access granted to ${newUserEmail}.` });
+            setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
             setNewUserEmail('');
+            setCanAccessAttendance(false);
             fetchUsers();
         } catch (error) {
             console.error("Add Error:", error);
@@ -70,6 +73,26 @@ const AdminUserAccess = () => {
             setLoading(false);
         }
     };
+
+    const toggleAttendanceAccess = async (user) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('user_roles')
+                .update({ can_access_attendance: !user.can_access_attendance })
+                .eq('email', user.email);
+
+            if (error) throw error;
+            setStatus({ type: 'success', message: "Permission updated." });
+            fetchUsers();
+        } catch (error) {
+            console.error("Update Error:", error);
+            setStatus({ type: 'error', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     return (
         <div className="admin-wrapper" style={{ minHeight: '600px' }}>
@@ -150,6 +173,22 @@ const AdminUserAccess = () => {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Attendance Access Toggle for non-admins */}
+                            {newUserRole === 'viewer' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#0f1219', borderRadius: '0.375rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="attendanceAccess"
+                                        checked={canAccessAttendance}
+                                        onChange={(e) => setCanAccessAttendance(e.target.checked)}
+                                        style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="attendanceAccess" style={{ color: 'white', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                        Grant access to Time & Attendance
+                                    </label>
+                                </div>
+                            )}
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
@@ -183,6 +222,7 @@ const AdminUserAccess = () => {
                                 <tr>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Attendance</th>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
                                 </tr>
                             </thead>
@@ -207,6 +247,23 @@ const AdminUserAccess = () => {
                                                     <Eye size={12} /> Viewer
                                                 </span>
                                             )}
+                                        </td>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                            <div
+                                                onClick={() => user.role !== 'admin' && toggleAttendanceAccess(user)}
+                                                style={{
+                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    color: (user.can_access_attendance || user.role === 'admin') ? '#34d399' : '#64748b'
+                                                }}
+                                            >
+                                                {(user.can_access_attendance || user.role === 'admin') ? (
+                                                    <CheckCircle size={18} />
+                                                ) : (
+                                                    <X size={18} />
+                                                )}
+                                            </div>
                                         </td>
                                         {/* Removed Joined Date to save space if needed, or keeping it but with less padding */}
                                         <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>

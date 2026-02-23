@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import SummaryCards, { Card } from './SummaryCards';
 import Charts from './Charts';
@@ -54,13 +55,13 @@ const getValueColor = (value, type) => {
 
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
-    const { logout, isAdmin } = useAuth();
+    const { logout, isAdmin, canAccessAttendance } = useAuth();
+    const navigate = useNavigate();
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
 
     // Theme State
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
-    const [showAttendance, setShowAttendance] = useState(false); // [NEW] Time & Attendance Toggle
 
     // Mobile State
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1212,10 +1213,7 @@ const Dashboard = (props) => {
         return `${d}-${m}-${y}`;
     };
 
-    // [NEW] Time & Attendance View
-    if (showAttendance) {
-        return <TimeAttendance onBack={() => setShowAttendance(false)} />;
-    }
+    // Time & Attendance View (Removed: Now standalone)
 
     // --- Mobile View Render (Safe Position: After all Hooks) ---
     if (isMobile && mobileLayoutEnabled) {
@@ -1379,21 +1377,23 @@ const Dashboard = (props) => {
                             {theme === 'dark' ? 'Light' : 'Dark'}
                         </button>
 
-                        {/* [NEW] Time & Attendance Toggle */}
-                        <button
-                            className="btn-primary"
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                background: 'transparent',
-                                border: '1px solid var(--glass-border)',
-                                color: 'var(--text-primary)',
-                                boxShadow: 'none'
-                            }}
-                            onClick={() => setShowAttendance(true)}
-                        >
-                            <Clock size={18} />
-                            Time & Attendance
-                        </button>
+                        {/* [NEW] Time & Attendance standalone navigation */}
+                        {canAccessAttendance && (
+                            <button
+                                className="btn-primary"
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    background: 'transparent',
+                                    border: '1px solid var(--glass-border)',
+                                    color: 'var(--text-primary)',
+                                    boxShadow: 'none'
+                                }}
+                                onClick={() => navigate('/attendance')}
+                            >
+                                <Clock size={18} />
+                                Time & Attendance
+                            </button>
+                        )}
 
                         {/* Removed Add Files/Folder Buttons as per request */}
                     </div>
@@ -1912,7 +1912,7 @@ const Dashboard = (props) => {
                                     alignItems: 'center',
                                     cursor: 'pointer'
                                 }}
-                                    onClick={() => setShowAttendance(true)}
+                                    onClick={() => navigate('/attendance')}
                                 >
                                     <div>
                                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 0.25rem 0' }}>Payroll Preview</p>

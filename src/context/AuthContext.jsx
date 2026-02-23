@@ -6,13 +6,14 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [role, setRole] = useState(null);
+    const [canAccessAttendance, setCanAccessAttendance] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const fetchUserRole = async (email) => {
         // EMERGENCY OVERRIDE: Always make uhariff@gmail.com an admin
         if (email === 'uhariff@gmail.com') {
             console.log("Emergency Admin Access Granted");
-            return 'admin';
+            return { role: 'admin', can_access_attendance: true };
         }
 
         try {
@@ -25,7 +26,7 @@ export const AuthProvider = ({ children }) => {
 
             const fetchPromise = supabase
                 .from('user_roles')
-                .select('role')
+                .select('role, can_access_attendance')
                 .eq('email', email)
                 .single();
 
@@ -34,13 +35,16 @@ export const AuthProvider = ({ children }) => {
 
             if (error || !data) {
                 console.warn("Role fetch warning/error:", error);
-                return 'viewer';
+                return { role: 'viewer', can_access_attendance: false };
             }
             console.log("Role fetched successfully:", data.role);
-            return data.role;
+            return {
+                role: data.role,
+                can_access_attendance: data.can_access_attendance || false
+            };
         } catch (err) {
             console.error("Role fetch error/timeout:", err);
-            return 'viewer'; // Safe fallback
+            return { role: 'viewer', can_access_attendance: false }; // Safe fallback
         }
     };
 
@@ -51,11 +55,13 @@ export const AuthProvider = ({ children }) => {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user) {
                     setUser(session.user);
-                    const userRole = await fetchUserRole(session.user.email);
-                    setRole(userRole);
+                    const authData = await fetchUserRole(session.user.email);
+                    setRole(authData.role);
+                    setCanAccessAttendance(authData.can_access_attendance);
                 } else {
                     setUser(null);
                     setRole(null);
+                    setCanAccessAttendance(false);
                 }
             } catch (error) {
                 console.error("Session check error:", error);
@@ -83,11 +89,13 @@ export const AuthProvider = ({ children }) => {
             if (session?.user) {
                 setUser(session.user);
                 // Only fetch role if we don't have it or it's a new user
-                const userRole = await fetchUserRole(session.user.email);
-                setRole(userRole);
+                const authData = await fetchUserRole(session.user.email);
+                setRole(authData.role);
+                setCanAccessAttendance(authData.can_access_attendance);
             } else {
                 setUser(null);
                 setRole(null);
+                setCanAccessAttendance(false);
             }
             clearTimeout(timeout);
             setLoading(false);
@@ -146,10 +154,19 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error;
         setUser(null);
         setRole(null);
+        setCanAccessAttendance(false);
     };
 
     return (
-        <AuthContext.Provider value={{ user, role, login, logout, loading, isAdmin: role === 'admin' }}>
+        <AuthContext.Provider value={{
+            user,
+            role,
+            login,
+            logout,
+            loading,
+            isAdmin: role === 'admin',
+            canAccessAttendance: role === 'admin' || canAccessAttendance
+        }}>
             {children}
         </AuthContext.Provider>
     );

@@ -4,6 +4,7 @@ import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
 import AdminPanel from './components/admin/AdminPanel';
 import Login from './components/Login';
+import AttendancePage from './components/AttendancePage';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -39,8 +40,8 @@ class ErrorBoundary extends React.Component {
 }
 
 // Protected Route Wrapper
-const ProtectedRoute = ({ children, adminOnly = false }) => {
-    const { user, role, loading } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false }) => {
+    const { user, role, loading, canAccessAttendance, logout } = useAuth();
     const location = useLocation();
 
     if (loading) {
@@ -52,7 +53,27 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     }
 
     if (adminOnly && role !== 'admin') {
-        return <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontWeight: 'bold', fontSize: '1.25rem' }}>Access Denied: Admins Only</div>;
+        return (
+            <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', color: 'white' }}>
+                <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.5rem' }}>Access Denied: Admins Only</div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={() => window.location.href = '/'} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Back to Dashboard</button>
+                    <button onClick={logout} className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>Logout & Change User</button>
+                </div>
+            </div>
+        );
+    }
+
+    if (attendanceOnly && !canAccessAttendance) {
+        return (
+            <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', color: 'white' }}>
+                <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.5rem' }}>Access Denied: Attendance Access Required</div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={() => window.location.href = '/'} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Back to Dashboard</button>
+                    <button onClick={logout} className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>Logout & Change User</button>
+                </div>
+            </div>
+        );
     }
 
     return children;
@@ -288,6 +309,14 @@ const App = () => {
                             element={
                                 <ProtectedRoute adminOnly={true}>
                                     <AdminPanel />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/attendance"
+                            element={
+                                <ProtectedRoute attendanceOnly={true}>
+                                    <AttendancePage />
                                 </ProtectedRoute>
                             }
                         />

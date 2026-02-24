@@ -6,6 +6,8 @@ const AdminUserAccess = () => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState({ type: 'idle', message: '' });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingEmail, setEditingEmail] = useState(null);
 
     // Add User Form State
     const [newUserEmail, setNewUserEmail] = useState('');
@@ -77,20 +79,35 @@ const AdminUserAccess = () => {
         setStatus({ type: 'idle', message: '' });
 
         try {
-            const { data: existing } = await supabase.from('user_roles').select('id').eq('email', newUserEmail).single();
-            if (existing) throw new Error("User with this email already exists.");
+            if (isEditing) {
+                const { error } = await supabase
+                    .from('user_roles')
+                    .update({
+                        role: newUserRole,
+                        permissions: permissions,
+                        can_access_attendance: permissions.attendance
+                    })
+                    .eq('email', editingEmail);
 
-            const { error } = await supabase.from('user_roles').insert([{
-                email: newUserEmail,
-                role: newUserRole,
-                permissions: permissions,
-                can_access_attendance: permissions.attendance
-            }]);
+                if (error) throw error;
+                setStatus({ type: 'success', message: `Permissions updated for ${editingEmail}.` });
+                cancelEdit();
+            } else {
+                const { data: existing } = await supabase.from('user_roles').select('id').eq('email', newUserEmail).single();
+                if (existing) throw new Error("User with this email already exists.");
 
-            if (error) throw error;
+                const { error } = await supabase.from('user_roles').insert([{
+                    email: newUserEmail,
+                    role: newUserRole,
+                    permissions: permissions,
+                    can_access_attendance: permissions.attendance
+                }]);
 
-            setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
-            setNewUserEmail('');
+                if (error) throw error;
+                setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
+                setNewUserEmail('');
+            }
+
             setPermissions({
                 overview: true,
                 sales: false, expenses: false, procurement: false,
@@ -99,11 +116,38 @@ const AdminUserAccess = () => {
             });
             fetchUsers();
         } catch (error) {
-            console.error("Add Error:", error);
+            console.error("Operation Error:", error);
             setStatus({ type: 'error', message: error.message });
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleEditUser = (user) => {
+        setIsEditing(true);
+        setEditingEmail(user.email);
+        setNewUserEmail(user.email);
+        setNewUserRole(user.role);
+        setPermissions(user.permissions || {
+            overview: true,
+            sales: false, expenses: false, procurement: false,
+            stock: false, production: false, customers: false,
+            simulator: false, attendance: false
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const cancelEdit = () => {
+        setIsEditing(false);
+        setEditingEmail(null);
+        setNewUserEmail('');
+        setNewUserRole('viewer');
+        setPermissions({
+            overview: true,
+            sales: false, expenses: false, procurement: false,
+            stock: false, production: false, customers: false,
+            simulator: false, attendance: false
+        });
     };
 
     const handleDeleteUser = async (email) => {
@@ -167,12 +211,16 @@ const AdminUserAccess = () => {
                 {/* Grant Access Card - Clean & Solid */}
                 <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
-                        <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: '#60a5fa' }}>
-                            <UserPlus size={20} />
+                        <div style={{ padding: '0.5rem', background: isEditing ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: isEditing ? '#34d399' : '#60a5fa' }}>
+                            {isEditing ? <Shield size={20} /> : <UserPlus size={20} />}
                         </div>
                         <div>
-                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Invite Team Member</h3>
-                            <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>Grant access via email address.</p>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>
+                                {isEditing ? 'Update Member Access' : 'Invite Team Member'}
+                            </h3>
+                            <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>
+                                {isEditing ? `Modifying permissions for ${editingEmail}` : 'Grant access via email address.'}
+                            </p>
                         </div>
                     </div>
 
@@ -186,12 +234,13 @@ const AdminUserAccess = () => {
                                     <input
                                         type="email"
                                         required
+                                        disabled={isEditing}
                                         value={newUserEmail}
                                         onChange={e => setNewUserEmail(e.target.value)}
                                         placeholder="colleague@example.com"
-                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem' }}
-                                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
-                                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                        style={{ width: '100%', background: isEditing ? 'rgba(15, 18, 25, 0.5)' : '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: isEditing ? '#94a3b8' : 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem', cursor: isEditing ? 'not-allowed' : 'text' }}
+                                        onFocus={e => !isEditing && (e.target.style.borderColor = '#3b82f6')}
+                                        onBlur={e => !isEditing && (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
                                     />
                                 </div>
                             </div>
@@ -282,15 +331,24 @@ const AdminUserAccess = () => {
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+                            {isEditing && (
+                                <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}
+                                >
+                                    Cancel
+                                </button>
+                            )}
                             <button
                                 type="submit"
                                 disabled={loading || !newUserEmail}
-                                className="btn-action btn-sales"
-                                style={{ width: '100%', padding: '0.75rem', opacity: loading || !newUserEmail ? 0.5 : 1, cursor: loading || !newUserEmail ? 'not-allowed' : 'pointer', justifyContent: 'center' }}
+                                className={`btn-action ${isEditing ? 'btn-production' : 'btn-sales'}`}
+                                style={{ flex: isEditing ? 2 : 1, padding: '0.75rem', opacity: loading || !newUserEmail ? 0.5 : 1, cursor: loading || !newUserEmail ? 'not-allowed' : 'pointer', justifyContent: 'center' }}
                             >
                                 {loading && <RefreshCw className="animate-spin" size={14} />}
-                                {loading ? 'Processing...' : 'Grant Access'}
+                                {loading ? 'Processing...' : (isEditing ? 'Update Access' : 'Grant Access')}
                             </button>
                         </div>
                     </form>
@@ -363,15 +421,24 @@ const AdminUserAccess = () => {
                                         </td>
                                         {/* Removed Joined Date to save space if needed, or keeping it but with less padding */}
                                         <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                            <button
-                                                onClick={() => handleDeleteUser(user.email)}
-                                                style={{ color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.25rem', transition: 'all 0.2s' }}
-                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
-                                                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
-                                                title="Revoke Access"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                <button
+                                                    onClick={() => handleEditUser(user)}
+                                                    style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.375rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Edit Access"
+                                                >
+                                                    <Shield size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(user.email)}
+                                                    style={{ color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.375rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                                                    title="Revoke Access"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

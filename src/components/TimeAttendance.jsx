@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil } from 'lucide-react';
+import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil, User, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 
 // Initial helper for global use
@@ -46,6 +47,7 @@ const formatTimeFromDec = (decHours) => {
 }
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
+    const { user, role, logout: authLogout } = useAuth();
     const [attendanceData, setAttendanceData] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [payrollConfig, setPayrollConfig] = useState({
@@ -646,30 +648,112 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     return (
         <div className="attendance-container animate-fade-in" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', color: '#fff' }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '2.5rem',
+                paddingBottom: '1.5rem',
+                borderBottom: '1px solid var(--glass-border)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                     {!hideBack && onBack && (
-                        <button onClick={onBack} className="btn-icon">
+                        <button onClick={onBack} className="btn-icon" style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            padding: '0.6rem',
+                            borderRadius: '0.75rem',
+                            border: '1px solid var(--glass-border)'
+                        }}>
                             <ArrowLeft size={20} />
                         </button>
                     )}
                     <div>
-                        <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 700 }}>NFS Time & Attendance</h1>
+                        <h1 style={{
+                            margin: 0,
+                            fontSize: '2rem',
+                            fontWeight: 800,
+                            letterSpacing: '-0.5px',
+                            background: 'linear-gradient(135deg, #fff 0%, #94a3b8 100%)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                        }}>NFS Time & Attendance</h1>
+                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Management Dashboard
+                        </p>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={() => setShowManualEntry(true)} className="btn-action btn-outline">
-                        <FileText size={18} />
-                        Manual Entry
-                    </button>
-                    <button onClick={() => document.getElementById('attendance-upload').click()} className="btn-action btn-outline" style={{ background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}>
-                        <Upload size={18} />
-                        Upload Sheet
-                    </button>
-                    <button onClick={downloadTemplate} className="btn-action btn-outline">
-                        <Download size={18} />
-                        Download Attendance Logs
-                    </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    {/* Action Group */}
+                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        <button onClick={() => setShowManualEntry(true)} className="btn-action btn-outline" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem' }}>
+                            <FileText size={18} />
+                            Manual Entry
+                        </button>
+                        <button onClick={() => document.getElementById('attendance-upload').click()} className="btn-action btn-outline" style={{
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            borderColor: 'rgba(59, 130, 246, 0.2)',
+                            color: '#60a5fa',
+                            borderRadius: '0.75rem',
+                            padding: '0.6rem 1rem'
+                        }}>
+                            <Upload size={18} />
+                            Upload Sheet
+                        </button>
+                        <button onClick={downloadTemplate} className="btn-action btn-outline" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem' }}>
+                            <Download size={18} />
+                            Report
+                        </button>
+                    </div>
+
+                    {/* Divider */}
+                    <div style={{ width: '1px', height: '40px', background: 'var(--glass-border)' }} />
+
+                    {/* User Profile */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
+                                {user?.email?.split('@')[0]}
+                            </div>
+                            <div style={{
+                                fontSize: '0.7rem',
+                                color: role === 'admin' ? '#f59e0b' : '#60a5fa',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                            }}>
+                                {role || 'Viewer'}
+                            </div>
+                        </div>
+                        <div style={{
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '12px',
+                            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.1))',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#3b82f6'
+                        }}>
+                            <User size={22} />
+                        </div>
+                        <button
+                            onClick={authLogout}
+                            className="btn-icon"
+                            style={{
+                                color: '#ef4444',
+                                background: 'rgba(239, 68, 68, 0.05)',
+                                border: '1px solid rgba(239, 68, 68, 0.1)',
+                                padding: '0.6rem',
+                                borderRadius: '10px'
+                            }}
+                            title="Log Out"
+                        >
+                            <LogOut size={18} />
+                        </button>
+                    </div>
+
                     {isSaving && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', fontSize: '0.85rem' }}>
                             <Clock className="animate-spin" size={16} />

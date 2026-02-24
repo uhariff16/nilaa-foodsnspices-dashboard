@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, Database, Users, PlusCircle, ArrowLeft, Layers, LayoutGrid, Trash2, Settings } from 'lucide-react';
+import { Upload, Database, Users, PlusCircle, ArrowLeft, Layers, LayoutGrid, Trash2, Settings, User, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import AdminDataIngestion from './AdminDataIngestion';
 import DataManager from './DataManager';
 import AdminUserAccess from './AdminUserAccess';
@@ -11,6 +12,7 @@ import HumanResources from './HumanResources';
 
 const AdminPanel = () => {
     const navigate = useNavigate();
+    const { logout, user, role } = useAuth();
     const [activeTab, setActiveTab] = useState('upload');
 
     // Matching the Dashboard's "Pill" style navigation
@@ -81,6 +83,68 @@ const AdminPanel = () => {
                                 </button>
                             );
                         })}
+                    </div>
+
+                    {/* User Profile & Logout - Matching Dashboard Style */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.35rem 0.75rem',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '0.75rem',
+                        }}>
+                            <div style={{
+                                width: '2rem',
+                                height: '2rem',
+                                borderRadius: '0.5rem',
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                border: '1px solid rgba(37, 99, 235, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#3b82f6'
+                            }}>
+                                <User size={16} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'white', lineHeight: 1.2 }}>
+                                    {user?.email?.split('@')[0] || 'Admin'}
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'capitalize' }}>
+                                    {role || 'Administrator'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={logout}
+                            title="Logout"
+                            style={{
+                                padding: '0.5rem',
+                                borderRadius: '0.5rem',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                        >
+                            <LogOut size={18} />
+                        </button>
                     </div>
                 </div>
             </div>

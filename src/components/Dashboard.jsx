@@ -13,7 +13,7 @@ import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
@@ -55,7 +55,7 @@ const getValueColor = (value, type) => {
 
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
-    const { logout, isAdmin, canAccessAttendance } = useAuth();
+    const { logout, user, role, isAdmin, canAccessAttendance } = useAuth();
     const navigate = useNavigate();
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
@@ -1388,7 +1388,7 @@ const Dashboard = (props) => {
                                     color: 'var(--text-primary)',
                                     boxShadow: 'none'
                                 }}
-                                onClick={() => navigate('/attendance')}
+                                onClick={() => window.open('/attendance', '_blank')}
                             >
                                 <Clock size={18} />
                                 Time & Attendance
@@ -1433,9 +1433,68 @@ const Dashboard = (props) => {
                             <Settings size={18} style={{ marginRight: '0.5rem' }} /> Admin
                         </button>
                     )}
-                    <button className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--glass-border)', color: 'var(--danger)', boxShadow: 'none' }} onClick={logout}>
-                        <LogOut size={18} style={{ marginRight: '0.5rem' }} /> Logout
-                    </button>
+
+                    {/* User Profile Display */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        padding: '0.4rem 1rem',
+                        background: 'var(--glass-highlight)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '1rem',
+                        backdropFilter: 'blur(10px)',
+                        marginLeft: '0.5rem'
+                    }}>
+                        <div style={{
+                            width: '2.5rem',
+                            height: '2.5rem',
+                            borderRadius: '0.75rem',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'rgb(59, 130, 246)'
+                        }}>
+                            <User size={20} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                                {user?.email?.split('@')[0] || 'User'}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                                {role || 'Staff'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={logout}
+                            title="Logout"
+                            style={{
+                                marginLeft: '0.5rem',
+                                padding: '0.5rem',
+                                borderRadius: '0.5rem',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                        >
+                            <LogOut size={16} />
+                        </button>
+                    </div>
                 </div>
             </header >
 

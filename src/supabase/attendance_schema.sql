@@ -62,6 +62,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admin Update Access' AND tablename = 'employees') THEN
         CREATE POLICY "Admin Update Access" ON public.employees FOR UPDATE USING (true);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admin Delete Access' AND tablename = 'employees') THEN
+        CREATE POLICY "Admin Delete Access" ON public.employees FOR DELETE USING (true);
+    END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Access' AND tablename = 'employee_attendance') THEN
         CREATE POLICY "Public Read Access" ON public.employee_attendance FOR SELECT USING (true);

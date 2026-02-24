@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Mail, Loader2, Play } from 'lucide-react';
 import logo from '../assets/logo.png';
 
@@ -11,6 +11,8 @@ const Login = () => {
     const [isLoading, setIsLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    const from = location.state?.from?.pathname || "/";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -19,7 +21,7 @@ const Login = () => {
 
         try {
             await login(email, password);
-            navigate('/');
+            navigate(from, { replace: true });
         } catch (err) {
             console.error("Login failed:", err);
             setError(err.message);

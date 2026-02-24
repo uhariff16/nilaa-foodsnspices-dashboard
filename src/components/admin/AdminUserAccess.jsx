@@ -6,55 +6,11 @@ const AdminUserAccess = () => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState({ type: 'idle', message: '' });
-    const [isEditing, setIsEditing] = useState(false);
-    const [editingEmail, setEditingEmail] = useState(null);
 
     // Add User Form State
     const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin' | 'power_user'
-    const [permissions, setPermissions] = useState({
-        overview: true,
-        sales: false,
-        expenses: false,
-        procurement: false,
-        stock: false,
-        production: false,
-        customers: false,
-        simulator: false,
-        attendance: false
-    });
-
-    const ALL_TABS = [
-        { id: 'overview', label: 'Overview' },
-        { id: 'sales', label: 'Sales' },
-        { id: 'expenses', label: 'Expenses' },
-        { id: 'procurement', label: 'Procurement' },
-        { id: 'stock', label: 'Stock' },
-        { id: 'production', label: 'Production' },
-        { id: 'customers', label: 'Customers' },
-        { id: 'simulator', label: 'Simulator' },
-        { id: 'attendance', label: 'Attendance' }
-    ];
-
-    const handleRoleChange = (role) => {
-        setNewUserRole(role);
-        if (role === 'admin') {
-            setPermissions(Object.fromEntries(ALL_TABS.map(t => [t.id, true])));
-        } else if (role === 'power_user') {
-            setPermissions(Object.fromEntries(ALL_TABS.map(t => [t.id, true])));
-        } else {
-            setPermissions({
-                overview: true,
-                sales: false, expenses: false, procurement: false,
-                stock: false, production: false, customers: false,
-                simulator: false, attendance: false
-            });
-        }
-    };
-
-    const togglePermission = (id) => {
-        setPermissions(prev => ({ ...prev, [id]: !prev[id] }));
-    };
+    const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin'
+    const [canAccessAttendance, setCanAccessAttendance] = useState(false);
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -79,75 +35,27 @@ const AdminUserAccess = () => {
         setStatus({ type: 'idle', message: '' });
 
         try {
-            if (isEditing) {
-                const { error } = await supabase
-                    .from('user_roles')
-                    .update({
-                        role: newUserRole,
-                        permissions: permissions,
-                        can_access_attendance: permissions.attendance
-                    })
-                    .eq('email', editingEmail);
+            const { data: existing } = await supabase.from('user_roles').select('id').eq('email', newUserEmail).single();
+            if (existing) throw new Error("User with this email already exists.");
 
-                if (error) throw error;
-                setStatus({ type: 'success', message: `Permissions updated for ${editingEmail}.` });
-                cancelEdit();
-            } else {
-                const { data: existing } = await supabase.from('user_roles').select('id').eq('email', newUserEmail).single();
-                if (existing) throw new Error("User with this email already exists.");
+            const { error } = await supabase.from('user_roles').insert([{
+                email: newUserEmail,
+                role: newUserRole,
+                can_access_attendance: newUserRole === 'admin' || canAccessAttendance
+            }]);
 
-                const { error } = await supabase.from('user_roles').insert([{
-                    email: newUserEmail,
-                    role: newUserRole,
-                    permissions: permissions,
-                    can_access_attendance: permissions.attendance
-                }]);
+            if (error) throw error;
 
-                if (error) throw error;
-                setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
-                setNewUserEmail('');
-            }
-
-            setPermissions({
-                overview: true,
-                sales: false, expenses: false, procurement: false,
-                stock: false, production: false, customers: false,
-                simulator: false, attendance: false
-            });
+            setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
+            setNewUserEmail('');
+            setCanAccessAttendance(false);
             fetchUsers();
         } catch (error) {
-            console.error("Operation Error:", error);
+            console.error("Add Error:", error);
             setStatus({ type: 'error', message: error.message });
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleEditUser = (user) => {
-        setIsEditing(true);
-        setEditingEmail(user.email);
-        setNewUserEmail(user.email);
-        setNewUserRole(user.role);
-        setPermissions(user.permissions || {
-            overview: true,
-            sales: false, expenses: false, procurement: false,
-            stock: false, production: false, customers: false,
-            simulator: false, attendance: false
-        });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const cancelEdit = () => {
-        setIsEditing(false);
-        setEditingEmail(null);
-        setNewUserEmail('');
-        setNewUserRole('viewer');
-        setPermissions({
-            overview: true,
-            sales: false, expenses: false, procurement: false,
-            stock: false, production: false, customers: false,
-            simulator: false, attendance: false
-        });
     };
 
     const handleDeleteUser = async (email) => {
@@ -169,13 +77,9 @@ const AdminUserAccess = () => {
     const toggleAttendanceAccess = async (user) => {
         setLoading(true);
         try {
-            const newPermissions = { ...user.permissions, attendance: !user.can_access_attendance };
             const { error } = await supabase
                 .from('user_roles')
-                .update({
-                    can_access_attendance: !user.can_access_attendance,
-                    permissions: newPermissions
-                })
+                .update({ can_access_attendance: !user.can_access_attendance })
                 .eq('email', user.email);
 
             if (error) throw error;
@@ -207,20 +111,16 @@ const AdminUserAccess = () => {
                 </div>
             </div>
 
-            <div className="admin-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '2rem' }}>
+            <div className="admin-grid">
                 {/* Grant Access Card - Clean & Solid */}
                 <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
-                        <div style={{ padding: '0.5rem', background: isEditing ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: isEditing ? '#34d399' : '#60a5fa' }}>
-                            {isEditing ? <Shield size={20} /> : <UserPlus size={20} />}
+                        <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: '#60a5fa' }}>
+                            <UserPlus size={20} />
                         </div>
                         <div>
-                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>
-                                {isEditing ? 'Update Member Access' : 'Invite Team Member'}
-                            </h3>
-                            <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>
-                                {isEditing ? `Modifying permissions for ${editingEmail}` : 'Grant access via email address.'}
-                            </p>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Invite Team Member</h3>
+                            <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>Grant access via email address.</p>
                         </div>
                     </div>
 
@@ -234,13 +134,12 @@ const AdminUserAccess = () => {
                                     <input
                                         type="email"
                                         required
-                                        disabled={isEditing}
                                         value={newUserEmail}
                                         onChange={e => setNewUserEmail(e.target.value)}
                                         placeholder="colleague@example.com"
-                                        style={{ width: '100%', background: isEditing ? 'rgba(15, 18, 25, 0.5)' : '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: isEditing ? '#94a3b8' : 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem', cursor: isEditing ? 'not-allowed' : 'text' }}
-                                        onFocus={e => !isEditing && (e.target.style.borderColor = '#3b82f6')}
-                                        onBlur={e => !isEditing && (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem' }}
+                                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                                     />
                                 </div>
                             </div>
@@ -251,104 +150,56 @@ const AdminUserAccess = () => {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                     <button
                                         type="button"
-                                        onClick={() => handleRoleChange('viewer')}
+                                        onClick={() => setNewUserRole('viewer')}
                                         style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Viewer</span>
                                             {newUserRole === 'viewer' && <CheckCircle size={14} />}
                                         </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Limited access</div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Read-only access</div>
                                     </button>
 
                                     <button
                                         type="button"
-                                        onClick={() => handleRoleChange('power_user')}
-                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'power_user' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'power_user' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Power User</span>
-                                            {newUserRole === 'power_user' && <CheckCircle size={14} />}
-                                        </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'power_user' ? '#bfdbfe' : '#64748b' }}>Deep data access</div>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRoleChange('admin')}
+                                        onClick={() => setNewUserRole('admin')}
                                         style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Admin</span>
                                             {newUserRole === 'admin' && <CheckCircle size={14} />}
                                         </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full system access</div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full access</div>
                                     </button>
                                 </div>
                             </div>
 
-                            {/* [NEW] Tab-Level Selection */}
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Granular Tab Access</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem', background: '#0f1219', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    {ALL_TABS.map(tab => (
-                                        <div
-                                            key={tab.id}
-                                            onClick={() => newUserRole !== 'admin' && togglePermission(tab.id)}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.5rem',
-                                                padding: '0.35rem 0.5rem',
-                                                background: permissions[tab.id] ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
-                                                border: '1px solid',
-                                                borderColor: permissions[tab.id] ? 'rgba(37, 99, 235, 0.2)' : 'rgba(255,255,255,0.05)',
-                                                borderRadius: '0.375rem',
-                                                cursor: newUserRole === 'admin' ? 'not-allowed' : 'pointer',
-                                                opacity: newUserRole === 'admin' ? 0.7 : 1,
-                                                transition: 'all 0.2s'
-                                            }}
-                                        >
-                                            <div style={{
-                                                width: '1rem',
-                                                height: '1rem',
-                                                borderRadius: '4px',
-                                                border: '1px solid',
-                                                borderColor: permissions[tab.id] ? '#3b82f6' : '#475569',
-                                                background: permissions[tab.id] ? '#3b82f6' : 'transparent',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: 'white',
-                                                fontSize: '0.6rem'
-                                            }}>
-                                                {permissions[tab.id] && <CheckCircle size={10} />}
-                                            </div>
-                                            <span style={{ fontSize: '0.75rem', color: permissions[tab.id] ? 'white' : '#94a3b8' }}>{tab.label}</span>
-                                        </div>
-                                    ))}
+                            {/* Attendance Access Toggle for non-admins */}
+                            {newUserRole === 'viewer' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#0f1219', borderRadius: '0.375rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="attendanceAccess"
+                                        checked={canAccessAttendance}
+                                        onChange={(e) => setCanAccessAttendance(e.target.checked)}
+                                        style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="attendanceAccess" style={{ color: 'white', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                        Grant access to Time & Attendance
+                                    </label>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
-                            {isEditing && (
-                                <button
-                                    type="button"
-                                    onClick={cancelEdit}
-                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}
-                                >
-                                    Cancel
-                                </button>
-                            )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
                             <button
                                 type="submit"
                                 disabled={loading || !newUserEmail}
-                                className={`btn-action ${isEditing ? 'btn-production' : 'btn-sales'}`}
-                                style={{ flex: isEditing ? 2 : 1, padding: '0.75rem', opacity: loading || !newUserEmail ? 0.5 : 1, cursor: loading || !newUserEmail ? 'not-allowed' : 'pointer', justifyContent: 'center' }}
+                                className="btn-action btn-sales"
+                                style={{ width: '100%', padding: '0.75rem', opacity: loading || !newUserEmail ? 0.5 : 1, cursor: loading || !newUserEmail ? 'not-allowed' : 'pointer', justifyContent: 'center' }}
                             >
                                 {loading && <RefreshCw className="animate-spin" size={14} />}
-                                {loading ? 'Processing...' : (isEditing ? 'Update Access' : 'Grant Access')}
+                                {loading ? 'Processing...' : 'Grant Access'}
                             </button>
                         </div>
                     </form>
@@ -369,83 +220,62 @@ const AdminUserAccess = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                             <thead style={{ background: '#0f1219', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 <tr>
-                                    <th style={{ padding: '1rem', textAlign: 'left', width: '40%' }}>User</th>
-                                    <th style={{ padding: '1rem', textAlign: 'left', width: '20%' }}>Role</th>
-                                    <th style={{ padding: '1rem', textAlign: 'left', width: '25%' }}>Access</th>
-                                    <th style={{ padding: '1rem', textAlign: 'right', width: '15%' }}>Action</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Attendance</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody style={{ color: 'white' }}>
                                 {users.map((user) => (
-                                    <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', verticalAlign: 'middle' }}>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', maxWidth: '100%' }}>
-                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: 'rgba(71, 85, 105, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0 }}>
                                                     {user.email.substring(0, 2).toUpperCase()}
                                                 </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                                    <span
-                                                        style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                                        title={user.email}
-                                                    >
-                                                        {user.email}
-                                                    </span>
-                                                </div>
+                                                <span style={{ fontWeight: 500, wordBreak: 'break-all' }}>{user.email}</span>
                                             </div>
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
                                             {user.role === 'admin' ? (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)', whiteSpace: 'nowrap' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                                     <Crown size={12} /> Admin
                                                 </span>
-                                            ) : user.role === 'power_user' ? (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.2)', whiteSpace: 'nowrap' }}>
-                                                    <Shield size={12} /> Power User
-                                                </span>
                                             ) : (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)', whiteSpace: 'nowrap' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                                     <Eye size={12} /> Viewer
                                                 </span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', maxWidth: '300px' }}>
-                                                {user.role === 'admin' ? (
-                                                    <span style={{ fontSize: '0.65rem', color: '#60a5fa', fontWeight: 600 }}>All Tabs Granted</span>
+                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                            <div
+                                                onClick={() => user.role !== 'admin' && toggleAttendanceAccess(user)}
+                                                style={{
+                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    color: (user.can_access_attendance || user.role === 'admin') ? '#34d399' : '#64748b'
+                                                }}
+                                            >
+                                                {(user.can_access_attendance || user.role === 'admin') ? (
+                                                    <CheckCircle size={18} />
                                                 ) : (
-                                                    Object.entries(user.permissions || {})
-                                                        .filter(([_, value]) => value)
-                                                        .map(([key]) => (
-                                                            <span key={key} style={{ fontSize: '0.6rem', padding: '0.15rem 0.4rem', background: 'rgba(255,255,255,0.08)', borderRadius: '0.25rem', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                                                {key.charAt(0).toUpperCase() + key.slice(1)}
-                                                            </span>
-                                                        ))
-                                                )}
-                                                {(!user.permissions || Object.values(user.permissions).every(v => !v)) && user.role !== 'admin' && (
-                                                    <span style={{ fontSize: '0.65rem', color: '#64748b' }}>None</span>
+                                                    <X size={18} />
                                                 )}
                                             </div>
                                         </td>
                                         {/* Removed Joined Date to save space if needed, or keeping it but with less padding */}
-                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                                                <button
-                                                    onClick={() => handleEditUser(user)}
-                                                    style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                    title="Edit Access"
-                                                >
-                                                    <Shield size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteUser(user.email)}
-                                                    style={{ color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                    onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'; }}
-                                                    onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-                                                    title="Revoke Access"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
+                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                                            <button
+                                                onClick={() => handleDeleteUser(user.email)}
+                                                style={{ color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.25rem', transition: 'all 0.2s' }}
+                                                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
+                                                title="Revoke Access"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

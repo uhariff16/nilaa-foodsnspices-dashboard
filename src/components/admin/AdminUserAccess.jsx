@@ -9,8 +9,50 @@ const AdminUserAccess = () => {
 
     // Add User Form State
     const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin'
-    const [canAccessAttendance, setCanAccessAttendance] = useState(false);
+    const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin' | 'power_user'
+    const [permissions, setPermissions] = useState({
+        overview: true,
+        sales: false,
+        expenses: false,
+        procurement: false,
+        stock: false,
+        production: false,
+        customers: false,
+        simulator: false,
+        attendance: false
+    });
+
+    const ALL_TABS = [
+        { id: 'overview', label: 'Overview' },
+        { id: 'sales', label: 'Sales' },
+        { id: 'expenses', label: 'Expenses' },
+        { id: 'procurement', label: 'Procurement' },
+        { id: 'stock', label: 'Stock' },
+        { id: 'production', label: 'Production' },
+        { id: 'customers', label: 'Customers' },
+        { id: 'simulator', label: 'Simulator' },
+        { id: 'attendance', label: 'Attendance' }
+    ];
+
+    const handleRoleChange = (role) => {
+        setNewUserRole(role);
+        if (role === 'admin') {
+            setPermissions(Object.fromEntries(ALL_TABS.map(t => [t.id, true])));
+        } else if (role === 'power_user') {
+            setPermissions(Object.fromEntries(ALL_TABS.map(t => [t.id, true])));
+        } else {
+            setPermissions({
+                overview: true,
+                sales: false, expenses: false, procurement: false,
+                stock: false, production: false, customers: false,
+                simulator: false, attendance: false
+            });
+        }
+    };
+
+    const togglePermission = (id) => {
+        setPermissions(prev => ({ ...prev, [id]: !prev[id] }));
+    };
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -41,14 +83,20 @@ const AdminUserAccess = () => {
             const { error } = await supabase.from('user_roles').insert([{
                 email: newUserEmail,
                 role: newUserRole,
-                can_access_attendance: newUserRole === 'admin' || canAccessAttendance
+                permissions: permissions,
+                can_access_attendance: permissions.attendance
             }]);
 
             if (error) throw error;
 
             setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
             setNewUserEmail('');
-            setCanAccessAttendance(false);
+            setPermissions({
+                overview: true,
+                sales: false, expenses: false, procurement: false,
+                stock: false, production: false, customers: false,
+                simulator: false, attendance: false
+            });
             fetchUsers();
         } catch (error) {
             console.error("Add Error:", error);
@@ -77,9 +125,13 @@ const AdminUserAccess = () => {
     const toggleAttendanceAccess = async (user) => {
         setLoading(true);
         try {
+            const newPermissions = { ...user.permissions, attendance: !user.can_access_attendance };
             const { error } = await supabase
                 .from('user_roles')
-                .update({ can_access_attendance: !user.can_access_attendance })
+                .update({
+                    can_access_attendance: !user.can_access_attendance,
+                    permissions: newPermissions
+                })
                 .eq('email', user.email);
 
             if (error) throw error;
@@ -150,45 +202,84 @@ const AdminUserAccess = () => {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                     <button
                                         type="button"
-                                        onClick={() => setNewUserRole('viewer')}
+                                        onClick={() => handleRoleChange('viewer')}
                                         style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Viewer</span>
                                             {newUserRole === 'viewer' && <CheckCircle size={14} />}
                                         </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Read-only access</div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Limited access</div>
                                     </button>
 
                                     <button
                                         type="button"
-                                        onClick={() => setNewUserRole('admin')}
+                                        onClick={() => handleRoleChange('power_user')}
+                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'power_user' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'power_user' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Power User</span>
+                                            {newUserRole === 'power_user' && <CheckCircle size={14} />}
+                                        </div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'power_user' ? '#bfdbfe' : '#64748b' }}>Deep data access</div>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRoleChange('admin')}
                                         style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Admin</span>
                                             {newUserRole === 'admin' && <CheckCircle size={14} />}
                                         </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full access</div>
+                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full system access</div>
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Attendance Access Toggle for non-admins */}
-                            {newUserRole === 'viewer' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#0f1219', borderRadius: '0.375rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <input
-                                        type="checkbox"
-                                        id="attendanceAccess"
-                                        checked={canAccessAttendance}
-                                        onChange={(e) => setCanAccessAttendance(e.target.checked)}
-                                        style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
-                                    />
-                                    <label htmlFor="attendanceAccess" style={{ color: 'white', fontSize: '0.875rem', cursor: 'pointer' }}>
-                                        Grant access to Time & Attendance
-                                    </label>
+                            {/* [NEW] Tab-Level Selection */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Granular Tab Access</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem', background: '#0f1219', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    {ALL_TABS.map(tab => (
+                                        <div
+                                            key={tab.id}
+                                            onClick={() => newUserRole !== 'admin' && togglePermission(tab.id)}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                padding: '0.35rem 0.5rem',
+                                                background: permissions[tab.id] ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
+                                                border: '1px solid',
+                                                borderColor: permissions[tab.id] ? 'rgba(37, 99, 235, 0.2)' : 'rgba(255,255,255,0.05)',
+                                                borderRadius: '0.375rem',
+                                                cursor: newUserRole === 'admin' ? 'not-allowed' : 'pointer',
+                                                opacity: newUserRole === 'admin' ? 0.7 : 1,
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '1rem',
+                                                height: '1rem',
+                                                borderRadius: '4px',
+                                                border: '1px solid',
+                                                borderColor: permissions[tab.id] ? '#3b82f6' : '#475569',
+                                                background: permissions[tab.id] ? '#3b82f6' : 'transparent',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: 'white',
+                                                fontSize: '0.6rem'
+                                            }}>
+                                                {permissions[tab.id] && <CheckCircle size={10} />}
+                                            </div>
+                                            <span style={{ fontSize: '0.75rem', color: permissions[tab.id] ? 'white' : '#94a3b8' }}>{tab.label}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
@@ -242,6 +333,10 @@ const AdminUserAccess = () => {
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                                     <Crown size={12} /> Admin
                                                 </span>
+                                            ) : user.role === 'power_user' ? (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                                                    <Shield size={12} /> Power User
+                                                </span>
                                             ) : (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                                     <Eye size={12} /> Viewer
@@ -249,19 +344,20 @@ const AdminUserAccess = () => {
                                             )}
                                         </td>
                                         <td style={{ padding: '0.75rem 1rem' }}>
-                                            <div
-                                                onClick={() => user.role !== 'admin' && toggleAttendanceAccess(user)}
-                                                style={{
-                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    color: (user.can_access_attendance || user.role === 'admin') ? '#34d399' : '#64748b'
-                                                }}
-                                            >
-                                                {(user.can_access_attendance || user.role === 'admin') ? (
-                                                    <CheckCircle size={18} />
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', maxWidth: '150px' }}>
+                                                {user.role === 'admin' ? (
+                                                    <span style={{ fontSize: '0.65rem', color: '#60a5fa' }}>All Tabs Granted</span>
                                                 ) : (
-                                                    <X size={18} />
+                                                    Object.entries(user.permissions || {})
+                                                        .filter(([_, value]) => value)
+                                                        .map(([key]) => (
+                                                            <span key={key} style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.25rem', color: '#94a3b8' }}>
+                                                                {key.charAt(0).toUpperCase() + key.slice(1)}
+                                                            </span>
+                                                        ))
+                                                )}
+                                                {(!user.permissions || Object.values(user.permissions).every(v => !v)) && user.role !== 'admin' && (
+                                                    <span style={{ fontSize: '0.65rem', color: '#64748b' }}>None</span>
                                                 )}
                                             </div>
                                         </td>

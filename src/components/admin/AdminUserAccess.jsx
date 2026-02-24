@@ -207,7 +207,7 @@ const AdminUserAccess = () => {
                 </div>
             </div>
 
-            <div className="admin-grid">
+            <div className="admin-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '2rem' }}>
                 {/* Grant Access Card - Clean & Solid */}
                 <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
@@ -369,47 +369,54 @@ const AdminUserAccess = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                             <thead style={{ background: '#0f1219', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 <tr>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Attendance</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
+                                    <th style={{ padding: '1rem', textAlign: 'left', width: '40%' }}>User</th>
+                                    <th style={{ padding: '1rem', textAlign: 'left', width: '20%' }}>Role</th>
+                                    <th style={{ padding: '1rem', textAlign: 'left', width: '25%' }}>Access</th>
+                                    <th style={{ padding: '1rem', textAlign: 'right', width: '15%' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody style={{ color: 'white' }}>
                                 {users.map((user) => (
-                                    <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '0.75rem 1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0 }}>
+                                    <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', verticalAlign: 'middle' }}>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', maxWidth: '100%' }}>
+                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: 'rgba(71, 85, 105, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>
                                                     {user.email.substring(0, 2).toUpperCase()}
                                                 </div>
-                                                <span style={{ fontWeight: 500, wordBreak: 'break-all' }}>{user.email}</span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                    <span
+                                                        style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                                        title={user.email}
+                                                    >
+                                                        {user.email}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </td>
-                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                        <td style={{ padding: '1rem' }}>
                                             {user.role === 'admin' ? (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)', whiteSpace: 'nowrap' }}>
                                                     <Crown size={12} /> Admin
                                                 </span>
                                             ) : user.role === 'power_user' ? (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.2)', whiteSpace: 'nowrap' }}>
                                                     <Shield size={12} /> Power User
                                                 </span>
                                             ) : (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)', whiteSpace: 'nowrap' }}>
                                                     <Eye size={12} /> Viewer
                                                 </span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '0.75rem 1rem' }}>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', maxWidth: '150px' }}>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', maxWidth: '300px' }}>
                                                 {user.role === 'admin' ? (
-                                                    <span style={{ fontSize: '0.65rem', color: '#60a5fa' }}>All Tabs Granted</span>
+                                                    <span style={{ fontSize: '0.65rem', color: '#60a5fa', fontWeight: 600 }}>All Tabs Granted</span>
                                                 ) : (
                                                     Object.entries(user.permissions || {})
                                                         .filter(([_, value]) => value)
                                                         .map(([key]) => (
-                                                            <span key={key} style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.25rem', color: '#94a3b8' }}>
+                                                            <span key={key} style={{ fontSize: '0.6rem', padding: '0.15rem 0.4rem', background: 'rgba(255,255,255,0.08)', borderRadius: '0.25rem', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.05)' }}>
                                                                 {key.charAt(0).toUpperCase() + key.slice(1)}
                                                             </span>
                                                         ))
@@ -420,23 +427,23 @@ const AdminUserAccess = () => {
                                             </div>
                                         </td>
                                         {/* Removed Joined Date to save space if needed, or keeping it but with less padding */}
-                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
                                                 <button
                                                     onClick={() => handleEditUser(user)}
-                                                    style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.375rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    style={{ color: '#60a5fa', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                                     title="Edit Access"
                                                 >
-                                                    <Shield size={14} />
+                                                    <Shield size={16} />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteUser(user.email)}
-                                                    style={{ color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', padding: '0.4rem', borderRadius: '0.375rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'; }}
+                                                    style={{ color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                                                     title="Revoke Access"
                                                 >
-                                                    <Trash2 size={14} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </td>

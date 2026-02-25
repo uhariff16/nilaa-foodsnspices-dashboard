@@ -472,12 +472,12 @@ const Dashboard = (props) => {
     const manualDailyCalc = parseFloat(manualExpenses.daily) || 0;
 
     // Add Manual Components to their respective categories
-    const finalSalaryExpenses = salaryExpenses + manualSalaryCalc + attendancePayroll;
+    const finalSalaryExpenses = salaryExpenses + manualSalaryCalc;
     // Note: Manual Daily is still added to 'Other'. User might want a 'Manual Bills' field later?
     // For now, let's assume 'Daily' is miscellaneous, so it stays in 'Other'.
     const finalOtherExpenses = otherExpenses + manualDailyCalc;
 
-    const totalManual = manualSalaryCalc + manualDailyCalc + attendancePayroll;
+    const totalManual = manualSalaryCalc + manualDailyCalc;
     const grandTotalExpenses = recordedExpenses + totalManual;
 
     // [NEW] Prepare Chart Data
@@ -529,7 +529,7 @@ const Dashboard = (props) => {
                 return r.date.startsWith(y + '-' + monthMap[m]);
             }).reduce((s, r) => s + (parseFloat(r.daily_wage) || 0), 0);
 
-            const totalExpenses = parsedExpenses + manualSalary + manualDaily + attendPay;
+            const totalExpenses = parsedExpenses + manualSalary + manualDaily;
             const netProfit = sales - totalExpenses;
 
             const overviewData = [
@@ -539,8 +539,8 @@ const Dashboard = (props) => {
                 ["Total Expenses", totalExpenses],
                 ["  - Parsed Expenses", parsedExpenses],
                 ["  - Staff Salary (Est)", manualSalary],
-                ["  - Attendance (Actual)", attendPay],
                 ["  - Other Daily (Est)", manualDaily],
+                ["  - Attendance Payroll (For Ref)", attendPay], // [FIX] Kept as reference only
                 ["Net Profit", netProfit],
                 ["Profit Margin", sales > 0 ? (netProfit / sales * 100).toFixed(2) + "%" : "0%"]
             ];

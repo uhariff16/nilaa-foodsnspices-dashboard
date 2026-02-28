@@ -113,13 +113,13 @@ const AdminUserAccess = () => {
 
             <div className="admin-grid">
                 {/* Grant Access Card - Clean & Solid */}
-                <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
                         <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.375rem', color: '#60a5fa' }}>
                             <UserPlus size={20} />
                         </div>
                         <div>
-                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Invite Team Member</h3>
+                            <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)', margin: 0 }}>Invite Team Member</h3>
                             <p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>Grant access via email address.</p>
                         </div>
                     </div>
@@ -128,7 +128,7 @@ const AdminUserAccess = () => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {/* Email Input */}
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Email Address</label>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Email Address</label>
                                 <div style={{ position: 'relative' }}>
                                     <Mail style={{ position: 'absolute', left: '0.75rem', top: '0.75rem', color: '#64748b' }} size={18} />
                                     <input
@@ -137,7 +137,7 @@ const AdminUserAccess = () => {
                                         value={newUserEmail}
                                         onChange={e => setNewUserEmail(e.target.value)}
                                         placeholder="colleague@example.com"
-                                        style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: 'white', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem' }}
+                                        style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.375rem', padding: '0.625rem 1rem 0.625rem 2.5rem', color: 'var(--text-primary)', outline: 'none', transition: 'border 0.2s', fontSize: '0.875rem' }}
                                         onFocus={e => e.target.style.borderColor = '#3b82f6'}
                                         onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                                     />
@@ -146,12 +146,12 @@ const AdminUserAccess = () => {
 
                             {/* Role Selection */}
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Assign Role</label>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Assign Role</label>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                     <button
                                         type="button"
                                         onClick={() => setNewUserRole('viewer')}
-                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
+                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Viewer</span>
@@ -163,7 +163,7 @@ const AdminUserAccess = () => {
                                     <button
                                         type="button"
                                         onClick={() => setNewUserRole('admin')}
-                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : '#0f1219', color: 'white', cursor: 'pointer' }}
+                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
                                     >
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Admin</span>
@@ -176,7 +176,7 @@ const AdminUserAccess = () => {
 
                             {/* Attendance Access Toggle for non-admins */}
                             {newUserRole === 'viewer' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: '#0f1219', borderRadius: '0.375rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '0.375rem', border: '1px solid var(--glass-border)' }}>
                                     <input
                                         type="checkbox"
                                         id="attendanceAccess"
@@ -184,7 +184,7 @@ const AdminUserAccess = () => {
                                         onChange={(e) => setCanAccessAttendance(e.target.checked)}
                                         style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
                                     />
-                                    <label htmlFor="attendanceAccess" style={{ color: 'white', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                    <label htmlFor="attendanceAccess" style={{ color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer' }}>
                                         Grant access to Time & Attendance
                                     </label>
                                 </div>
@@ -206,9 +206,9 @@ const AdminUserAccess = () => {
                 </div>
 
                 {/* Current Users List */}
-                <div style={{ background: '#1e293b', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#1e293b' }}>
-                        <h3 style={{ fontWeight: 'bold', color: 'white', fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ background: 'var(--bg-secondary)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--bg-secondary)' }}>
+                        <h3 style={{ fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '1.125rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             Active Members ({users.length})
                         </h3>
                         <button onClick={fetchUsers} disabled={loading} style={{ color: '#60a5fa', fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -218,7 +218,7 @@ const AdminUserAccess = () => {
 
                     <div style={{ overflowX: 'auto', flex: 1 }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                            <thead style={{ background: '#0f1219', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            <thead style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 <tr>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
@@ -226,12 +226,12 @@ const AdminUserAccess = () => {
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
                                 </tr>
                             </thead>
-                            <tbody style={{ color: 'white' }}>
+                            <tbody style={{ color: 'var(--text-primary)' }}>
                                 {users.map((user) => (
                                     <tr key={user.id || user.email} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '0.75rem 1rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'white', flexShrink: 0 }}>
+                                                <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-primary)', flexShrink: 0 }}>
                                                     {user.email.substring(0, 2).toUpperCase()}
                                                 </div>
                                                 <span style={{ fontWeight: 500, wordBreak: 'break-all' }}>{user.email}</span>
@@ -269,7 +269,7 @@ const AdminUserAccess = () => {
                                         <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                                             <button
                                                 onClick={() => handleDeleteUser(user.email)}
-                                                style={{ color: '#94a3b8', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.25rem', transition: 'all 0.2s' }}
+                                                style={{ color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.25rem', transition: 'all 0.2s' }}
                                                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
                                                 onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
                                                 title="Revoke Access"
@@ -294,10 +294,10 @@ const AdminUserAccess = () => {
 
             {/* Status Toast - Fixed */}
             {status.message && (
-                <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '0.75rem 1rem', borderRadius: '0.375rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 50, fontSize: '0.875rem', fontWeight: 500, background: status.type === 'error' ? '#dc2626' : '#059669', color: 'white' }}>
+                <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', padding: '0.75rem 1rem', borderRadius: '0.375rem', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', gap: '0.75rem', zIndex: 50, fontSize: '0.875rem', fontWeight: 500, background: status.type === 'error' ? '#dc2626' : '#059669', color: 'var(--text-primary)' }}>
                     {status.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
                     <span>{status.message}</span>
-                    <button onClick={() => setStatus({ type: 'idle', message: '' })} style={{ marginLeft: '0.5rem', opacity: 0.8, background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={14} /></button>
+                    <button onClick={() => setStatus({ type: 'idle', message: '' })} style={{ marginLeft: '0.5rem', opacity: 0.8, background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}><X size={14} /></button>
                 </div>
             )}
         </div>

@@ -14,8 +14,8 @@ const ItemAnalysis = ({ data }) => {
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
-                <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem' }}>
-                    <p style={{ margin: '0 0 0.5rem', fontWeight: 'bold', color: 'white' }}>{label}</p>
+                <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', padding: '1rem', border: '1px solid var(--glass-border)', borderRadius: '0.5rem' }}>
+                    <p style={{ margin: '0 0 0.5rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{label}</p>
                     <p style={{ margin: 0, color: '#3b82f6' }}>Revenue: {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(payload[0].value)}</p>
                     {payload[1] && (
                         <p style={{ margin: 0, color: '#10b981' }}>Profit: {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(payload[1].value)}</p>
@@ -39,7 +39,7 @@ const ItemAnalysis = ({ data }) => {
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByProfit} layout="vertical" margin={{ left: 20 }}>
                             <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#e2e8f0', fontSize: 11 }} />
+                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="profit" fill="#10b981" radius={[0, 4, 4, 0]}>
                                 {sortedByProfit.map((entry, index) => (
@@ -56,7 +56,7 @@ const ItemAnalysis = ({ data }) => {
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByRevenue} layout="vertical" margin={{ left: 20 }}>
                             <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#e2e8f0', fontSize: 11 }} />
+                            <YAxis dataKey="name" type="category" width={100} tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
                         </BarChart>

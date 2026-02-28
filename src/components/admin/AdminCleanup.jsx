@@ -251,7 +251,7 @@ const AdminCleanup = () => {
                         <button
                             onClick={() => { setMode('all_production'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
                             className="btn-toggle"
-                            style={mode === 'all_production' ? { background: '#dc2626', color: 'white', borderColor: '#dc2626' } : {}}
+                            style={mode === 'all_production' ? { background: '#dc2626', color: 'var(--text-primary)', borderColor: '#dc2626' } : {}}
                         >
                             <Bomb size={16} />
                             Reset Production DB
@@ -262,8 +262,8 @@ const AdminCleanup = () => {
 
             <div className="admin-grid" style={{ maxWidth: '40rem', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
                 {/* Selection Card */}
-                <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1.5rem', textAlign: 'center', lineHeight: '1.5' }}>
+                <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem', textAlign: 'center', lineHeight: '1.5' }}>
                         {mode === 'period'
                             ? "Select a period to permanently delete Sales, Expenses, and Production records."
                             : "Permanently delete ALL Production Logs from the database."}
@@ -320,7 +320,7 @@ const AdminCleanup = () => {
                                         <select
                                             value={selectedYear}
                                             onChange={(e) => setSelectedYear(Number(e.target.value))}
-                                            style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
+                                            style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
                                         >
                                             {years.map(y => <option key={y} value={y}>{y}</option>)}
                                         </select>
@@ -336,7 +336,7 @@ const AdminCleanup = () => {
                                                 setPreviewData(null);
                                                 setStatus({ type: '', message: '' });
                                             }}
-                                            style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
+                                            style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
                                         >
                                             <option value="">Select Month</option>
                                             {months.map(m => <option key={m} value={m}>{m}</option>)}
@@ -369,15 +369,15 @@ const AdminCleanup = () => {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
                             <div>
                                 <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '0.25rem' }}>{mode === 'period' ? 'Confirm Deletion' : '🔥 NUCLEAR DELETE'}</h3>
-                                <p style={{ color: '#cbd5e1', fontSize: '0.875rem', lineHeight: '1.5' }}>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.5' }}>
                                     {mode === 'period' ? (
                                         <>
-                                            Found <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.totalCount}</span> records
+                                            Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records
                                             for <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{previewData.period}</span>.
                                         </>
                                     ) : (
                                         <>
-                                            Found <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.totalCount}</span> records in TOTAL.
+                                            Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records in TOTAL.
                                             This includes all Stock In, Pre-Production, and Post-Production logs.
                                         </>
                                     )}
@@ -390,7 +390,7 @@ const AdminCleanup = () => {
                                 style={{
                                     padding: '0.75rem 1.5rem',
                                     background: '#dc2626',
-                                    color: 'white',
+                                    color: 'var(--text-primary)',
                                     borderRadius: '0.5rem',
                                     fontWeight: 'bold',
                                     fontSize: '0.875rem',

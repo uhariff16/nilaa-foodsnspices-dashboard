@@ -20,8 +20,8 @@ const getGradientOffset = (data, dataKey) => {
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-        <p style={{ color: '#e2e8f0', fontSize: '0.875rem', marginBottom: '8px', fontWeight: 600 }}>{label}</p>
+      <div style={{ backgroundColor: 'rgba(30, 41, 59, 0.95)', border: '1px solid var(--glass-border)', borderRadius: '8px', padding: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '8px', fontWeight: 600 }}>{label}</p>
         {payload.map((entry, index) => {
           const isProfit = entry.dataKey === 'Profit';
           const isNegative = entry.value < 0;
@@ -41,7 +41,7 @@ const CustomTooltip = ({ active, payload, label }) => {
           return (
             <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: valueColor }}></div>
-              <span style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>{labelName}:</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{labelName}:</span>
               <span style={{ color: valueColor, fontSize: '0.875rem', fontWeight: 600, marginLeft: 'auto' }}>
                 {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(entry.value)}
               </span>
@@ -132,7 +132,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
             {renderSeries(true)}
             <YAxis
               width={yAxisWidth}
-              stroke="#e2e8f0"
+              stroke="var(--text-secondary)"
               fontSize={12}
               tickLine={false}
               axisLine={false}
@@ -164,7 +164,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
               <XAxis
                 dataKey="name"
-                stroke="#e2e8f0"
+                stroke="var(--text-secondary)"
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
@@ -187,7 +187,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
     <div className="glass-panel" style={{ padding: '1.5rem', height: '400px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '0.5rem', gap: '0.25rem' }}>
+        <div style={{ display: 'flex', background: 'var(--glass-highlight)', padding: '0.25rem', borderRadius: '0.5rem', gap: '0.25rem' }}>
           <button
             onClick={() => setType('area')}
             title="Area Chart"

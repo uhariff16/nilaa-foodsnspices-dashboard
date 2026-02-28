@@ -10,15 +10,15 @@ const AttendancePage = () => {
     // Secondary safety check (ProtectedRoute handles it primarily)
     if (!canAccessAttendance) {
         return (
-            <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: 'white' }}>
+            <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
                 <div style={{ textAlign: 'center' }}>
                     <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Access Denied</h2>
-                    <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>You do not have permission to access the Time & Attendance module.</p>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>You do not have permission to access the Time & Attendance module.</p>
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                         <button
                             onClick={() => navigate('/')}
                             className="btn-primary"
-                            style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid var(--glass-border)' }}
+                            style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}
                         >
                             Back to Dashboard
                         </button>

@@ -945,17 +945,17 @@ const AdminDataIngestion = () => {
             {dbReport && (
                 <div className="stat-grid animate-fade-in">
                     <div className="stat-card">
-                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.transactions.toLocaleString()}</p>
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{dbReport.transactions.toLocaleString()}</p>
                         <p style={{ fontSize: '0.75rem', color: '#93c5fd', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Transactions</p>
                     </div>
 
                     <div className="stat-card">
-                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.customers.toLocaleString()}</p>
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{dbReport.customers.toLocaleString()}</p>
                         <p style={{ fontSize: '0.75rem', color: '#d8b4fe', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Customers</p>
                     </div>
 
                     <div className="stat-card">
-                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'white', marginBottom: '0.25rem' }}>{dbReport.production.toLocaleString()}</p>
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{dbReport.production.toLocaleString()}</p>
                         <p style={{ fontSize: '0.75rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Production Logs</p>
                     </div>
                 </div>
@@ -1107,8 +1107,8 @@ const AdminDataIngestion = () => {
                     </div>
 
                     <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Sales & Expenses</h3>
-                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-primary)', margin: 0 }}>Sales & Expenses</h3>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
 
                     </div>
 
@@ -1165,8 +1165,8 @@ const AdminDataIngestion = () => {
                     </div>
 
                     <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'white', margin: 0 }}>Production Logs</h3>
-                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Stock In · Usage · Production Output</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-primary)', margin: 0 }}>Production Logs</h3>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Stock In · Usage · Production Output</p>
                     </div>
 
                     {uploadMode === 'file' ? (
@@ -1210,7 +1210,7 @@ const AdminDataIngestion = () => {
                     <h4 style={{ color: '#34d399', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Radio size={12} /> Live Watcher Logs
                     </h4>
-                    <div className="custom-scrollbar" style={{ height: '8rem', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.625rem', color: '#94a3b8' }}>
+                    <div className="custom-scrollbar" style={{ height: '8rem', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.625rem', color: 'var(--text-secondary)' }}>
                         {watchLogs.map((log, i) => (
                             <div key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>{log}</div>
                         ))}
@@ -1228,34 +1228,34 @@ const AdminDataIngestion = () => {
 
             {/* DEBUG REPORT UI */}
             {testReport && (
-                <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#0f172a', borderRadius: '0.75rem', border: '1px solid rgba(59, 130, 246, 0.3)', fontFamily: 'monospace', fontSize: '0.75rem', color: '#cbd5e1', overflow: 'hidden', width: '100%', maxWidth: '56rem' }}>
-                    <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>📂 Diagnostic Report: {testReport.fileName}</h3>
+                <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'var(--bg-primary)', borderRadius: '0.75rem', border: '1px solid rgba(59, 130, 246, 0.3)', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', width: '100%', maxWidth: '56rem' }}>
+                    <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '1rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>📂 Diagnostic Report: {testReport.fileName}</h3>
 
                     <div className="stat-grid" style={{ marginBottom: '1.5rem', gridTemplateColumns: '1fr 1fr 1fr' }}>
-                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)' }}>
                             <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Stock In</span>
-                            <span style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold' }}>{testReport.parsedCounts.stockIn}</span>
+                            <span style={{ fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 'bold' }}>{testReport.parsedCounts.stockIn}</span>
                         </div>
-                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)' }}>
                             <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Pre-Prod</span>
                             <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: testReport.parsedCounts.preProd === 0 ? '#ef4444' : 'white' }}>{testReport.parsedCounts.preProd}</span>
                         </div>
-                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '0.75rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)' }}>
                             <span style={{ display: 'block', color: '#64748b', marginBottom: '0.25rem' }}>Post-Prod</span>
-                            <span style={{ fontSize: '1.25rem', color: 'white', fontWeight: 'bold' }}>{testReport.parsedCounts.postProd}</span>
+                            <span style={{ fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 'bold' }}>{testReport.parsedCounts.postProd}</span>
                         </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', height: '400px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                             <h4 style={{ fontWeight: 'bold', color: '#60a5fa', marginBottom: '0.5rem' }}>1. Raw Excel Data (Top 10 Rows)</h4>
-                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'pre' }}>
+                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid var(--glass-border)', whiteSpace: 'pre' }}>
                                 {JSON.stringify(testReport.previewRows, null, 2)}
                             </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                             <h4 style={{ fontWeight: 'bold', color: '#34d399', marginBottom: '0.5rem' }}>2. Parser Logs</h4>
-                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'pre', color: 'rgba(16, 185, 129, 0.8)' }}>
+                            <div style={{ flex: 1, background: 'black', padding: '1rem', borderRadius: '0.25rem', overflow: 'auto', border: '1px solid var(--glass-border)', whiteSpace: 'pre', color: 'rgba(16, 185, 129, 0.8)' }}>
                                 {testReport.parserDebug.join('\n')}
                             </div>
                         </div>

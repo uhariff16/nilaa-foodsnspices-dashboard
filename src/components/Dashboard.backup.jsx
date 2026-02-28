@@ -899,8 +899,8 @@ const Dashboard = (props) => {
                                         top: '100%',
                                         left: '0',
                                         width: '100%',
-                                        background: '#1e293b',
-                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--glass-border)',
                                         borderRadius: '0.5rem',
                                         padding: '0.75rem',
                                         zIndex: 1000,
@@ -908,7 +908,7 @@ const Dashboard = (props) => {
                                         marginTop: '0.5rem',
                                         fontSize: '0.75rem'
                                     }}>
-                                        <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.25rem' }}>Detailed Breakdown</p>
+                                        <p style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.25rem' }}>Detailed Breakdown</p>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '200px', overflowY: 'auto' }}>
                                             {materialStats.openingStockDetails.map((item, idx) => (
                                                 <div key={idx} style={{
@@ -924,11 +924,11 @@ const Dashboard = (props) => {
                                                         borderRadius: '50%',
                                                         background: item.type === 'Raw' ? '#22d3ee' : '#f472b6'
                                                     }} />
-                                                    <span style={{ color: '#e2e8f0', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                         {item.name.replace(/^OS\s*-\s*/i, '')}
                                                     </span>
-                                                    <span style={{ color: '#fff', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>
-                                                        {item.weight.toLocaleString()} <span style={{ fontSize: '0.85em', color: '#94a3b8' }}>kg</span>
+                                                    <span style={{ color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>
+                                                        {item.weight.toLocaleString()} <span style={{ fontSize: '0.85em', color: 'var(--text-secondary)' }}>kg</span>
                                                     </span>
                                                 </div>
                                             ))}
@@ -1013,7 +1013,7 @@ const Dashboard = (props) => {
                     <div className="glass-panel" style={{ padding: '1.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                             <h3>Sales Transactions</h3>
-                            <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--glass-highlight)', padding: '0.25rem', borderRadius: '0.5rem' }}>
                                 <button
                                     onClick={() => setSalesViewMode('summary')}
                                     style={{
@@ -1070,11 +1070,11 @@ const Dashboard = (props) => {
                                         value={expenseSearch}
                                         onChange={(e) => setExpenseSearch(e.target.value)}
                                         style={{
-                                            background: 'rgba(255,255,255,0.05)',
+                                            background: 'var(--glass-highlight)',
                                             border: '1px solid var(--glass-border)',
                                             padding: '0.5rem 0.5rem 0.5rem 2.5rem',
                                             borderRadius: '0.5rem',
-                                            color: 'white',
+                                            color: 'var(--text-primary)',
                                             outline: 'none',
                                             width: '250px'
                                         }}
@@ -1084,15 +1084,15 @@ const Dashboard = (props) => {
 
                             {/* Expense Metrics */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Recorded (Files)</div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getValueColor(recordedExpenses, 'expense') }}>{formatCurrency(recordedExpenses)}</div>
                                 </div>
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Manual (Salary/Daily)</div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(totalManual)}</div>
                                 </div>
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Total Outflow</div>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getValueColor(grandTotalExpenses, 'expense') }}>{formatCurrency(grandTotalExpenses)}</div>
                                 </div>
@@ -1111,7 +1111,7 @@ const Dashboard = (props) => {
                                     <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
                                         Staff Salary (Monthly)
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
                                         <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
                                         <input
                                             type="text"
@@ -1123,7 +1123,7 @@ const Dashboard = (props) => {
                                                 }
                                             }}
                                             placeholder="0.00"
-                                            style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1rem', width: '100%', outline: 'none' }}
+                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
                                         />
                                     </div>
                                 </div>
@@ -1132,7 +1132,7 @@ const Dashboard = (props) => {
                                     <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
                                         Other Daily Expenses
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.5rem', padding: '0.75rem' }}>
                                         <span style={{ color: 'var(--text-secondary)', marginRight: '0.5rem' }}>₹</span>
                                         <input
                                             type="text"
@@ -1144,7 +1144,7 @@ const Dashboard = (props) => {
                                                 }
                                             }}
                                             placeholder="0.00"
-                                            style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1rem', width: '100%', outline: 'none' }}
+                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '1rem', width: '100%', outline: 'none' }}
                                         />
                                     </div>
                                 </div>

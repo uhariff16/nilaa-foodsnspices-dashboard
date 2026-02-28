@@ -7,6 +7,7 @@ import Login from './components/Login';
 import AttendancePage from './components/AttendancePage';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 
 // Error Boundary Component
@@ -299,39 +300,41 @@ const DashboardLayout = () => {
 const App = () => {
     console.log("App Component Reloaded - Debug Check");
     return (
-        <AuthProvider>
-            <Router>
-                <ErrorBoundary>
-                    <Routes>
-                        <Route path="/login" element={<Login />} />
-                        <Route
-                            path="/admin"
-                            element={
-                                <ProtectedRoute adminOnly={true}>
-                                    <AdminPanel />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/attendance"
-                            element={
-                                <ProtectedRoute attendanceOnly={true}>
-                                    <AttendancePage />
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route
-                            path="/"
-                            element={
-                                <ProtectedRoute>
-                                    <DashboardLayout />
-                                </ProtectedRoute>
-                            }
-                        />
-                    </Routes>
-                </ErrorBoundary>
-            </Router>
-        </AuthProvider>
+        <ThemeProvider>
+            <AuthProvider>
+                <Router>
+                    <ErrorBoundary>
+                        <Routes>
+                            <Route path="/login" element={<Login />} />
+                            <Route
+                                path="/admin"
+                                element={
+                                    <ProtectedRoute adminOnly={true}>
+                                        <AdminPanel />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/attendance"
+                                element={
+                                    <ProtectedRoute attendanceOnly={true}>
+                                        <AttendancePage />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/"
+                                element={
+                                    <ProtectedRoute>
+                                        <DashboardLayout />
+                                    </ProtectedRoute>
+                                }
+                            />
+                        </Routes>
+                    </ErrorBoundary>
+                </Router>
+            </AuthProvider>
+        </ThemeProvider>
     );
 }
 

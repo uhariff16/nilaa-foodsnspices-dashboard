@@ -15,6 +15,7 @@ import SalesSummaryTable from './SalesSummaryTable';
 
 import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import logo from '../assets/logo.png'; // Import logo
 import MobileDashboard from './mobile/MobileDashboard';
@@ -60,8 +61,8 @@ const Dashboard = (props) => {
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
 
-    // Theme State
-    const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+    // Theme Context
+    const { theme, toggleTheme } = useTheme();
 
     // Mobile State
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -92,13 +93,7 @@ const Dashboard = (props) => {
         };
     }, []);
 
-    // Toggle Theme Effect
-    useEffect(() => {
-        document.body.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    // Removed local theme effect since ThemeContext handles it
 
     // Update local storage when tab changes
     useEffect(() => {
@@ -1243,7 +1238,7 @@ const Dashboard = (props) => {
                 {props.debugError && (
                     <div style={{
                         position: 'absolute', top: 0, left: 0, width: '100%',
-                        background: '#ef4444', color: 'white', padding: '0.5rem',
+                        background: '#ef4444', color: 'var(--text-primary)', padding: '0.5rem',
                         textAlign: 'center', fontWeight: 'bold', zIndex: 9999
                     }}>
                         ⚠️ {props.debugError}
@@ -1404,7 +1399,7 @@ const Dashboard = (props) => {
                     {props.isAdmin && (
                         <button className="btn-primary"
                             disabled={props.isSyncing}
-                            style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none', opacity: props.isSyncing ? 0.7 : 1 }}
+                            style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', boxShadow: 'none', opacity: props.isSyncing ? 0.7 : 1 }}
                             onClick={async () => {
                                 if (props.onSync) {
                                     await props.onSync();
@@ -1415,7 +1410,7 @@ const Dashboard = (props) => {
                             {props.isSyncing ? 'Syncing...' : 'Sync Data'}
                         </button>
                     )}
-                    <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }} onClick={() => {
+                    <button className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', boxShadow: 'none' }} onClick={() => {
                         // Force a hard reload to ensure new files (which change the import.meta.glob manifest) are detected
                         const url = new URL(window.location.href);
                         url.searchParams.set('refresh', new Date().getTime());
@@ -2157,24 +2152,24 @@ const Dashboard = (props) => {
                                 {/* Left: Total Summary */}
                                 <div style={{
                                     flex: '1 1 300px',
-                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    background: 'var(--glass-highlight)',
                                     padding: '2rem',
                                     borderRadius: '1rem',
-                                    border: '1px solid rgba(239, 68, 68, 0.5)',
-                                    boxShadow: '0 10px 15px -3px rgba(239, 68, 68, 0.1), 0 4px 6px -2px rgba(239, 68, 68, 0.05)',
+                                    border: '1px solid var(--danger)',
+                                    boxShadow: '0 4px 6px -2px rgba(239, 68, 68, 0.05)',
                                     display: 'flex', flexDirection: 'column', justifyContent: 'center'
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                         <div>
-                                            <div style={{ color: '#fca5a5', fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem' }}>Total Outflow</div>
-                                            <div style={{ fontSize: '0.875rem', color: 'rgba(252, 165, 165, 0.8)' }}>Aggregated Expenses</div>
+                                            <div style={{ color: 'var(--danger)', fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem' }}>Total Outflow</div>
+                                            <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Aggregated Expenses</div>
                                         </div>
                                         <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '0.5rem', borderRadius: '0.5rem' }}>
                                             <IndianRupee size={24} color="#ef4444" />
                                         </div>
                                     </div>
-                                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#ef4444', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
-                                    <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#fca5a5' }}>
+                                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--danger)', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
+                                    <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                                         {expenseChartData.length} Categories Tracked
                                     </div>
                                 </div>
@@ -2212,8 +2207,8 @@ const Dashboard = (props) => {
                                             </Pie>
                                             <Tooltip
                                                 formatter={(value) => formatCurrency(value)}
-                                                contentStyle={{ background: 'rgba(17, 24, 39, 0.9)', border: 'none', borderRadius: '0.5rem', color: '#fff' }}
-                                                itemStyle={{ color: '#fff' }}
+                                                contentStyle={{ background: 'rgba(17, 24, 39, 0.9)', border: 'none', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                                itemStyle={{ color: 'var(--text-primary)' }}
                                             />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -2256,7 +2251,7 @@ const Dashboard = (props) => {
                                     <div style={{ display: 'flex', borderTop: '1px solid rgba(249, 115, 22, 0.1)' }}>
                                         {/* Core Material */}
                                         <div style={{ flex: 1, padding: '0.75rem 1rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#fca5a5', marginBottom: '0.25rem' }}>Core Material</div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Core Material</div>
                                             <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f97316' }}>
                                                 {formatCurrency(rawMaterialExpenses - waterExpenses)}
                                             </div>
@@ -2267,8 +2262,8 @@ const Dashboard = (props) => {
 
                                         {/* Water */}
                                         <div style={{ flex: 1, padding: '0.75rem 1rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '0.25rem' }}>Water</div>
-                                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Water</div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#3b82f6' }}>
                                                 {formatCurrency(waterExpenses)}
                                             </div>
                                         </div>
@@ -2388,7 +2383,7 @@ const Dashboard = (props) => {
                                             onClick={() => setSelectedExpenseCategory(null)}
                                             style={{
                                                 fontSize: '0.75rem',
-                                                background: 'rgba(255, 255, 255, 0.1)',
+                                                background: 'var(--glass-highlight)',
                                                 border: '1px solid var(--glass-border)',
                                                 padding: '0.25rem 0.5rem',
                                                 borderRadius: '0.25rem',
@@ -2567,7 +2562,7 @@ const Dashboard = (props) => {
                                                     <div key={i} style={{
                                                         display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 100px 120px', padding: '0.75rem',
                                                         borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
-                                                        background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                                                        background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
                                                     }}>
                                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                             <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
@@ -2582,7 +2577,7 @@ const Dashboard = (props) => {
                                                         <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                                                             {item.count}
                                                         </div>
-                                                        <div style={{ textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>
+                                                        <div style={{ textAlign: 'right', color: 'var(--danger)', fontWeight: 500 }}>
                                                             {formatCurrency(item.total)}
                                                         </div>
                                                     </div>
@@ -2593,7 +2588,7 @@ const Dashboard = (props) => {
                                                 <div key={i} style={{
                                                     display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)', padding: '1rem',
                                                     borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
-                                                    background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                                                    background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
                                                 }}>
                                                     {/* Item & Category */}
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -2636,7 +2631,7 @@ const Dashboard = (props) => {
 
                                                     {/* Total & Recency */}
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <div style={{ color: '#ef4444', fontWeight: 600, fontSize: '1rem' }}>
+                                                        <div style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '1rem' }}>
                                                             {formatCurrency(item.total)}
                                                         </div>
                                                         {item.latestDate && (

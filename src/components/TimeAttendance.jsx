@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil, User, LogOut } from 'lucide-react';
+import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil, User, LogOut, Plus, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 
 // Initial helper for global use
@@ -48,6 +49,7 @@ const formatTimeFromDec = (decHours) => {
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
     const { user, role, logout: authLogout } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const [attendanceData, setAttendanceData] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [payrollConfig, setPayrollConfig] = useState({
@@ -60,12 +62,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('');
     const [editingRecord, setEditingRecord] = useState(null);
+    const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'payments'
+    const [paymentData, setPaymentData] = useState([]);
 
     // Initial Load from DB
     useEffect(() => {
         fetchAttendance();
         fetchEmployees();
         fetchPayrollConfig();
+        fetchPayments();
     }, []);
 
     const fetchPayrollConfig = async () => {
@@ -163,6 +168,32 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         } catch (err) {
             console.error("Fetch Error:", err);
+        }
+    };
+
+    const fetchPayments = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('employee_payments')
+                .select('*')
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+            if (data) setPaymentData(data);
+        } catch (err) {
+            console.error("Fetch Payments Error:", err);
+        }
+    };
+
+    const deletePayment = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this payment record?")) return;
+        try {
+            const { error } = await supabase.from('employee_payments').delete().eq('id', id);
+            if (error) throw error;
+            fetchPayments();
+        } catch (err) {
+            console.error("Delete Payment Error:", err);
+            alert("Failed to delete record: " + err.message);
         }
     };
 
@@ -389,6 +420,81 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         });
     }, [attendanceData, searchTerm, dateFilter]);
 
+    const filteredPayments = useMemo(() => {
+        return paymentData.filter(row => {
+            const matchesSearch = row.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (row.emp_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesDate = !dateFilter || row.date === dateFilter;
+            return matchesSearch && matchesDate;
+        });
+    }, [paymentData, searchTerm, dateFilter]);
+
+    const paymentStats = useMemo(() => {
+        const stats = {
+            totalSalary: 0,
+            totalAdvance: 0,
+            totalWages: 0,
+            totalEarned: 0
+        };
+
+        // 1. Calculate Payments
+        filteredPayments.forEach(p => {
+            const amt = parseFloat(p.amount) || 0;
+            if (p.type === 'Salary') stats.totalSalary += amt;
+            else if (p.type === 'Advance') stats.totalAdvance += amt;
+            else if (p.type === 'Wages') stats.totalWages += amt;
+        });
+
+        // 2. Calculate Total Earned from matching attendance records
+        // Using all attendanceData to find the total earned for the filtered employees/dates
+        attendanceData.forEach(row => {
+            const matchesSearch = row.empId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                row.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesDate = !dateFilter || row.date === dateFilter;
+
+            if (matchesSearch && matchesDate) {
+                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                const dailyWage = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                const deductions = parseFloat(row.deductions) || 0;
+
+                const netDailyPay = dailyWage + (otPay > 0 ? otPay : 0) - deductions;
+                stats.totalEarned += netDailyPay;
+            }
+        });
+
+        stats.balance = stats.totalEarned - (stats.totalSalary + stats.totalAdvance + stats.totalWages);
+
+        return stats;
+    }, [filteredPayments, attendanceData, searchTerm, dateFilter, payrollConfig]);
+
+    // Employee specific balances for the table
+    const employeeBalances = useMemo(() => {
+        const balances = {};
+
+        // Accumulate earnings
+        attendanceData.forEach(row => {
+            if (!balances[row.empId]) balances[row.empId] = { earned: 0, paid: 0 };
+
+            const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+            const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+            const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+            const dailyWage = parseFloat(row.daily_wage || row.dailyWage) || 0;
+            const deductions = parseFloat(row.deductions) || 0;
+
+            balances[row.empId].earned += (dailyWage + (otPay > 0 ? otPay : 0) - deductions);
+        });
+
+        // Accumulate payments
+        paymentData.forEach(p => {
+            if (!balances[p.emp_id]) balances[p.emp_id] = { earned: 0, paid: 0 };
+            balances[p.emp_id].paid += (parseFloat(p.amount) || 0);
+        });
+
+        return balances;
+    }, [attendanceData, paymentData, payrollConfig]);
+
     // Stats
     const stats = useMemo(() => {
         // Context Date: Filter date if selected, otherwise Today (Local)
@@ -468,16 +574,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         });
 
-        const netPayout = totalCost - totalDeductions;
-        const tempNetPayout = tempTotalCost - tempTotalDeductions;
-        const permNetPayout = permTotalCost - permTotalDeductions;
+        const grossPay = totalCost + totalOTPay;
+        const tempGrossPay = tempTotalCost + tempTotalOTPay;
+        const permGrossPay = permTotalCost + permTotalOTPay;
+
+        const netPayout = grossPay - totalDeductions;
+        const tempNetPayout = tempGrossPay - tempTotalDeductions;
+        const permNetPayout = permGrossPay - permTotalDeductions;
 
         const s = {
-            totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout,
+            totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, grossPay,
             presentCount, leaveCount, absentCount, contextDate, totalDeductions,
             tempPresentCount,
-            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout,
-            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permNetPayout
+            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout, tempGrossPay,
+            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permNetPayout, permGrossPay
         };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
@@ -646,7 +756,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
 
     return (
-        <div className="attendance-container animate-fade-in" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', color: '#fff' }}>
+        <div className="attendance-container animate-fade-in" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
             {/* Header */}
             <div style={{
                 display: 'flex',
@@ -659,7 +769,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                     {!hideBack && onBack && (
                         <button onClick={onBack} className="btn-icon" style={{
-                            background: 'rgba(255,255,255,0.05)',
+                            background: 'var(--glass-highlight)',
                             padding: '0.6rem',
                             borderRadius: '0.75rem',
                             border: '1px solid var(--glass-border)'
@@ -673,7 +783,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             fontSize: '2rem',
                             fontWeight: 800,
                             letterSpacing: '-0.5px',
-                            background: 'linear-gradient(135deg, #fff 0%, #94a3b8 100%)',
+                            background: 'linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%)',
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent'
                         }}>NFS Time & Attendance</h1>
@@ -693,7 +803,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         <button onClick={() => document.getElementById('attendance-upload').click()} className="btn-action btn-outline" style={{
                             background: 'rgba(59, 130, 246, 0.1)',
                             borderColor: 'rgba(59, 130, 246, 0.2)',
-                            color: '#60a5fa',
+                            color: 'var(--accent-primary)',
                             borderRadius: '0.75rem',
                             padding: '0.6rem 1rem'
                         }}>
@@ -712,12 +822,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     {/* User Profile */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                                 {user?.email?.split('@')[0]}
                             </div>
                             <div style={{
                                 fontSize: '0.7rem',
-                                color: role === 'admin' ? '#f59e0b' : '#60a5fa',
+                                color: role === 'admin' ? '#f59e0b' : 'var(--accent-primary)',
                                 fontWeight: 700,
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.5px'
@@ -734,7 +844,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#3b82f6'
+                            color: 'var(--accent-primary)'
                         }}>
                             <User size={22} />
                         </div>
@@ -772,360 +882,547 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 id="attendance-upload"
             />
 
-            {/* Stats Cards */}
-            {/* Workforce Status */}
-            <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Users size={16} /> Workforce Overview
+            {/* Tab Selection */}
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
+                <button
+                    onClick={() => setActiveTab('attendance')}
+                    style={{
+                        padding: '0.75rem 1.5rem',
+                        background: activeTab === 'attendance' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                        border: 'none',
+                        borderBottom: activeTab === 'attendance' ? '2px solid #3b82f6' : 'none',
+                        color: activeTab === 'attendance' ? '#3b82f6' : 'var(--text-secondary)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                    }}
+                >
+                    Attendance Tracking
+                </button>
+                <button
+                    onClick={() => setActiveTab('payments')}
+                    style={{
+                        padding: '0.75rem 1.5rem',
+                        background: activeTab === 'payments' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                        border: 'none',
+                        borderBottom: activeTab === 'payments' ? '2px solid #3b82f6' : 'none',
+                        color: activeTab === 'payments' ? '#3b82f6' : 'var(--text-secondary)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                    }}
+                >
+                    Salaries & Advances
+                </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                        Incl. {employees.filter(e => e.staff_type === 'Temporary').length} Temporary
+
+            {activeTab === 'attendance' ? (
+                <>
+                    {/* Workforce Status */}
+                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Users size={16} /> Workforce Overview
                     </div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
-                    <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Present ({stats.contextDate})</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{stats.presentCount}</div>
-                    {stats.tempPresentCount > 0 && (
-                        <div style={{ fontSize: '0.65rem', color: '#10b981', opacity: 0.8, marginTop: '0.25rem' }}>
-                            {stats.tempPresentCount} Temporary
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                Incl. {employees.filter(e => e.staff_type === 'Temporary').length} Temporary
+                            </div>
                         </div>
-                    )}
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>On Leave ({stats.contextDate})</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.leaveCount}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ef4444' }}>
-                    <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Absent ({stats.contextDate})</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{stats.absentCount}</div>
-                </div>
-            </div>
-
-            {/* Overall Summary */}
-            <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                Overall Summary (All Staff)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                <div className="glass-panel" style={{ padding: '1rem' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1rem' }}>
-                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1rem' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1rem' }}>
-                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.totalCost)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
-                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
-                </div>
-            </div>
-
-            {/* Temporary Staff Metrics */}
-            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                Temporary Staff (Field Metrics)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempTotalCost)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
-                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
-                </div>
-            </div>
-
-            {/* Permanent Staff Metrics */}
-            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                Permanent Staff (Core Team)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                    <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                    <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permTotalCost)}</div>
-                </div>
-                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
-                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="glass-panel" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Attendance Log</h3>
-                        <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Showing {filteredAttendance.length} of {attendanceData.length} entries</div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Present ({stats.contextDate})</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{stats.presentCount}</div>
+                            {stats.tempPresentCount > 0 && (
+                                <div style={{ fontSize: '0.65rem', color: '#10b981', opacity: 0.8, marginTop: '0.25rem' }}>
+                                    {stats.tempPresentCount} Temporary
+                                </div>
+                            )}
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>On Leave ({stats.contextDate})</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.leaveCount}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ef4444' }}>
+                            <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Absent ({stats.contextDate})</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{stats.absentCount}</div>
+                        </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                        <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>
-                                <Users size={16} />
-                            </span>
-                            <input
-                                type="text"
-                                placeholder="Search by ID or Name..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.6rem 0.75rem 0.6rem 2.5rem',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    border: '1px solid var(--glass-border)',
-                                    borderRadius: '0.5rem',
-                                    color: 'white',
-                                    fontSize: '0.9rem'
-                                }}
-                            />
-                        </div>
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                type="date"
-                                value={dateFilter}
-                                onChange={(e) => setDateFilter(e.target.value)}
-                                style={{
-                                    padding: '0.6rem 0.75rem',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    border: '1px solid var(--glass-border)',
-                                    borderRadius: '0.5rem',
-                                    color: 'white',
-                                    fontSize: '0.9rem'
-                                }}
-                            />
-                        </div>
-                        {(searchTerm || dateFilter) && (
-                            <button
-                                onClick={() => { setSearchTerm(''); setDateFilter(''); }}
-                                style={{
-                                    padding: '0.6rem 1rem',
-                                    background: 'rgba(239, 68, 68, 0.1)',
-                                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                                    borderRadius: '0.5rem',
-                                    color: '#ef4444',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Reset Filters
-                            </button>
-                        )}
+                    {/* Overall Summary */}
+                    <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                        Overall Summary (All Staff)
                     </div>
-                </div>
-                <div style={{ overflowY: 'auto', maxHeight: '500px', borderBottomLeftRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}>
-                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0f172a' }}>
-                            <tr style={{ textAlign: 'left' }}>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', whiteSpace: 'nowrap' }}>Date</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Emp ID</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Employee</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Status</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 1</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 2</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 3</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)' }}>Shift 4</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Net Pay</th>
-                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredAttendance.map((row, i) => {
-                                const emp = employees.find(e => e.emp_id === row.empId);
-                                const isTemp = emp?.staff_type === 'Temporary';
-                                return (
-                                    <tr key={i} style={{
-                                        borderBottom: '1px solid var(--glass-border)',
-                                        background: isTemp
-                                            ? 'rgba(245, 158, 11, 0.05)'
-                                            : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
-                                    }}>
-                                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
-                                        <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
-                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                {row.name}
-                                                {isTemp && (
-                                                    <span style={{
-                                                        fontSize: '0.65rem',
-                                                        padding: '0.1rem 0.3rem',
-                                                        background: 'rgba(245, 158, 11, 0.1)',
-                                                        color: '#f59e0b',
-                                                        border: '1px solid rgba(245, 158, 11, 0.2)',
-                                                        borderRadius: '0.25rem',
-                                                        fontWeight: 700
-                                                    }}>TEMP</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{
-                                                padding: '0.25rem 0.5rem',
-                                                borderRadius: '0.25rem',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 600,
-                                                display: 'inline-block',
-                                                background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
-                                            }}>
-                                                {row.attendance_status || 'Present'}
-                                            </div>
-                                            {row.leave_reason && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', maxWidth: '120px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.leave_reason}>{row.leave_reason}</div>}
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div>
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div>
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div>
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div>
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div>
-                                            {(row.attendance_status === 'Present' || !row.attendance_status) && row.hoursWorked < payrollConfig.standard_daily_hours && <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>Short Shift</span>}
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            {(() => {
-                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                return displayOT > 0 ? (
-                                                    <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
-                                                        +{displayOT.toFixed(2)}h
-                                                    </span>
-                                                ) : '-';
-                                            })()}
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            {(() => {
-                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                return otPay > 0 ? (
-                                                    <span style={{ color: '#f59e0b' }}>{formatCurrency(otPay)}</span>
-                                                ) : '-';
-                                            })()}
-                                        </td>
-                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
-                                        <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444' }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
-                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>{formatCurrency((row.daily_wage || row.dailyWage) - (row.deductions || 0))}</td>
-                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                        <div className="glass-panel" style={{ padding: '1rem' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1rem' }}>
+                            <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1rem' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1rem' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.grossPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                            <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                        </div>
+                    </div>
+
+                    {/* Temporary Staff Metrics */}
+                    <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                        Temporary Staff (Field Metrics)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                            <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                            <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempGrossPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
+                        </div>
+                    </div>
+
+                    {/* Permanent Staff Metrics */}
+                    <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                        Permanent Staff (Core Team)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                            <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                            <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                            <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permGrossPay)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                            <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                        <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Attendance Log</h3>
+                                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Showing {filteredAttendance.length} of {attendanceData.length} entries</div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>
+                                        <Users size={16} />
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by ID or Name..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.6rem 0.75rem 0.6rem 2.5rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="date"
+                                        value={dateFilter}
+                                        onChange={(e) => setDateFilter(e.target.value)}
+                                        style={{
+                                            padding: '0.6rem 0.75rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    />
+                                </div>
+                                {(searchTerm || dateFilter) && (
+                                    <button
+                                        onClick={() => { setSearchTerm(''); setDateFilter(''); }}
+                                        style={{
+                                            padding: '0.6rem 1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                                            borderRadius: '0.5rem',
+                                            color: '#ef4444',
+                                            fontSize: '0.85rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Reset Filters
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div style={{ overflowY: 'auto', maxHeight: '500px', borderBottomLeftRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '2rem', minWidth: 'max-content', paddingBottom: '1rem' }}>
+                                {/* Table 1: Shift Details & Working Hours */}
+                                <div style={{ flex: 1, borderRight: '1px dashed var(--glass-border)', paddingRight: '1rem' }}>
+                                    <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid var(--accent-primary)', display: 'inline-block' }}>
+                                        Shift Details & Working Hours
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
+                                            <tr style={{ textAlign: 'left' }}>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 4</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredAttendance.map((row, i) => {
+                                                const emp = employees.find(e => e.emp_id === row.empId);
+                                                const isTemp = emp?.staff_type === 'Temporary';
+                                                return (
+                                                    <tr key={i} style={{
+                                                        height: '85px',
+                                                        borderBottom: '1px solid var(--glass-border)',
+                                                        background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                    }}>
+                                                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
+                                                        <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
+                                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                {row.name}
+                                                                {isTemp && <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.25rem', fontWeight: 700 }}>TEMP</span>}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: '1rem' }}>
+                                                            <div style={{
+                                                                padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
+                                                                background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                            }}>{row.attendance_status || 'Present'}</div>
+                                                        </td>
+                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div></td>
+                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div></td>
+                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
+                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
+                                                        <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
+                                                        <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div></td>
+                                                        <td style={{ padding: '1rem' }}>
+                                                            {(() => {
+                                                                const total = parseFloat(row.hoursWorked) || 0;
+                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                const nonOT = Math.max(0, total - displayOT);
+                                                                return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{nonOT.toFixed(2)}h</div>;
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '1rem' }}>
+                                                            {(() => {
+                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                return displayOT > 0 ? (
+                                                                    <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
+                                                                        +{displayOT.toFixed(2)}h
+                                                                    </span>
+                                                                ) : '-';
+                                                            })()}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {filteredAttendance.length === 0 && (
+                                                <tr><td colSpan={12} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Table 2: Payout Details */}
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid #10b981', display: 'inline-block' }}>
+                                        Payout Details
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
+                                            <tr style={{ textAlign: 'left' }}>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Non OT Pay</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Net Pay</th>
+                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredAttendance.map((row, i) => {
+                                                const emp = employees.find(e => e.emp_id === row.empId);
+                                                const isTemp = emp?.staff_type === 'Temporary';
+                                                return (
+                                                    <tr key={i} style={{
+                                                        height: '85px',
+                                                        borderBottom: '1px solid var(--glass-border)',
+                                                        background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                    }}>
+                                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                                                <span>{row.name}</span>
+                                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{row.date}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
+                                                        <td style={{ padding: '1rem' }}>
+                                                            {(() => {
+                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                return otPay > 0 ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(otPay)}</span> : '-';
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                                                            {(() => {
+                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                return formatCurrency(base + (otPay > 0 ? otPay : 0));
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
+                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>
+                                                            {(() => {
+                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                const deductions = parseFloat(row.deductions) || 0;
+                                                                return formatCurrency(base + (otPay > 0 ? otPay : 0) - deductions);
+                                                            })()}
+                                                        </td>
+                                                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                                <button onClick={() => { setEditingRecord(row); setShowManualEntry(true); }} style={{ padding: '0.4rem', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#3b82f6', cursor: 'pointer', transition: 'all 0.2s' }} title="Edit Log"><Pencil size={18} /></button>
+                                                                <button onClick={() => handleDelete(row)} style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Delete Log"><Trash2 size={18} /></button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {filteredAttendance.length === 0 && (
+                                                <tr><td colSpan={7} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <>
+                    {/* Payment Stats */}
+                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <DollarSign size={16} /> Financial Overview (Filtered)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Salary Paid</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Advances</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(paymentStats.totalAdvance)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Wages</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(paymentStats.totalWages)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.05)' }}>
+                            <div style={{ color: '#a78bfa', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Financial Outflow</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ec4899', background: 'rgba(236, 72, 153, 0.05)' }}>
+                            <div style={{ color: '#f472b6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Earned (Attendance)</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalEarned)}</div>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: `4px solid ${paymentStats.balance >= 0 ? '#10b981' : '#ef4444'}`, background: paymentStats.balance >= 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)' }}>
+                            <div style={{ color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Balance Salary Pending</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(paymentStats.balance)}</div>
+                        </div>
+                    </div>
+
+                    {/* Payments Table */}
+                    <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                        <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Payment Register (Salaries & Advances)</h3>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button onClick={() => setShowManualEntry(true)} className="btn-action btn-primary" style={{ background: '#3b82f6', borderRadius: '0.5rem' }}>
+                                        <Plus size={18} /> Register Payment
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>
+                                        <Users size={16} />
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by ID or Name..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.6rem 0.75rem 0.6rem 2.5rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="date"
+                                        value={dateFilter}
+                                        onChange={(e) => setDateFilter(e.target.value)}
+                                        style={{
+                                            padding: '0.6rem 0.75rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ overflowY: 'auto', maxHeight: '500px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                                <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
+                                    <tr style={{ textAlign: 'left' }}>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Date</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Emp ID</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Employee Name</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Type</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Amount</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Remarks</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Emp. Balance</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredPayments.map((row) => (
+                                        <tr key={row.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                            <td style={{ padding: '1rem' }}>{row.date}</td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{row.emp_id}</td>
+                                            <td style={{ padding: '1rem', fontWeight: 500 }}>{row.emp_name}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{
+                                                    padding: '0.2rem 0.6rem',
+                                                    borderRadius: '1rem',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 700,
+                                                    background: row.type === 'Salary' ? 'rgba(59, 130, 246, 0.1)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
+                                                    color: row.type === 'Salary' ? '#3b82f6' : (row.type === 'Advance' ? '#f59e0b' : '#10b981'),
+                                                    border: `1px solid ${row.type === 'Salary' ? 'rgba(59, 130, 246, 0.2)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)')}`
+                                                }}>
+                                                    {row.type.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(row.amount)}</td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{row.remarks || '-'}</td>
+                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: (employeeBalances[row.emp_id]?.earned - employeeBalances[row.emp_id]?.paid) >= 0 ? '#10b981' : '#ef4444' }}>
+                                                {formatCurrency((employeeBalances[row.emp_id]?.earned || 0) - (employeeBalances[row.emp_id]?.paid || 0))}
+                                            </td>
+                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
                                                 <button
-                                                    onClick={() => { setEditingRecord(row); setShowManualEntry(true); }}
-                                                    style={{
-                                                        padding: '0.4rem',
-                                                        background: 'rgba(59, 130, 246, 0.1)',
-                                                        border: 'none',
-                                                        borderRadius: '0.4rem',
-                                                        color: '#3b82f6',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    title="Edit Log"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(row)}
-                                                    style={{
-                                                        padding: '0.4rem',
-                                                        background: 'rgba(239, 68, 68, 0.1)',
-                                                        border: 'none',
-                                                        borderRadius: '0.4rem',
-                                                        color: '#ef4444',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    title="Delete Log"
+                                                    onClick={() => deletePayment(row.id)}
+                                                    style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {filteredAttendance.length === 0 && (
-                                <tr>
-                                    <td colSpan={13} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                        <div style={{ marginBottom: '1rem' }}>No data loaded.</div>
-                                        <div style={{ fontSize: '0.8rem' }}>Please upload an Excel file or use Manual Entry.</div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredPayments.length === 0 && (
+                                        <tr>
+                                            <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                                No payment records found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* Manual Entry Modal */}
             {(showManualEntry || editingRecord) && (
                 <ManualEntryModal
                     onClose={() => { setShowManualEntry(false); setEditingRecord(null); }}
-                    onSave={() => { fetchAttendance(); fetchEmployees(); }}
+                    onSave={() => { fetchAttendance(); fetchEmployees(); fetchPayments(); }}
                     config={payrollConfig}
                     employees={employees}
                     initialData={editingRecord}
+                    activeTab={activeTab}
                 />
             )}
         </div>
     );
 };
 
-const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) => {
+const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, activeTab = 'attendance' }) => {
+    const isPaymentTab = activeTab === 'payments';
     const [formData, setFormData] = useState({
         date: initialData?.date || new Date().toISOString().split('T')[0],
-        empId: initialData?.empId || '',
-        empName: initialData?.name || '',
+        empId: initialData?.emp_id || initialData?.empId || '',
+        empName: initialData?.emp_name || initialData?.name || '',
         shifts: initialData?.shifts?.length > 0
             ? [...initialData.shifts, ...Array.from({ length: Math.max(0, 4 - initialData.shifts.length) }, () => ({ in: '', out: '' }))].slice(0, 4)
             : Array.from({ length: 4 }, () => ({ in: '', out: '' })),
@@ -1135,7 +1432,11 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
         deductionReason: initialData?.deduction_reason || '',
         attendance_status: initialData?.attendance_status || 'Present',
         leave_reason: initialData?.leave_reason || '',
-        isNewTemp: false
+        isNewTemp: false,
+        // Payment specific
+        paymentType: initialData?.type || 'Advance',
+        paymentAmount: initialData?.amount || 0,
+        paymentRemarks: initialData?.remarks || ''
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -1158,9 +1459,25 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
         e.preventDefault();
         setIsSaving(true);
         try {
-            // ... (rest of the logic stays the same but uses formData.rate)
-            // const getDec = (time) => ... // Removed local simulation
+            if (isPaymentTab) {
+                const record = {
+                    date: formData.date,
+                    emp_id: formData.empId,
+                    emp_name: formData.empName,
+                    type: formData.paymentType,
+                    amount: parseFloat(formData.paymentAmount),
+                    remarks: formData.paymentRemarks
+                };
 
+                const { error } = await supabase
+                    .from('employee_payments')
+                    .insert([record]);
+
+                if (error) throw error;
+                onSave();
+                onClose();
+                return;
+            }
 
             const isPresent = formData.attendance_status === 'Present';
 
@@ -1243,87 +1560,101 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
             <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '2rem', position: 'relative' }}>
-                <h2 style={{ marginBottom: '1.5rem' }}>{initialData ? 'Edit Attendance Log' : 'Manual Attendance Entry'}</h2>
+                <h2 style={{ marginBottom: '1.5rem' }}>
+                    {isPaymentTab ? (initialData ? 'Edit Payment' : 'Register Payment') : (initialData ? 'Edit Attendance Log' : 'Manual Attendance Entry')}
+                </h2>
                 <form onSubmit={handleSubmit}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isPaymentTab ? '1fr 1fr' : '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Date</label>
-                            <input type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem' }} />
+                            <input type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                         </div>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Emp ID</label>
-                            <input type="text" list="emp-list" required disabled={!!initialData} value={formData.empId} onChange={e => handleIdChange(e.target.value)} placeholder="e.g. NFS1001" style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem', opacity: initialData ? 0.7 : 1 }} />
+                            <input type="text" list="emp-list" required disabled={!!initialData} value={formData.empId} onChange={e => handleIdChange(e.target.value)} placeholder="e.g. NFS1001" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', opacity: initialData ? 0.7 : 1 }} />
                             <datalist id="emp-list">
                                 {employees.map(e => <option key={e.id} value={e.emp_id}>{e.name}</option>)}
                             </datalist>
                         </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status</label>
-                            <select
-                                value={formData.attendance_status}
-                                onChange={e => setFormData({ ...formData, attendance_status: e.target.value })}
-                                style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem', outline: 'none' }}
-                            >
-                                <option value="Present" style={{ background: '#1e293b', color: '#fff' }}>Present</option>
-                                <option value="Absent" style={{ background: '#1e293b', color: '#fff' }}>Absent</option>
-                                <option value="Casual Leave" style={{ background: '#1e293b', color: '#fff' }}>Casual Leave</option>
-                                <option value="Medical Leave" style={{ background: '#1e293b', color: '#fff' }}>Medical Leave</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Name</label>
-                            <input type="text" required value={formData.empName} onChange={e => setFormData({ ...formData, empName: e.target.value })} placeholder="Full Name" style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem' }} />
-                            {!initialData && (
-                                <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    marginTop: '0.5rem',
-                                    padding: formData.isNewTemp ? '0.4rem' : '0',
-                                    background: formData.isNewTemp ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
-                                    borderRadius: '0.25rem',
-                                    border: formData.isNewTemp ? '1px solid rgba(245, 158, 11, 0.2)' : 'none'
-                                }}>
-                                    <input
-                                        type="checkbox"
-                                        id="isNewTemp"
-                                        checked={formData.isNewTemp}
-                                        onChange={e => setFormData({ ...formData, isNewTemp: e.target.checked })}
-                                        style={{ cursor: 'pointer' }}
-                                    />
-                                    <label htmlFor="isNewTemp" style={{ fontSize: '0.75rem', color: '#f59e0b', cursor: 'pointer', fontWeight: 700 }}>New Temporary Staff</label>
-                                </div>
-                            )}
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Hourly Rate (₹)</label>
-                            <input type="number" required value={formData.rate} onChange={e => setFormData({ ...formData, rate: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem' }} />
-                        </div>
+                        {!isPaymentTab && (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status</label>
+                                <select
+                                    value={formData.attendance_status}
+                                    onChange={e => setFormData({ ...formData, attendance_status: e.target.value })}
+                                    style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', outline: 'none' }}
+                                >
+                                    <option value="Present" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Present</option>
+                                    <option value="Absent" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Absent</option>
+                                    <option value="Casual Leave" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Casual Leave</option>
+                                    <option value="Medical Leave" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Medical Leave</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isPaymentTab ? '1fr' : '2fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Deductions / Advance (₹)</label>
-                            <input type="number" value={formData.deductions} onChange={e => setFormData({ ...formData, deductions: e.target.value })} placeholder="0" style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem' }} />
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Name</label>
+                            <input type="text" required value={formData.empName} onChange={e => setFormData({ ...formData, empName: e.target.value })} placeholder="Full Name" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                         </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Reason / Remark</label>
-                            <select
-                                value={formData.deductionReason}
-                                onChange={e => setFormData({ ...formData, deductionReason: e.target.value })}
-                                style={{ width: '100%', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem', outline: 'none' }}
-                            >
-                                <option value="" style={{ background: '#1e293b' }}>Select Reason...</option>
-                                <option value="Salary Advance" style={{ background: '#1e293b' }}>Salary Advance</option>
-                                <option value="Late Arrival" style={{ background: '#1e293b' }}>Late Arrival</option>
-                                <option value="Damage Recovery" style={{ background: '#1e293b' }}>Damage Recovery</option>
-                                <option value="Loan Repayment" style={{ background: '#1e293b' }}>Loan Repayment</option>
-                                <option value="Other" style={{ background: '#1e293b' }}>Other</option>
-                            </select>
-                        </div>
+                        {!isPaymentTab && (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Hourly Rate (₹)</label>
+                                <input type="number" required value={formData.rate} onChange={e => setFormData({ ...formData, rate: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                            </div>
+                        )}
                     </div>
+
+                    {isPaymentTab ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Payment Type</label>
+                                <select
+                                    value={formData.paymentType}
+                                    onChange={e => setFormData({ ...formData, paymentType: e.target.value })}
+                                    style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', outline: 'none' }}
+                                >
+                                    <option value="Advance" style={{ background: 'var(--bg-secondary)' }}>Salary Advance</option>
+                                    <option value="Salary" style={{ background: 'var(--bg-secondary)' }}>Salary Installment</option>
+                                    <option value="Wages" style={{ background: 'var(--bg-secondary)' }}>Wages</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Amount (₹)</label>
+                                <input type="number" required value={formData.paymentAmount} onChange={e => setFormData({ ...formData, paymentAmount: e.target.value })} placeholder="0" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                            </div>
+                            <div style={{ gridColumn: 'span 2' }}>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Remarks</label>
+                                <input type="text" value={formData.paymentRemarks} onChange={e => setFormData({ ...formData, paymentRemarks: e.target.value })} placeholder="Any notes..." style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Deductions / Advance (₹)</label>
+                                    <input type="number" value={formData.deductions} onChange={e => setFormData({ ...formData, deductions: e.target.value })} placeholder="0" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Reason / Remark</label>
+                                    <select
+                                        value={formData.deductionReason}
+                                        onChange={e => setFormData({ ...formData, deductionReason: e.target.value })}
+                                        style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', outline: 'none' }}
+                                    >
+                                        <option value="" style={{ background: 'var(--bg-secondary)' }}>Select Reason...</option>
+                                        <option value="Salary Advance" style={{ background: 'var(--bg-secondary)' }}>Salary Advance</option>
+                                        <option value="Late Arrival" style={{ background: 'var(--bg-secondary)' }}>Late Arrival</option>
+                                        <option value="Damage Recovery" style={{ background: 'var(--bg-secondary)' }}>Damage Recovery</option>
+                                        <option value="Loan Repayment" style={{ background: 'var(--bg-secondary)' }}>Loan Repayment</option>
+                                        <option value="Other" style={{ background: 'var(--bg-secondary)' }}>Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            {/* ... existing attendance details section ... */}
+                        </>
+                    )}
 
                     {(() => {
                         const existingEmp = (employees || []).find(e => e.emp_id === formData.empId);
@@ -1366,13 +1697,13 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
                         );
                     })()}
 
-                    {formData.attendance_status === 'Present' ? (
+                    {!isPaymentTab && (formData.attendance_status === 'Present' ? (
                         <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                 <h4 style={{ margin: 0, fontSize: '0.9rem' }}>Work Shifts</h4>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Break (min):</label>
-                                    <input type="number" value={formData.breakMins} onChange={e => setFormData({ ...formData, breakMins: e.target.value })} style={{ width: '60px', padding: '0.3rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.3rem', textAlign: 'center' }} />
+                                    <input type="number" value={formData.breakMins} onChange={e => setFormData({ ...formData, breakMins: e.target.value })} style={{ width: '60px', padding: '0.3rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', textAlign: 'center' }} />
                                 </div>
                             </div>
 
@@ -1389,14 +1720,14 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
                                                     const news = [...formData.shifts];
                                                     news[i].in = e.target.value;
                                                     setFormData({ ...formData, shifts: news });
-                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
                                             </div>
                                             <div style={{ flex: 1 }}>
                                                 <input type="time" title="Out Time" value={shift.out} onChange={e => {
                                                     const news = [...formData.shifts];
                                                     news[i].out = e.target.value;
                                                     setFormData({ ...formData, shifts: news });
-                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
                                             </div>
                                         </div>
                                     </div>
@@ -1410,10 +1741,10 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData }) =
                                 value={formData.leave_reason}
                                 onChange={e => setFormData({ ...formData, leave_reason: e.target.value })}
                                 placeholder="Casual leave / medical leave reason..."
-                                style={{ width: '100%', height: '80px', padding: '0.6rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', borderRadius: '0.4rem', resize: 'none' }}
+                                style={{ width: '100%', height: '80px', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', resize: 'none' }}
                             />
                         </div>
-                    )}
+                    ))}
 
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                         <button type="button" onClick={onClose} className="btn-action btn-outline">Cancel</button>

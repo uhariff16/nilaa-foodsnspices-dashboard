@@ -187,7 +187,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     };
 
     const inputStyle = {
-        background: 'rgba(255, 255, 255, 0.05)',
+        background: 'var(--glass-highlight)',
         border: '1px solid var(--glass-border)',
         color: 'var(--text-primary)',
         padding: '0.75rem',
@@ -223,7 +223,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                             <button
                                 onClick={() => setShowSettings(true)}
                                 style={{
-                                    background: 'rgba(255,255,255,0.05)',
+                                    background: 'var(--glass-highlight)',
                                     border: '1px solid var(--glass-border)',
                                     borderRadius: '0.5rem',
                                     padding: '0.5rem',
@@ -252,7 +252,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     </div>
 
                     {/* Sales Channel Toggle */}
-                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                    <div style={{ display: 'flex', background: 'var(--glass-highlight)', padding: '0.25rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                         {['retail', 'wholesale'].map(channel => (
                             <button
                                 key={channel}
@@ -695,24 +695,24 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                             <div style={{ position: 'absolute', top: '-50%', left: '50%', transform: 'translateX(-50%)', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)', borderRadius: '50%', filter: 'blur(40px)' }}></div>
 
                             <div style={{ position: 'relative', zIndex: 10, width: '100%' }}>
-                                <div style={{ fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: '600', marginBottom: '1rem' }}>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: '600', marginBottom: '1rem' }}>
                                     Production Cost
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', lineHeight: 1, marginBottom: '0.5rem' }}>
                                     <span style={{ fontSize: '2.5rem', color: '#64748b', fontWeight: '400', marginTop: '0.5rem', marginRight: '0.25rem' }}>₹</span>
-                                    <span style={{ fontSize: '5rem', fontWeight: '800', color: '#f8fafc', letterSpacing: '-0.02em', textShadow: '0 0 30px rgba(248, 250, 252, 0.2)' }}>
+                                    <span style={{ fontSize: '5rem', fontWeight: '800', color: 'var(--text-primary)', letterSpacing: '-0.02em', textShadow: '0 0 30px rgba(248, 250, 252, 0.2)' }}>
                                         {results.costPerKg.toFixed(2)}
                                     </span>
                                 </div>
-                                <div style={{ fontSize: '1rem', color: '#94a3b8' }}>per Kg Output</div>
+                                <div style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>per Kg Output</div>
 
                                 <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent)', width: '80%', margin: '2.5rem auto' }}></div>
 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', width: '100%' }}>
                                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Total Output</div>
-                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e2e8f0' }}>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Total Output</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
                                             {results.totalOutputKg.toFixed(1)} <span style={{ fontSize: '0.9rem', fontWeight: '500', color: '#64748b' }}>kg</span>
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: results.yieldPercent < 75 ? '#ef4444' : '#10b981', marginTop: '0.25rem', fontWeight: '500' }}>
@@ -720,8 +720,8 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                         </div>
                                     </div>
                                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Total Spend</div>
-                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e2e8f0' }}>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Total Spend</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
                                             ₹{Math.round(results.totalCost).toLocaleString()}
                                         </div>
                                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>All Inclusive</div>
@@ -787,7 +787,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
                     }}>
-                        <div className="glass-panel" style={{ width: '350px', padding: '1.5rem', background: '#1e293b', border: '1px solid var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+                        <div className="glass-panel" style={{ width: '350px', padding: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Settings size={18} />
@@ -835,7 +835,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                     }}
                                     style={{
                                         marginTop: '1rem', width: '100%', padding: '0.75rem',
-                                        background: 'var(--accent-primary)', color: 'white', border: 'none',
+                                        background: 'var(--accent-primary)', color: 'var(--text-primary)', border: 'none',
                                         borderRadius: '0.5rem', fontWeight: '600', cursor: 'pointer',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
                                     }}

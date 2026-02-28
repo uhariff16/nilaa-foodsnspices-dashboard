@@ -114,7 +114,7 @@ const HRSettings = () => {
                                 type="number"
                                 value={payrollConfig.standard_daily_hours}
                                 onChange={(e) => updatePayrollConfig('standard_daily_hours', e.target.value)}
-                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', padding: '0.5rem', borderRadius: '0.4rem', width: '80px', fontWeight: 'bold', fontSize: '1.1rem' }}
+                                style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', padding: '0.5rem', borderRadius: '0.4rem', width: '80px', fontWeight: 'bold', fontSize: '1.1rem' }}
                             />
                             <span style={{ fontWeight: 600 }}>Hrs</span>
                         </div>
@@ -132,7 +132,7 @@ const HRSettings = () => {
                                 step="0.1"
                                 value={payrollConfig.ot_multiplier}
                                 onChange={(e) => updatePayrollConfig('ot_multiplier', e.target.value)}
-                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#f59e0b', padding: '0.5rem', borderRadius: '0.4rem', width: '80px', fontWeight: 'bold', fontSize: '1.1rem' }}
+                                style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: '#f59e0b', padding: '0.5rem', borderRadius: '0.4rem', width: '80px', fontWeight: 'bold', fontSize: '1.1rem' }}
                             />
                             <span style={{ fontWeight: 600 }}>x</span>
                         </div>
@@ -150,7 +150,7 @@ const HRSettings = () => {
                                 type="number"
                                 value={payrollConfig.default_hourly_rate}
                                 onChange={(e) => updatePayrollConfig('default_hourly_rate', e.target.value)}
-                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#10b981', padding: '0.5rem', borderRadius: '0.4rem', width: '100px', fontWeight: 'bold', fontSize: '1.1rem' }}
+                                style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: '#10b981', padding: '0.5rem', borderRadius: '0.4rem', width: '100px', fontWeight: 'bold', fontSize: '1.1rem' }}
                             />
                         </div>
                         <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Base rate if not set for staff.</p>
@@ -171,9 +171,9 @@ const HRSettings = () => {
                             value={newDept}
                             onChange={(e) => setNewDept(e.target.value)}
                             placeholder="Add new department..."
-                            style={{ flex: 1, padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                            style={{ flex: 1, padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                         />
-                        <button type="submit" className="btn-icon" style={{ background: '#3b82f6', color: '#fff' }}>
+                        <button type="submit" className="btn-icon" style={{ background: '#3b82f6', color: 'var(--text-primary)' }}>
                             <Plus size={20} />
                         </button>
                     </form>
@@ -202,9 +202,9 @@ const HRSettings = () => {
                             value={newRole}
                             onChange={(e) => setNewRole(e.target.value)}
                             placeholder="Add new role..."
-                            style={{ flex: 1, padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                            style={{ flex: 1, padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                         />
-                        <button type="submit" className="btn-icon" style={{ background: '#10b981', color: '#fff' }}>
+                        <button type="submit" className="btn-icon" style={{ background: '#10b981', color: 'var(--text-primary)' }}>
                             <Plus size={20} />
                         </button>
                     </form>

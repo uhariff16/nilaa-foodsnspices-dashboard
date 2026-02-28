@@ -21,13 +21,13 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color }}></div>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#e0f2fe' }}>{title}</h3>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</h3>
             </div>
             <div style={{
                 width: '60px', height: '60px',
                 borderRadius: '50%',
-                background: 'linear-gradient(145deg, rgba(255,255,255,0.05), rgba(0,0,0,0.4))',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                background: 'var(--glass-highlight)',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: `1px solid ${color}`,
                 overflow: 'hidden',
@@ -39,11 +39,11 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
 
         {/* content */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '1.1rem' }}>
-            <span style={{ color: '#fbbf24', fontWeight: 600 }}>Opening:</span>
-            <span style={{ textAlign: 'right', color: '#fbbf24', fontWeight: 600 }}>{opening.toLocaleString()} kg</span>
+            <span style={{ color: '#d97706', fontWeight: 600 }}>Opening:</span>
+            <span style={{ textAlign: 'right', color: '#d97706', fontWeight: 600 }}>{opening.toLocaleString()} kg</span>
 
-            <span style={{ color: '#38bdf8', fontWeight: 600 }}>Purchased:</span>
-            <span style={{ textAlign: 'right', color: '#38bdf8', fontWeight: 600 }}>{purchased.toLocaleString()} kg</span>
+            <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Purchased:</span>
+            <span style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>{purchased.toLocaleString()} kg</span>
 
             <span style={{ color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>Total:</span>
             <span style={{ textAlign: 'right', color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>{total.toLocaleString()} kg</span>

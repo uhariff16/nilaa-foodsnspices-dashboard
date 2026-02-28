@@ -56,7 +56,7 @@ const AdminSystemSettings = () => {
         setTimeout(() => setMessage(null), 3000);
     };
 
-    if (loading) return <div style={{ color: 'white', padding: '2rem' }}>Loading settings...</div>;
+    if (loading) return <div style={{ color: 'var(--text-primary)', padding: '2rem' }}>Loading settings...</div>;
 
     return (
         <div style={{ padding: '1rem', color: 'var(--text-primary)' }}>

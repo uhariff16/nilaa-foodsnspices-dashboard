@@ -182,7 +182,7 @@ const EmployeeMaster = () => {
     );
 
     return (
-        <div style={{ color: '#fff' }}>
+        <div style={{ color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
                     <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Employee Master</h2>
@@ -206,7 +206,7 @@ const EmployeeMaster = () => {
                         placeholder="Search name or ID..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 3rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                        style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 3rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                     />
                 </div>
                 <button onClick={fetchData} className="btn-icon">
@@ -217,7 +217,7 @@ const EmployeeMaster = () => {
             <div className="glass-panel" style={{ overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                     <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                        <tr style={{ background: 'var(--glass-highlight)', textAlign: 'left' }}>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Employee</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Designation</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
@@ -236,13 +236,13 @@ const EmployeeMaster = () => {
                                             {emp.name.charAt(0)}
                                         </div>
                                         <div>
-                                            <div style={{ fontWeight: 600, color: '#fff' }}>{emp.name}</div>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{emp.name}</div>
                                             <div style={{ fontSize: '0.75rem', color: '#3b82f6', fontFamily: 'monospace' }}>{emp.emp_id}</div>
                                         </div>
                                     </div>
                                 </td>
                                 <td style={{ padding: '1rem' }}>
-                                    <div style={{ fontWeight: 500, color: '#fff' }}>{emp.role || '-'}</div>
+                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{emp.role || '-'}</div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{emp.department || '-'}</div>
                                 </td>
                                 <td style={{ padding: '1rem' }}>
@@ -264,7 +264,7 @@ const EmployeeMaster = () => {
                                 </td>
                                 <td style={{ padding: '1rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.2rem' }}>
-                                        <span style={{ color: '#fff', fontWeight: 600, fontSize: '1rem' }}>₹{emp.hourly_rate}</span>
+                                        <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>₹{emp.hourly_rate}</span>
                                         <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>/ hr</span>
                                     </div>
                                 </td>
@@ -333,7 +333,7 @@ const EmployeeMaster = () => {
                                                 value={formData.emp_id}
                                                 onChange={e => setFormData({ ...formData, emp_id: e.target.value.toUpperCase() })}
                                                 placeholder="e.g. NFS1001"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                         <div>
@@ -342,7 +342,7 @@ const EmployeeMaster = () => {
                                                 type="date"
                                                 value={formData.joining_date}
                                                 onChange={e => setFormData({ ...formData, joining_date: e.target.value })}
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                     </div>
@@ -352,11 +352,11 @@ const EmployeeMaster = () => {
                                             <select
                                                 value={formData.role}
                                                 onChange={e => setFormData({ ...formData, role: e.target.value })}
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             >
-                                                <option value="" style={{ background: '#1e293b' }}>Select Role</option>
+                                                <option value="" style={{ background: 'var(--bg-secondary)' }}>Select Role</option>
                                                 {roles.map(r => (
-                                                    <option key={r.name} value={r.name} style={{ background: '#1e293b' }}>{r.name}</option>
+                                                    <option key={r.name} value={r.name} style={{ background: 'var(--bg-secondary)' }}>{r.name}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -365,11 +365,11 @@ const EmployeeMaster = () => {
                                             <select
                                                 value={formData.department}
                                                 onChange={e => setFormData({ ...formData, department: e.target.value })}
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             >
-                                                <option value="" style={{ background: '#1e293b' }}>Select Department</option>
+                                                <option value="" style={{ background: 'var(--bg-secondary)' }}>Select Department</option>
                                                 {departments.map(d => (
-                                                    <option key={d.name} value={d.name} style={{ background: '#1e293b' }}>{d.name}</option>
+                                                    <option key={d.name} value={d.name} style={{ background: 'var(--bg-secondary)' }}>{d.name}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -389,7 +389,7 @@ const EmployeeMaster = () => {
                                             value={formData.name}
                                             onChange={e => setFormData({ ...formData, name: e.target.value })}
                                             placeholder="Enter name"
-                                            style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                         />
                                     </div>
                                     <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
@@ -400,7 +400,7 @@ const EmployeeMaster = () => {
                                                 value={formData.phone}
                                                 onChange={e => setFormData({ ...formData, phone: e.target.value })}
                                                 placeholder="e.g. +91 98765 43210"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                         <div>
@@ -410,7 +410,7 @@ const EmployeeMaster = () => {
                                                 value={formData.emergency_contact}
                                                 onChange={e => setFormData({ ...formData, emergency_contact: e.target.value })}
                                                 placeholder="Name & Number"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                     </div>
@@ -421,7 +421,7 @@ const EmployeeMaster = () => {
                                             onChange={e => setFormData({ ...formData, address: e.target.value })}
                                             placeholder="House No, Street, City, State, ZIP"
                                             rows={2}
-                                            style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff', resize: 'none' }}
+                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)', resize: 'none' }}
                                         />
                                     </div>
                                 </div>
@@ -439,7 +439,7 @@ const EmployeeMaster = () => {
                                                 value={formData.aadhar_no}
                                                 onChange={e => setFormData({ ...formData, aadhar_no: e.target.value })}
                                                 placeholder="12-digit Aadhar No"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                         <div>
@@ -452,7 +452,7 @@ const EmployeeMaster = () => {
                                                     value={formData.hourly_rate}
                                                     onChange={e => setFormData({ ...formData, hourly_rate: e.target.value })}
                                                     placeholder="100"
-                                                    style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                    style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                                 />
                                             </div>
                                         </div>
@@ -465,7 +465,7 @@ const EmployeeMaster = () => {
                                             value={formData.bank_name}
                                             onChange={e => setFormData({ ...formData, bank_name: e.target.value })}
                                             placeholder="e.g. HDFC Bank"
-                                            style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                         />
                                     </div>
 
@@ -477,7 +477,7 @@ const EmployeeMaster = () => {
                                                 value={formData.account_no}
                                                 onChange={e => setFormData({ ...formData, account_no: e.target.value })}
                                                 placeholder="Enter account number"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                         <div>
@@ -487,7 +487,7 @@ const EmployeeMaster = () => {
                                                 value={formData.ifsc_code}
                                                 onChange={e => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
                                                 placeholder="e.g. HDFC0001234"
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
                                     </div>
@@ -499,10 +499,10 @@ const EmployeeMaster = () => {
                                                 required
                                                 value={formData.staff_type}
                                                 onChange={e => setFormData({ ...formData, staff_type: e.target.value })}
-                                                style={{ width: '100%', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: '#fff' }}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             >
-                                                <option value="Permanent" style={{ background: '#1e293b' }}>Permanent Staff</option>
-                                                <option value="Temporary" style={{ background: '#1e293b' }}>Temporary Staff</option>
+                                                <option value="Permanent" style={{ background: 'var(--bg-secondary)' }}>Permanent Staff</option>
+                                                <option value="Temporary" style={{ background: 'var(--bg-secondary)' }}>Temporary Staff</option>
                                             </select>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1.25rem' }}>
@@ -513,7 +513,7 @@ const EmployeeMaster = () => {
                                                 onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
                                                 style={{ width: '1.2rem', height: '1.2rem', cursor: 'pointer' }}
                                             />
-                                            <label htmlFor="is_active" style={{ fontSize: '0.875rem', color: '#fff', cursor: 'pointer' }}>Active Employee</label>
+                                            <label htmlFor="is_active" style={{ fontSize: '0.875rem', color: 'var(--text-primary)', cursor: 'pointer' }}>Active Employee</label>
                                         </div>
                                     </div>
                                 </div>

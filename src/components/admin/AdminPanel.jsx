@@ -27,15 +27,15 @@ const AdminPanel = () => {
     ];
 
     return (
-        <div style={{ minHeight: '100vh', background: '#0f1219', color: '#f8fafc', fontFamily: 'var(--font-sans)' }}>
+        <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)' }}>
             {/* Top Navigation Bar - Clean & Professional */}
-            <div style={{ background: '#1e293b', borderBottom: '1px solid #334155', position: 'sticky', top: 0, zIndex: 50 }}>
+            <div style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid #334155', position: 'sticky', top: 0, zIndex: 50 }}>
                 <div style={{ maxWidth: '80rem', margin: '0 auto', padding: '0 1rem', height: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <button
                             onClick={() => navigate('/')}
                             title="Back to Dashboard"
-                            style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', transition: 'color 0.2s' }}
+                            style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', transition: 'color 0.2s' }}
                             onMouseEnter={e => e.currentTarget.style.color = 'white'}
                             onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}
                         >
@@ -46,7 +46,7 @@ const AdminPanel = () => {
                             <div style={{ width: '2rem', height: '2rem', background: '#2563eb', borderRadius: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <LayoutGrid size={18} color="white" />
                             </div>
-                            <h1 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'white', letterSpacing: '0.025em' }}>
+                            <h1 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)', letterSpacing: '0.025em' }}>
                                 Admin Console
                             </h1>
                         </div>
@@ -92,8 +92,8 @@ const AdminPanel = () => {
                             alignItems: 'center',
                             gap: '0.75rem',
                             padding: '0.35rem 0.75rem',
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            background: 'var(--glass-highlight)',
+                            border: '1px solid var(--glass-border)',
                             borderRadius: '0.75rem',
                         }}>
                             <div style={{
@@ -110,10 +110,10 @@ const AdminPanel = () => {
                                 <User size={16} />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'white', lineHeight: 1.2 }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', lineHeight: 1.2 }}>
                                     {user?.email?.split('@')[0] || 'Admin'}
                                 </span>
-                                <span style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'capitalize' }}>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                                     {role || 'Administrator'}
                                 </span>
                             </div>

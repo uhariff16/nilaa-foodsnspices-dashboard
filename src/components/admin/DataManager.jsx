@@ -202,7 +202,7 @@ const DataManager = () => {
                                 type="date"
                                 value={dateFilter}
                                 onChange={e => setDateFilter(e.target.value)}
-                                style={{ background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'white', fontSize: '0.875rem', outline: 'none', height: '100%' }}
+                                style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '100%' }}
                             />
                         </div>
                         <div style={{ position: 'relative', minWidth: '250px' }}>
@@ -212,7 +212,7 @@ const DataManager = () => {
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
                                 placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : (selectedTable === 'customer_receivables' ? "Search Customer..." : "Search Material...")}
-                                style={{ width: '100%', background: '#0f1219', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'white', fontSize: '0.875rem', outline: 'none' }}
+                                style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
                             />
                         </div>
                         <button type="submit" className="btn-action" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
@@ -232,10 +232,10 @@ const DataManager = () => {
             )}
 
             {/* Data Table */}
-            <div style={{ flex: 1, overflow: 'hidden', background: '#0f1219', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-primary)', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ overflow: 'auto', flex: 1 }} className="custom-scrollbar">
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                        <thead style={{ background: '#151923', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold', position: 'sticky', top: 0, zIndex: 10 }}>
+                        <thead style={{ background: '#151923', color: 'var(--text-secondary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold', position: 'sticky', top: 0, zIndex: 10 }}>
                             <tr>
                                 <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Date</th>
                                 {selectedTable === 'transactions' ? (
@@ -260,7 +260,7 @@ const DataManager = () => {
                                 <th style={{ padding: '1rem', textAlign: 'right', width: '120px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Actions</th>
                             </tr>
                         </thead>
-                        <tbody style={{ color: 'white' }}>
+                        <tbody style={{ color: 'var(--text-primary)' }}>
                             {data.map(row => (
                                 <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: editingId === row.id ? 'rgba(59, 130, 246, 0.1)' : 'transparent', transition: 'background 0.2s' }} className="hover:bg-slate-800/50">
                                     {editingId === row.id ? (
@@ -271,14 +271,14 @@ const DataManager = () => {
                                                     <span style={{ color: '#64748b', fontSize: '0.75rem' }}>N/A</span>
                                                 ) : (
                                                     <input type="date" value={editForm.date} onChange={e => handleEditChange('date', e.target.value)}
-                                                        style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                        style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                 )}
                                             </td>
                                             {selectedTable === 'transactions' ? (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
                                                         <select value={editForm.payment_mode} onChange={e => handleEditChange('payment_mode', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }}>
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }}>
                                                             <option value="Sale">Sale</option>
                                                             <option value="Expense">Expense</option>
                                                             <option value="Online">Online</option>
@@ -286,33 +286,33 @@ const DataManager = () => {
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.item_name} onChange={e => handleEditChange('item_name', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.amount} onChange={e => handleEditChange('amount', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
                                             ) : selectedTable === 'customer_receivables' ? (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.customer_name} onChange={e => handleEditChange('customer_name', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.city} onChange={e => handleEditChange('city', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.balance} onChange={e => handleEditChange('balance', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
                                             ) : (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
                                                         <select value={editForm.type} onChange={e => handleEditChange('type', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }}>
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }}>
                                                             <option value="stock_in">Stock In</option>
                                                             <option value="usage">Usage</option>
                                                             <option value="production">Production</option>
@@ -320,11 +320,11 @@ const DataManager = () => {
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.material} onChange={e => handleEditChange('material', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="number" value={editForm.weight} onChange={e => handleEditChange('weight', e.target.value)}
-                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'white', fontSize: '0.75rem', textAlign: 'right' }} />
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem', textAlign: 'right' }} />
                                                     </td>
                                                 </>
                                             )}
@@ -339,9 +339,9 @@ const DataManager = () => {
                                         // VIEW MODE
                                         <>
                                             {selectedTable === 'customer_receivables' ? (
-                                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>-</td>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', fontFamily: 'monospace' }}>-</td>
                                             ) : (
-                                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.75rem', fontFamily: 'monospace' }}>{row.date}</td>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', fontFamily: 'monospace' }}>{row.date}</td>
                                             )}
 
                                             {selectedTable === 'transactions' ? (
@@ -360,18 +360,18 @@ const DataManager = () => {
                                                             {row.payment_mode}
                                                         </span>
                                                     </td>
-                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                                         {row.item_name}
-                                                        {row.invoice_no && <span style={{ marginLeft: '0.5rem', fontSize: '0.625rem', color: '#64748b', padding: '0.125rem 0.375rem', background: 'rgba(255,255,255,0.05)', borderRadius: '0.25rem' }}>#{row.invoice_no}</span>}
+                                                        {row.invoice_no && <span style={{ marginLeft: '0.5rem', fontSize: '0.625rem', color: '#64748b', padding: '0.125rem 0.375rem', background: 'var(--glass-highlight)', borderRadius: '0.25rem' }}>#{row.invoice_no}</span>}
                                                     </td>
-                                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#e2e8f0', fontFamily: 'monospace' }}>
+                                                    <td style={{ padding: '1rem', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
                                                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(row.amount)}
                                                     </td>
                                                 </>
                                             ) : selectedTable === 'customer_receivables' ? (
                                                 <>
-                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>{row.customer_name}</td>
-                                                    <td style={{ padding: '1rem', color: '#94a3b8' }}>{row.city}</td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{row.customer_name}</td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{row.city}</td>
                                                     <td style={{ padding: '1rem', textAlign: 'right', color: row.balance > 0 ? '#ef4444' : '#10b981', fontFamily: 'monospace', fontWeight: 'bold' }}>
                                                         {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(row.balance)}
                                                     </td>
@@ -392,8 +392,8 @@ const DataManager = () => {
                                                             {(row.type || 'N/A').replace('_', ' ')}
                                                         </span>
                                                     </td>
-                                                    <td style={{ padding: '1rem', color: '#e2e8f0', fontWeight: 500 }}>{row.material}</td>
-                                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#e2e8f0', fontFamily: 'monospace' }}>{row.weight} KG</td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{row.material}</td>
+                                                    <td style={{ padding: '1rem', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.weight} KG</td>
                                                 </>
                                             )}
                                             <td style={{ padding: '1rem', textAlign: 'right' }}>
@@ -401,7 +401,7 @@ const DataManager = () => {
                                                     <button onClick={() => startEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: '#60a5fa' }} title="Edit">
                                                         <Edit2 size={16} />
                                                     </button>
-                                                    <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: '#94a3b8' }} title="Delete" onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}>
+                                                    <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--text-secondary)' }} title="Delete" onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = '#94a3b8'}>
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>

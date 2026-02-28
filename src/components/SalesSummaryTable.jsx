@@ -41,7 +41,7 @@ const SalesSummaryTable = ({ transactions, groupBy = 'date' }) => {
 
             <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: '#0f172a', zIndex: 10 }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-primary)', zIndex: 10 }}>
                         <tr>
                             <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                 {groupBy === 'item' ? 'Item Name' : 'Date'}

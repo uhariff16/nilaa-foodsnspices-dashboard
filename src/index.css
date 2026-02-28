@@ -14,15 +14,22 @@
 }
 
 [data-theme='light'] {
-  --bg-primary: #f1f5f9;
-  --bg-secondary: #ffffff;
+  --bg-primary: #f8fafc;
+  /* Sleek off-white background */
+  --bg-secondary: #f1f5f9;
+  /* Slate for panels */
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --accent-primary: #2563eb;
-  --accent-glow: rgba(37, 99, 235, 0.3);
-  --card-bg: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(0, 0, 0, 0.1);
-  --glass-highlight: rgba(0, 0, 0, 0.03);
+  --text-secondary: #334155;
+  /* Darker secondary text */
+  --accent-primary: #1d4ed8;
+  /* Darker blue for contrast */
+  --accent-glow: rgba(29, 78, 216, 0.15);
+  --card-bg: rgba(255, 255, 255, 1);
+  /* Solid white cards for maximum contrast */
+  --glass-border: rgba(15, 23, 42, 0.1);
+  /* Dark slate borders */
+  --glass-highlight: rgba(15, 23, 42, 0.04);
+  /* Subtle dark highlight */
 }
 
 body {
@@ -418,19 +425,19 @@ h3 {
 }
 
 .btn-toggle:hover:not(.active) {
-  color: white;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background: var(--glass-highlight);
 }
 
 .btn-outline {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--glass-highlight);
   border: 1px solid var(--glass-border);
   color: var(--text-primary);
 }
 
 .btn-outline:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--glass-highlight);
+  border-color: var(--text-secondary);
 }
 
 .btn-icon {
@@ -447,8 +454,8 @@ h3 {
 }
 
 .btn-icon:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: white;
+  background: var(--glass-highlight);
+  color: var(--text-primary);
 }
 
 .btn-action {
@@ -456,7 +463,7 @@ h3 {
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 700;
-  color: white;
+  color: var(--text-primary);
   border: none;
   cursor: pointer;
   display: flex;

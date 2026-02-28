@@ -131,7 +131,7 @@ const FileUpload = ({ onDataLoaded, onProductionLoaded }) => {
                     </button>
                     <button
                         className="btn-primary"
-                        style={{ background: 'transparent', border: '1px solid var(--glass-border)', boxShadow: 'none' }}
+                        style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', boxShadow: 'none' }}
                         onClick={() => folderInputRef.current?.click()}
                     >
                         Select Folder

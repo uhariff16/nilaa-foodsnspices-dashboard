@@ -570,7 +570,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             background: showSettings ? 'var(--accent-color)' : 'var(--glass-highlight)',
                             border: '1px solid var(--glass-border)',
-                            color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                            color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '0.5rem',
                             cursor: 'pointer', fontSize: '0.875rem'
                         }}
                     >
@@ -597,7 +597,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                 type="number"
                                 value={wastageSettings.ginger}
                                 onChange={(e) => setWastageSettings({ ...wastageSettings, ginger: parseFloat(e.target.value) || 0 })}
-                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'white' }}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'var(--text-primary)' }}
                             />
                         </div>
                         <div>
@@ -606,7 +606,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                 type="number"
                                 value={wastageSettings.garlic}
                                 onChange={(e) => setWastageSettings({ ...wastageSettings, garlic: parseFloat(e.target.value) || 0 })}
-                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'white' }}
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)', border: 'none', color: 'var(--text-primary)' }}
                             />
                         </div>
                     </div>
@@ -653,7 +653,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                             )}
 
                             <div style={{
-                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: gingerAvailable < 0 ? '#ef4444' : 'white', fontWeight: 700,
+                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: gingerAvailable < 0 ? 'var(--danger)' : 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
                             }}>
                                 <span>Available:</span>
@@ -694,7 +694,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                             )}
 
                             <div style={{
-                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: garlicAvailable < 0 ? '#ef4444' : 'white', fontWeight: 700,
+                                display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', color: garlicAvailable < 0 ? 'var(--danger)' : 'var(--text-primary)', fontWeight: 700,
                                 borderTop: '1px solid var(--glass-border)', paddingTop: '0.3rem', marginTop: '0.1rem'
                             }}>
                                 <span>Available:</span>
@@ -736,7 +736,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                         </div>
                     );
 
-                    const renderSection = (stats, title, icon, color, bgColor = 'rgba(255, 255, 255, 0.02)') => (
+                    const renderSection = (stats, title, icon, color, bgColor = 'var(--glass-highlight)') => (
                         <div style={{ backgroundColor: bgColor, borderRadius: '1rem', padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
                             <h5 style={{ fontSize: '0.9rem', color: color, marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase' }}>
                                 {icon} {title}
@@ -871,7 +871,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                             {renderSection(realTimeStats.weekly, "Weekly Performance", <Factory size={18} />, '#34d399')}
 
                             {/* Overall Performance (Using Stats from props/main scope) */}
-                            <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: '1rem', padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
+                            <div style={{ backgroundColor: 'var(--glass-highlight)', borderRadius: '1rem', padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
                                 <h5 style={{ fontSize: '0.9rem', color: '#a78bfa', marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase' }}>
                                     <TrendingUp size={18} /> Overall Performance
                                     {overallRange && <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: '0.25rem' }}>{overallRange}</span>}

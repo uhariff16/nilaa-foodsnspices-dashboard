@@ -86,7 +86,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     };
 
     const inputStyle = {
-        background: 'rgba(255, 255, 255, 0.05)',
+        background: 'var(--glass-highlight)',
         border: '1px solid var(--glass-border)',
         color: 'var(--text-primary)',
         padding: '0.75rem',
@@ -364,7 +364,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
 
                             <div style={{ position: 'relative', zIndex: 10, width: '100%' }}>
                                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>PRODUCTION COST</div>
-                                <div style={{ fontSize: '3.5rem', fontWeight: '800', color: '#f8fafc', textShadow: '0 0 20px rgba(248, 250, 252, 0.1)', lineHeight: 1 }}>
+                                <div style={{ fontSize: '3.5rem', fontWeight: '800', color: 'var(--text-primary)', textShadow: '0 0 20px rgba(248, 250, 252, 0.1)', lineHeight: 1 }}>
                                     <span style={{ fontSize: '2rem', color: '#64748b', fontWeight: '400', marginRight: '0.25rem' }}>₹</span>
                                     {results.costPerKg.toFixed(2)}
                                 </div>

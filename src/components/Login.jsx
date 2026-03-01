@@ -21,7 +21,7 @@ const Login = () => {
 
         try {
             await login(email, password);
-            navigate(from, { replace: true });
+            navigate('/', { replace: true });
         } catch (err) {
             console.error("Login failed:", err);
             setError(err.message);

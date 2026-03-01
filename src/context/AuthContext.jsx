@@ -8,13 +8,15 @@ export const AuthProvider = ({ children }) => {
     const [role, setRole] = useState(null);
     const [canAccessAttendance, setCanAccessAttendance] = useState(false);
     const [canAccessPayouts, setCanAccessPayouts] = useState(false);
+    const [canViewDashboard, setCanViewDashboard] = useState(false);
+    const [canManageUsers, setCanManageUsers] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const fetchUserRole = async (email) => {
         // EMERGENCY OVERRIDE: Always make uhariff@gmail.com an admin
         if (email === 'uhariff@gmail.com') {
             console.log("Emergency Admin Access Granted");
-            return { role: 'admin', can_access_attendance: true, can_access_payouts: true };
+            return { role: 'admin', can_access_attendance: true, can_access_payouts: true, can_view_dashboard: true, can_manage_users: true };
         }
 
         try {
@@ -27,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
             const fetchPromise = supabase
                 .from('user_roles')
-                .select('role, can_access_attendance, can_access_payouts')
+                .select('role, can_access_attendance, can_access_payouts, can_view_dashboard, can_manage_users')
                 .eq('email', email)
                 .single();
 
@@ -36,17 +38,19 @@ export const AuthProvider = ({ children }) => {
 
             if (error || !data) {
                 console.warn("Role fetch warning/error:", error);
-                return { role: 'viewer', can_access_attendance: false, can_access_payouts: false };
+                return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false };
             }
             console.log("Role fetched successfully:", data.role);
             return {
-                role: data.role,
+                role: data.role === 'power_user' ? 'viewer' : data.role,
                 can_access_attendance: data.can_access_attendance || false,
-                can_access_payouts: data.can_access_payouts || false
+                can_access_payouts: data.can_access_payouts || false,
+                can_view_dashboard: data.can_view_dashboard ?? false,
+                can_manage_users: data.can_manage_users ?? false
             };
         } catch (err) {
             console.error("Role fetch error/timeout:", err);
-            return { role: 'viewer', can_access_attendance: false, can_access_payouts: false }; // Safe fallback
+            return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false }; // Safe fallback
         }
     };
 
@@ -61,11 +65,15 @@ export const AuthProvider = ({ children }) => {
                     setRole(authData.role);
                     setCanAccessAttendance(authData.can_access_attendance);
                     setCanAccessPayouts(authData.can_access_payouts);
+                    setCanViewDashboard(authData.can_view_dashboard);
+                    setCanManageUsers(authData.can_manage_users);
                 } else {
                     setUser(null);
                     setRole(null);
                     setCanAccessAttendance(false);
                     setCanAccessPayouts(false);
+                    setCanViewDashboard(false);
+                    setCanManageUsers(false);
                 }
             } catch (error) {
                 console.error("Session check error:", error);
@@ -97,11 +105,15 @@ export const AuthProvider = ({ children }) => {
                 setRole(authData.role);
                 setCanAccessAttendance(authData.can_access_attendance);
                 setCanAccessPayouts(authData.can_access_payouts);
+                setCanViewDashboard(authData.can_view_dashboard);
+                setCanManageUsers(authData.can_manage_users);
             } else {
                 setUser(null);
                 setRole(null);
                 setCanAccessAttendance(false);
                 setCanAccessPayouts(false);
+                setCanViewDashboard(false);
+                setCanManageUsers(false);
             }
             clearTimeout(timeout);
             setLoading(false);
@@ -152,16 +164,33 @@ export const AuthProvider = ({ children }) => {
             password,
         });
         if (error) throw error;
+
+        if (data?.user) {
+            // Await role fetch to prevent UI race conditions on redirect
+            const authData = await fetchUserRole(data.user.email);
+            setRole(authData.role);
+            setCanAccessAttendance(authData.can_access_attendance);
+            setCanAccessPayouts(authData.can_access_payouts);
+            setCanViewDashboard(authData.can_view_dashboard);
+            setCanManageUsers(authData.can_manage_users);
+        }
+
         return data;
     };
 
     const logout = async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-        setUser(null);
-        setRole(null);
-        setCanAccessAttendance(false);
-        setCanAccessPayouts(false);
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error("Logout error:", error);
+        } finally {
+            setUser(null);
+            setRole(null);
+            setCanAccessAttendance(false);
+            setCanAccessPayouts(false);
+            setCanViewDashboard(false);
+            setCanManageUsers(false);
+        }
     };
 
     return (
@@ -173,7 +202,9 @@ export const AuthProvider = ({ children }) => {
             loading,
             isAdmin: role === 'admin',
             canAccessAttendance: role === 'admin' || canAccessAttendance,
-            canAccessPayouts: role === 'admin' || canAccessPayouts
+            canAccessPayouts: role === 'admin' || canAccessPayouts,
+            canViewDashboard: role === 'admin' || canViewDashboard,
+            canManageUsers: role === 'admin' || canManageUsers
         }}>
             {children}
         </AuthContext.Provider>

@@ -245,7 +245,7 @@ h3 {
 }
 
 .admin-container {
-  max-width: 64rem;
+  max-width: 75rem;
   margin: 0 auto;
   padding: 2rem 1.5rem;
   width: 100%;
@@ -274,17 +274,23 @@ h3 {
   margin: 0 auto;
 }
 
-.admin-grid {
+.admin-grid,
+.admin-grid-custom {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.5rem;
   width: 100%;
-  max-width: 56rem;
+  max-width: 75rem;
 }
 
 @media (min-width: 1024px) {
   .admin-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-grid-custom {
+    grid-template-columns: 350px 1fr;
+    align-items: start;
   }
 }
 
@@ -476,7 +482,6 @@ h3 {
 .btn-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  filter: grayscale(1);
 }
 
 .btn-action:active {

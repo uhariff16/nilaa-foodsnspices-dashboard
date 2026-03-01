@@ -41,8 +41,8 @@ class ErrorBoundary extends React.Component {
 }
 
 // Protected Route Wrapper
-const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false }) => {
-    const { user, role, loading, canAccessAttendance, logout } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false, dashboardOnly = false }) => {
+    const { user, role, loading, canAccessAttendance, canViewDashboard, logout } = useAuth();
     const location = useLocation();
 
     if (loading) {
@@ -71,6 +71,23 @@ const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false })
                 <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.5rem' }}>Access Denied: Attendance Access Required</div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <button onClick={() => window.location.href = '/'} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Back to Dashboard</button>
+                    <button onClick={logout} className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>Logout & Change User</button>
+                </div>
+            </div>
+        );
+    }
+
+    if (dashboardOnly && !canViewDashboard) {
+        if (location.pathname === '/' && canAccessAttendance) {
+            // Intelligent auto-redirect for Viewers who only have Attendance access
+            return <Navigate to="/attendance" replace />;
+        }
+
+        return (
+            <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', color: 'white' }}>
+                <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.5rem' }}>Access Denied: Dashboard Access Required</div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    {canAccessAttendance && <button onClick={() => window.location.href = '/attendance'} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Go to Attendance</button>}
                     <button onClick={logout} className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>Logout & Change User</button>
                 </div>
             </div>
@@ -326,7 +343,7 @@ const App = () => {
                             <Route
                                 path="/"
                                 element={
-                                    <ProtectedRoute>
+                                    <ProtectedRoute dashboardOnly={true}>
                                         <DashboardLayout />
                                     </ProtectedRoute>
                                 }

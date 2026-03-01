@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Users, UserPlus, Trash2, Mail, Shield, AlertCircle, CheckCircle, RefreshCw, X, Eye, Crown } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Shield, AlertCircle, CheckCircle, RefreshCw, X, Eye, Crown, Activity, DollarSign, LayoutDashboard } from 'lucide-react';
 
 const AdminUserAccess = () => {
     const [users, setUsers] = useState([]);
@@ -9,16 +9,26 @@ const AdminUserAccess = () => {
 
     // Add User Form State
     const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin'
+    const [newUserRole, setNewUserRole] = useState('viewer'); // 'admin', 'executive', 'attendance_manager', 'financial_controller', 'viewer'
     const [canAccessAttendance, setCanAccessAttendance] = useState(false);
     const [canAccessPayouts, setCanAccessPayouts] = useState(false);
+    const [canViewDashboard, setCanViewDashboard] = useState(false);
+
+    const ROLES = [
+        { id: 'admin', label: 'Master Admin', desc: 'Full access to all modules and settings' },
+        { id: 'executive', label: 'Dashboard Executive', desc: 'View main Dashboard only' },
+        { id: 'attendance_manager', label: 'Attendance Manager', desc: 'Manage Time & Attendance only' },
+        { id: 'financial_controller', label: 'Financial Controller', desc: 'View Dashboard, Attendance, and Payouts' },
+        { id: 'viewer', label: 'Custom Viewer', desc: 'Manually configure access permissions' }
+    ];
 
     const fetchUsers = async () => {
         setLoading(true);
         try {
             const { data, error } = await supabase.from('user_roles').select('*').order('created_at', { ascending: false });
             if (error) throw error;
-            setUsers(data);
+            const cleanedData = (data || []).map(u => ({ ...u, role: u.role === 'power_user' ? 'viewer' : u.role }));
+            setUsers(cleanedData);
         } catch (error) {
             console.error("Fetch Error:", error);
         } finally {
@@ -39,11 +49,34 @@ const AdminUserAccess = () => {
             const { data: existing } = await supabase.from('user_roles').select('id').eq('email', newUserEmail).single();
             if (existing) throw new Error("User with this email already exists.");
 
+            let permissions = {
+                can_access_attendance: false,
+                can_access_payouts: false,
+                can_view_dashboard: false,
+                can_manage_users: false
+            };
+
+            if (newUserRole === 'admin') {
+                permissions = { can_access_attendance: true, can_access_payouts: true, can_view_dashboard: true, can_manage_users: true };
+            } else if (newUserRole === 'executive') {
+                permissions = { can_access_attendance: false, can_access_payouts: false, can_view_dashboard: true, can_manage_users: false };
+            } else if (newUserRole === 'attendance_manager') {
+                permissions = { can_access_attendance: true, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false };
+            } else if (newUserRole === 'financial_controller') {
+                permissions = { can_access_attendance: true, can_access_payouts: true, can_view_dashboard: true, can_manage_users: false };
+            } else {
+                permissions = {
+                    can_access_attendance: canAccessAttendance,
+                    can_access_payouts: canAccessPayouts,
+                    can_view_dashboard: canViewDashboard,
+                    can_manage_users: false
+                };
+            }
+
             const { error } = await supabase.from('user_roles').insert([{
                 email: newUserEmail,
                 role: newUserRole,
-                can_access_attendance: newUserRole === 'admin' || canAccessAttendance,
-                can_access_payouts: newUserRole === 'admin' || canAccessPayouts
+                ...permissions
             }]);
 
             if (error) throw error;
@@ -52,9 +85,53 @@ const AdminUserAccess = () => {
             setNewUserEmail('');
             setCanAccessAttendance(false);
             setCanAccessPayouts(false);
+            setCanViewDashboard(false);
             fetchUsers();
         } catch (error) {
             console.error("Add Error:", error);
+            setStatus({ type: 'error', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const changeUserRole = async (user, newRole) => {
+        setLoading(true);
+        try {
+            let permissions = {
+                can_access_attendance: false,
+                can_access_payouts: false,
+                can_view_dashboard: false,
+                can_manage_users: false
+            };
+
+            if (newRole === 'admin') {
+                permissions = { can_access_attendance: true, can_access_payouts: true, can_view_dashboard: true, can_manage_users: true };
+            } else if (newRole === 'executive') {
+                permissions = { can_access_attendance: false, can_access_payouts: false, can_view_dashboard: true, can_manage_users: false };
+            } else if (newRole === 'attendance_manager') {
+                permissions = { can_access_attendance: true, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false };
+            } else if (newRole === 'financial_controller') {
+                permissions = { can_access_attendance: true, can_access_payouts: true, can_view_dashboard: true, can_manage_users: false };
+            } else {
+                permissions = {
+                    can_access_attendance: user.can_access_attendance,
+                    can_access_payouts: user.can_access_payouts,
+                    can_view_dashboard: user.can_view_dashboard,
+                    can_manage_users: false
+                };
+            }
+
+            const { error } = await supabase
+                .from('user_roles')
+                .update({ role: newRole, ...permissions })
+                .eq('email', user.email);
+
+            if (error) throw error;
+            setStatus({ type: 'success', message: `Role updated to ${newRole}.` });
+            fetchUsers();
+        } catch (error) {
+            console.error("Update Role Error:", error);
             setStatus({ type: 'error', message: error.message });
         } finally {
             setLoading(false);
@@ -71,6 +148,25 @@ const AdminUserAccess = () => {
             setStatus({ type: 'success', message: "User access revoked." });
             fetchUsers();
         } catch (error) {
+            setStatus({ type: 'error', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleDashboardAccess = async (user) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('user_roles')
+                .update({ can_view_dashboard: !user.can_view_dashboard })
+                .eq('email', user.email);
+
+            if (error) throw error;
+            setStatus({ type: 'success', message: "Dashboard permission updated." });
+            fetchUsers();
+        } catch (error) {
+            console.error("Update Error:", error);
             setStatus({ type: 'error', message: error.message });
         } finally {
             setLoading(false);
@@ -133,7 +229,7 @@ const AdminUserAccess = () => {
                 </div>
             </div>
 
-            <div className="admin-grid">
+            <div className="admin-grid-custom">
                 {/* Grant Access Card - Clean & Solid */}
                 <div style={{ background: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
@@ -169,36 +265,39 @@ const AdminUserAccess = () => {
                             {/* Role Selection */}
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Assign Role</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setNewUserRole('viewer')}
-                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'viewer' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'viewer' ? '#2563eb' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Viewer</span>
-                                            {newUserRole === 'viewer' && <CheckCircle size={14} />}
-                                        </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'viewer' ? '#bfdbfe' : '#64748b' }}>Read-only access</div>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setNewUserRole('admin')}
-                                        style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === 'admin' ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === 'admin' ? '#2563eb' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                            <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Admin</span>
-                                            {newUserRole === 'admin' && <CheckCircle size={14} />}
-                                        </div>
-                                        <div style={{ fontSize: '0.625rem', color: newUserRole === 'admin' ? '#bfdbfe' : '#64748b' }}>Full access</div>
-                                    </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {ROLES.map(r => (
+                                        <button
+                                            key={r.id}
+                                            type="button"
+                                            onClick={() => setNewUserRole(r.id)}
+                                            style={{ padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'left', transition: 'all 0.2s', border: newUserRole === r.id ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)', background: newUserRole === r.id ? '#2563eb' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                <span style={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{r.label}</span>
+                                                {newUserRole === r.id && <CheckCircle size={14} />}
+                                            </div>
+                                            <div style={{ fontSize: '0.625rem', color: newUserRole === r.id ? '#bfdbfe' : '#64748b' }}>{r.desc}</div>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
                             {/* Access Toggles for non-admins */}
                             {newUserRole === 'viewer' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '0.375rem', border: '1px solid var(--glass-border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="dashboardAccess"
+                                            checked={canViewDashboard}
+                                            onChange={(e) => setCanViewDashboard(e.target.checked)}
+                                            style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="dashboardAccess" style={{ color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                            Grant access to Dashboard
+                                        </label>
+                                    </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                         <input
                                             type="checkbox"
@@ -256,11 +355,12 @@ const AdminUserAccess = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                             <thead style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 'bold' }}>
                                 <tr>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Attendance</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Payouts</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '30%' }}>User</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left', width: '25%' }}>Role</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center', width: '12%' }}>Dashboard</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center', width: '12%' }}>Attendance</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center', width: '12%' }}>Payouts</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right', width: '9%' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody style={{ color: 'var(--text-primary)' }}>
@@ -271,31 +371,45 @@ const AdminUserAccess = () => {
                                                 <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-primary)', flexShrink: 0 }}>
                                                     {user.email.substring(0, 2).toUpperCase()}
                                                 </div>
-                                                <span style={{ fontWeight: 500, wordBreak: 'break-all' }}>{user.email}</span>
+                                                <span style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={user.email}>{user.email}</span>
                                             </div>
                                         </td>
                                         <td style={{ padding: '0.75rem 1rem' }}>
-                                            {user.role === 'admin' ? (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                                    <Crown size={12} /> Admin
-                                                </span>
-                                            ) : (
-                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.125rem 0.625rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                                                    <Eye size={12} /> Viewer
-                                                </span>
-                                            )}
+                                            <select
+                                                value={user.role}
+                                                onChange={(e) => changeUserRole(user, e.target.value)}
+                                                disabled={loading || user.email === 'uhariff@gmail.com'}
+                                                style={{
+                                                    padding: '0.375rem 0.75rem',
+                                                    borderRadius: '0.375rem',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    border: '1px solid var(--glass-border)',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 'bold',
+                                                    cursor: (loading || user.email === 'uhariff@gmail.com') ? 'not-allowed' : 'pointer',
+                                                    outline: 'none',
+                                                    width: '100%',
+                                                    minWidth: '150px'
+                                                }}
+                                            >
+                                                {ROLES.map(r => (
+                                                    <option key={r.id} value={r.id}>{r.label}</option>
+                                                ))}
+                                            </select>
                                         </td>
                                         <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                                             <div
-                                                onClick={() => user.role !== 'admin' && toggleAttendanceAccess(user)}
+                                                onClick={() => user.role === 'viewer' && toggleDashboardAccess(user)}
                                                 style={{
-                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
+                                                    cursor: user.role === 'viewer' ? 'pointer' : 'default',
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
-                                                    color: (user.can_access_attendance || user.role === 'admin') ? '#34d399' : '#64748b'
+                                                    color: (user.can_view_dashboard || user.role === 'admin' || user.role === 'executive' || user.role === 'financial_controller') ? '#34d399' : '#64748b'
                                                 }}
+                                                title={user.role !== 'viewer' ? "Permission managed by role" : "Toggle access"}
                                             >
-                                                {(user.can_access_attendance || user.role === 'admin') ? (
+                                                {(user.can_view_dashboard || user.role === 'admin' || user.role === 'executive' || user.role === 'financial_controller') ? (
                                                     <CheckCircle size={18} />
                                                 ) : (
                                                     <X size={18} />
@@ -304,15 +418,34 @@ const AdminUserAccess = () => {
                                         </td>
                                         <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                                             <div
-                                                onClick={() => user.role !== 'admin' && togglePayoutAccess(user)}
+                                                onClick={() => user.role === 'viewer' && toggleAttendanceAccess(user)}
                                                 style={{
-                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
+                                                    cursor: user.role === 'viewer' ? 'pointer' : 'default',
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
-                                                    color: (user.can_access_payouts || user.role === 'admin') ? '#34d399' : '#64748b'
+                                                    color: (user.can_access_attendance || user.role === 'admin' || user.role === 'attendance_manager' || user.role === 'financial_controller') ? '#34d399' : '#64748b'
                                                 }}
+                                                title={user.role !== 'viewer' ? "Permission managed by role" : "Toggle access"}
                                             >
-                                                {(user.can_access_payouts || user.role === 'admin') ? (
+                                                {(user.can_access_attendance || user.role === 'admin' || user.role === 'attendance_manager' || user.role === 'financial_controller') ? (
+                                                    <CheckCircle size={18} />
+                                                ) : (
+                                                    <X size={18} />
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                            <div
+                                                onClick={() => user.role === 'viewer' && togglePayoutAccess(user)}
+                                                style={{
+                                                    cursor: user.role === 'viewer' ? 'pointer' : 'default',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    color: (user.can_access_payouts || user.role === 'admin' || user.role === 'financial_controller') ? '#34d399' : '#64748b'
+                                                }}
+                                                title={user.role !== 'viewer' ? "Permission managed by role" : "Toggle access"}
+                                            >
+                                                {(user.can_access_payouts || user.role === 'admin' || user.role === 'financial_controller') ? (
                                                     <CheckCircle size={18} />
                                                 ) : (
                                                     <X size={18} />

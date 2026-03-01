@@ -7,13 +7,14 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [role, setRole] = useState(null);
     const [canAccessAttendance, setCanAccessAttendance] = useState(false);
+    const [canAccessPayouts, setCanAccessPayouts] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const fetchUserRole = async (email) => {
         // EMERGENCY OVERRIDE: Always make uhariff@gmail.com an admin
         if (email === 'uhariff@gmail.com') {
             console.log("Emergency Admin Access Granted");
-            return { role: 'admin', can_access_attendance: true };
+            return { role: 'admin', can_access_attendance: true, can_access_payouts: true };
         }
 
         try {
@@ -26,7 +27,7 @@ export const AuthProvider = ({ children }) => {
 
             const fetchPromise = supabase
                 .from('user_roles')
-                .select('role, can_access_attendance')
+                .select('role, can_access_attendance, can_access_payouts')
                 .eq('email', email)
                 .single();
 
@@ -35,16 +36,17 @@ export const AuthProvider = ({ children }) => {
 
             if (error || !data) {
                 console.warn("Role fetch warning/error:", error);
-                return { role: 'viewer', can_access_attendance: false };
+                return { role: 'viewer', can_access_attendance: false, can_access_payouts: false };
             }
             console.log("Role fetched successfully:", data.role);
             return {
                 role: data.role,
-                can_access_attendance: data.can_access_attendance || false
+                can_access_attendance: data.can_access_attendance || false,
+                can_access_payouts: data.can_access_payouts || false
             };
         } catch (err) {
             console.error("Role fetch error/timeout:", err);
-            return { role: 'viewer', can_access_attendance: false }; // Safe fallback
+            return { role: 'viewer', can_access_attendance: false, can_access_payouts: false }; // Safe fallback
         }
     };
 
@@ -58,10 +60,12 @@ export const AuthProvider = ({ children }) => {
                     const authData = await fetchUserRole(session.user.email);
                     setRole(authData.role);
                     setCanAccessAttendance(authData.can_access_attendance);
+                    setCanAccessPayouts(authData.can_access_payouts);
                 } else {
                     setUser(null);
                     setRole(null);
                     setCanAccessAttendance(false);
+                    setCanAccessPayouts(false);
                 }
             } catch (error) {
                 console.error("Session check error:", error);
@@ -92,10 +96,12 @@ export const AuthProvider = ({ children }) => {
                 const authData = await fetchUserRole(session.user.email);
                 setRole(authData.role);
                 setCanAccessAttendance(authData.can_access_attendance);
+                setCanAccessPayouts(authData.can_access_payouts);
             } else {
                 setUser(null);
                 setRole(null);
                 setCanAccessAttendance(false);
+                setCanAccessPayouts(false);
             }
             clearTimeout(timeout);
             setLoading(false);
@@ -155,6 +161,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setRole(null);
         setCanAccessAttendance(false);
+        setCanAccessPayouts(false);
     };
 
     return (
@@ -165,7 +172,8 @@ export const AuthProvider = ({ children }) => {
             logout,
             loading,
             isAdmin: role === 'admin',
-            canAccessAttendance: role === 'admin' || canAccessAttendance
+            canAccessAttendance: role === 'admin' || canAccessAttendance,
+            canAccessPayouts: role === 'admin' || canAccessPayouts
         }}>
             {children}
         </AuthContext.Provider>

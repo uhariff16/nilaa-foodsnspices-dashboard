@@ -11,6 +11,7 @@ const AdminUserAccess = () => {
     const [newUserEmail, setNewUserEmail] = useState('');
     const [newUserRole, setNewUserRole] = useState('viewer'); // 'viewer' | 'admin'
     const [canAccessAttendance, setCanAccessAttendance] = useState(false);
+    const [canAccessPayouts, setCanAccessPayouts] = useState(false);
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -41,7 +42,8 @@ const AdminUserAccess = () => {
             const { error } = await supabase.from('user_roles').insert([{
                 email: newUserEmail,
                 role: newUserRole,
-                can_access_attendance: newUserRole === 'admin' || canAccessAttendance
+                can_access_attendance: newUserRole === 'admin' || canAccessAttendance,
+                can_access_payouts: newUserRole === 'admin' || canAccessPayouts
             }]);
 
             if (error) throw error;
@@ -49,6 +51,7 @@ const AdminUserAccess = () => {
             setStatus({ type: 'success', message: `Access granted to ${newUserEmail}.` });
             setNewUserEmail('');
             setCanAccessAttendance(false);
+            setCanAccessPayouts(false);
             fetchUsers();
         } catch (error) {
             console.error("Add Error:", error);
@@ -84,6 +87,25 @@ const AdminUserAccess = () => {
 
             if (error) throw error;
             setStatus({ type: 'success', message: "Permission updated." });
+            fetchUsers();
+        } catch (error) {
+            console.error("Update Error:", error);
+            setStatus({ type: 'error', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const togglePayoutAccess = async (user) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('user_roles')
+                .update({ can_access_payouts: !user.can_access_payouts })
+                .eq('email', user.email);
+
+            if (error) throw error;
+            setStatus({ type: 'success', message: "Payout permission updated." });
             fetchUsers();
         } catch (error) {
             console.error("Update Error:", error);
@@ -174,19 +196,33 @@ const AdminUserAccess = () => {
                                 </div>
                             </div>
 
-                            {/* Attendance Access Toggle for non-admins */}
+                            {/* Access Toggles for non-admins */}
                             {newUserRole === 'viewer' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '0.375rem', border: '1px solid var(--glass-border)' }}>
-                                    <input
-                                        type="checkbox"
-                                        id="attendanceAccess"
-                                        checked={canAccessAttendance}
-                                        onChange={(e) => setCanAccessAttendance(e.target.checked)}
-                                        style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
-                                    />
-                                    <label htmlFor="attendanceAccess" style={{ color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer' }}>
-                                        Grant access to Time & Attendance
-                                    </label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '0.375rem', border: '1px solid var(--glass-border)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="attendanceAccess"
+                                            checked={canAccessAttendance}
+                                            onChange={(e) => setCanAccessAttendance(e.target.checked)}
+                                            style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="attendanceAccess" style={{ color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                            Grant access to Time & Attendance
+                                        </label>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id="payoutAccess"
+                                            checked={canAccessPayouts}
+                                            onChange={(e) => setCanAccessPayouts(e.target.checked)}
+                                            style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                                        />
+                                        <label htmlFor="payoutAccess" style={{ color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer' }}>
+                                            Grant access to Financials & Payouts
+                                        </label>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -222,7 +258,8 @@ const AdminUserAccess = () => {
                                 <tr>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>User</th>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Role</th>
-                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>Attendance</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Attendance</th>
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Payouts</th>
                                     <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Action</th>
                                 </tr>
                             </thead>
@@ -248,7 +285,7 @@ const AdminUserAccess = () => {
                                                 </span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                                             <div
                                                 onClick={() => user.role !== 'admin' && toggleAttendanceAccess(user)}
                                                 style={{
@@ -259,6 +296,23 @@ const AdminUserAccess = () => {
                                                 }}
                                             >
                                                 {(user.can_access_attendance || user.role === 'admin') ? (
+                                                    <CheckCircle size={18} />
+                                                ) : (
+                                                    <X size={18} />
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                            <div
+                                                onClick={() => user.role !== 'admin' && togglePayoutAccess(user)}
+                                                style={{
+                                                    cursor: user.role === 'admin' ? 'default' : 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    color: (user.can_access_payouts || user.role === 'admin') ? '#34d399' : '#64748b'
+                                                }}
+                                            >
+                                                {(user.can_access_payouts || user.role === 'admin') ? (
                                                     <CheckCircle size={18} />
                                                 ) : (
                                                     <X size={18} />

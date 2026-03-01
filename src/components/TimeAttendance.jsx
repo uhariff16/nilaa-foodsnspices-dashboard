@@ -48,7 +48,8 @@ const formatTimeFromDec = (decHours) => {
 }
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
-    const { user, role, logout: authLogout } = useAuth();
+    const { user, role, logout: authLogout, canAccessPayouts } = useAuth();
+    const canViewPayouts = role === 'admin' || canAccessPayouts;
     const { theme, toggleTheme } = useTheme();
     const [attendanceData, setAttendanceData] = useState([]);
     const [employees, setEmployees] = useState([]);
@@ -60,7 +61,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [showManualEntry, setShowManualEntry] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [dateFilter, setDateFilter] = useState('');
+    const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1);
+    const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
     const [editingRecord, setEditingRecord] = useState(null);
     const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'payments'
     const [paymentData, setPaymentData] = useState([]);
@@ -415,19 +417,29 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         return attendanceData.filter(row => {
             const matchesSearch = row.empId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesDate = !dateFilter || row.date === dateFilter;
-            return matchesSearch && matchesDate;
+
+            if (!row.date) return false;
+            const [y, m, d] = row.date.split('-');
+            const matchesMonth = !monthFilter || parseInt(m) === monthFilter;
+            const matchesYear = !yearFilter || parseInt(y) === yearFilter;
+
+            return matchesSearch && matchesMonth && matchesYear;
         });
-    }, [attendanceData, searchTerm, dateFilter]);
+    }, [attendanceData, searchTerm, monthFilter, yearFilter]);
 
     const filteredPayments = useMemo(() => {
         return paymentData.filter(row => {
             const matchesSearch = row.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (row.emp_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesDate = !dateFilter || row.date === dateFilter;
-            return matchesSearch && matchesDate;
+
+            if (!row.date) return false;
+            const [y, m, d] = row.date.split('-');
+            const matchesMonth = !monthFilter || parseInt(m) === monthFilter;
+            const matchesYear = !yearFilter || parseInt(y) === yearFilter;
+
+            return matchesSearch && matchesMonth && matchesYear;
         });
-    }, [paymentData, searchTerm, dateFilter]);
+    }, [paymentData, searchTerm, monthFilter, yearFilter]);
 
     const paymentStats = useMemo(() => {
         const stats = {
@@ -450,7 +462,13 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         attendanceData.forEach(row => {
             const matchesSearch = row.empId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesDate = !dateFilter || row.date === dateFilter;
+            let matchesDate = false;
+            if (row.date) {
+                const [y, m, d] = row.date.split('-');
+                const matchesMonth = !monthFilter || parseInt(m) === monthFilter;
+                const matchesYear = !yearFilter || parseInt(y) === yearFilter;
+                matchesDate = matchesMonth && matchesYear;
+            }
 
             if (matchesSearch && matchesDate) {
                 const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
@@ -467,7 +485,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         stats.balance = stats.totalEarned - (stats.totalSalary + stats.totalAdvance + stats.totalWages);
 
         return stats;
-    }, [filteredPayments, attendanceData, searchTerm, dateFilter, payrollConfig]);
+    }, [filteredPayments, attendanceData, searchTerm, monthFilter, yearFilter, payrollConfig]);
 
     // Employee specific balances for the table
     const employeeBalances = useMemo(() => {
@@ -497,8 +515,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
     // Stats
     const stats = useMemo(() => {
-        // Context Date: Filter date if selected, otherwise Today (Local)
-        const contextDate = dateFilter || new Date().toISOString().split('T')[0];
+        // Context Date: Today (Local)
+        const contextDate = new Date().toISOString().split('T')[0];
 
         // Precise Workforce Overview from master list
         const totalEmployees = employees.length;
@@ -591,7 +609,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
-    }, [filteredAttendance, attendanceData, employees, payrollConfig, dateFilter]);
+    }, [filteredAttendance, attendanceData, employees, payrollConfig]);
 
 
     // Download Template
@@ -883,7 +901,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             />
 
             {/* Tab Selection */}
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', flexWrap: 'wrap' }}>
                 <button
                     onClick={() => setActiveTab('attendance')}
                     style={{
@@ -899,138 +917,165 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 >
                     Attendance Tracking
                 </button>
-                <button
-                    onClick={() => setActiveTab('payments')}
-                    style={{
-                        padding: '0.75rem 1.5rem',
-                        background: activeTab === 'payments' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                        border: 'none',
-                        borderBottom: activeTab === 'payments' ? '2px solid #3b82f6' : 'none',
-                        color: activeTab === 'payments' ? '#3b82f6' : 'var(--text-secondary)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                    }}
-                >
-                    Salaries & Advances
-                </button>
+                {canViewPayouts && (
+                    <button
+                        onClick={() => setActiveTab('payouts')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: activeTab === 'payouts' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'payouts' ? '2px solid #10b981' : 'none',
+                            color: activeTab === 'payouts' ? '#10b981' : 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Payout & Financials
+                    </button>
+                )}
+                {canViewPayouts && (
+                    <button
+                        onClick={() => setActiveTab('payments')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: activeTab === 'payments' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'payments' ? '2px solid #3b82f6' : 'none',
+                            color: activeTab === 'payments' ? '#3b82f6' : 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Salaries & Advances
+                    </button>
+                )}
             </div>
 
-            {activeTab === 'attendance' ? (
+            {(activeTab === 'attendance' || activeTab === 'payouts') && (
                 <>
-                    {/* Workforce Status */}
-                    <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Users size={16} /> Workforce Overview
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                                Incl. {employees.filter(e => e.staff_type === 'Temporary').length} Temporary
+                    {activeTab === 'attendance' && (
+                        <>
+                            {/* Workforce Status */}
+                            <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Users size={16} /> Workforce Overview
                             </div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
-                            <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Present ({stats.contextDate})</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{stats.presentCount}</div>
-                            {stats.tempPresentCount > 0 && (
-                                <div style={{ fontSize: '0.65rem', color: '#10b981', opacity: 0.8, marginTop: '0.25rem' }}>
-                                    {stats.tempPresentCount} Temporary
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                                        Incl. {employees.filter(e => e.staff_type === 'Temporary').length} Temporary
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
-                            <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>On Leave ({stats.contextDate})</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.leaveCount}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ef4444' }}>
-                            <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Absent ({stats.contextDate})</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{stats.absentCount}</div>
-                        </div>
-                    </div>
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Present ({stats.contextDate})</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{stats.presentCount}</div>
+                                    {stats.tempPresentCount > 0 && (
+                                        <div style={{ fontSize: '0.65rem', color: '#10b981', opacity: 0.8, marginTop: '0.25rem' }}>
+                                            {stats.tempPresentCount} Temporary
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>On Leave ({stats.contextDate})</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.leaveCount}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ef4444' }}>
+                                    <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Absent ({stats.contextDate})</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{stats.absentCount}</div>
+                                </div>
+                            </div>
+                        </>
+                    )}
 
-                    {/* Overall Summary */}
-                    <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                        Overall Summary (All Staff)
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                        <div className="glass-panel" style={{ padding: '1rem' }}>
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1rem' }}>
-                            <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1rem' }}>
-                            <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1rem' }}>
-                            <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.grossPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
-                            <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
-                        </div>
-                    </div>
+                    {activeTab === 'payouts' && canViewPayouts && (
+                        <>
+                            {/* Overall Summary */}
+                            <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                                Overall Summary (All Staff)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.grossPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                                </div>
+                            </div>
 
-                    {/* Temporary Staff Metrics */}
-                    <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                        Temporary Staff (Field Metrics)
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                            <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                            <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                            <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                            <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempGrossPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
-                            <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
-                        </div>
-                    </div>
+                            {/* Temporary Staff Metrics */}
+                            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                                Temporary Staff (Field Metrics)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempGrossPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
+                                </div>
+                            </div>
 
-                    {/* Permanent Staff Metrics */}
-                    <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
-                        Permanent Staff (Core Team)
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                            <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                            <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                            <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                            <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permGrossPay)}</div>
-                        </div>
-                        <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
-                            <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                            <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
-                        </div>
-                    </div>
+                            {/* Permanent Staff Metrics */}
+                            <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
+                                Permanent Staff (Core Team)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permGrossPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
+                                </div>
+                            </div>
+                        </>
+                    )}
 
-                    {/* Table */}
+                    {/* Table (Shared Search UI across both tabs) */}
                     <div className="glass-panel" style={{ overflow: 'hidden' }}>
                         <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -1059,24 +1104,48 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                         }}
                                     />
                                 </div>
-                                <div style={{ position: 'relative' }}>
-                                    <input
-                                        type="date"
-                                        value={dateFilter}
-                                        onChange={(e) => setDateFilter(e.target.value)}
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <select
+                                        value={monthFilter}
+                                        onChange={(e) => setMonthFilter(e.target.value ? parseInt(e.target.value) : '')}
                                         style={{
                                             padding: '0.6rem 0.75rem',
                                             background: 'var(--glass-highlight)',
                                             border: '1px solid var(--glass-border)',
                                             borderRadius: '0.5rem',
                                             color: 'var(--text-primary)',
-                                            fontSize: '0.9rem'
+                                            fontSize: '0.9rem',
+                                            cursor: 'pointer'
                                         }}
-                                    />
+                                    >
+                                        <option value="" style={{ color: '#1e293b' }}>All Months</option>
+                                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                            <option key={m} value={m} style={{ color: '#1e293b' }}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={yearFilter}
+                                        onChange={(e) => setYearFilter(e.target.value ? parseInt(e.target.value) : '')}
+                                        style={{
+                                            padding: '0.6rem 0.75rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <option value="" style={{ color: '#1e293b' }}>All Years</option>
+                                        {[...Array(5)].map((_, i) => {
+                                            const y = new Date().getFullYear() - 2 + i;
+                                            return <option key={y} value={y} style={{ color: '#1e293b' }}>{y}</option>;
+                                        })}
+                                    </select>
                                 </div>
-                                {(searchTerm || dateFilter) && (
+                                {(searchTerm || monthFilter !== '' || yearFilter !== '') && (
                                     <button
-                                        onClick={() => { setSearchTerm(''); setDateFilter(''); }}
+                                        onClick={() => { setSearchTerm(''); setMonthFilter(new Date().getMonth() + 1); setYearFilter(new Date().getFullYear()); }}
                                         style={{
                                             padding: '0.6rem 1rem',
                                             background: 'rgba(239, 68, 68, 0.1)',
@@ -1094,170 +1163,180 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         </div>
                         <div style={{ overflowY: 'auto', maxHeight: '500px', borderBottomLeftRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}>
                             <div style={{ display: 'flex', gap: '2rem', minWidth: 'max-content', paddingBottom: '1rem' }}>
-                                {/* Table 1: Shift Details & Working Hours */}
-                                <div style={{ flex: 1, borderRight: '1px dashed var(--glass-border)', paddingRight: '1rem' }}>
-                                    <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid var(--accent-primary)', display: 'inline-block' }}>
-                                        Shift Details & Working Hours
-                                    </div>
-                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
-                                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
-                                            <tr style={{ textAlign: 'left' }}>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 4</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredAttendance.map((row, i) => {
-                                                const emp = employees.find(e => e.emp_id === row.empId);
-                                                const isTemp = emp?.staff_type === 'Temporary';
-                                                return (
-                                                    <tr key={i} style={{
-                                                        height: '85px',
-                                                        borderBottom: '1px solid var(--glass-border)',
-                                                        background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
-                                                    }}>
-                                                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
-                                                        <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
-                                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                {row.name}
-                                                                {isTemp && <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.25rem', fontWeight: 700 }}>TEMP</span>}
-                                                            </div>
-                                                        </td>
-                                                        <td style={{ padding: '1rem' }}>
-                                                            <div style={{
-                                                                padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
-                                                                background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                                color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                                border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
-                                                            }}>{row.attendance_status || 'Present'}</div>
-                                                        </td>
-                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div></td>
-                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div></td>
-                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
-                                                        <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
-                                                        <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
-                                                        <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div></td>
-                                                        <td style={{ padding: '1rem' }}>
-                                                            {(() => {
-                                                                const total = parseFloat(row.hoursWorked) || 0;
-                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                const nonOT = Math.max(0, total - displayOT);
-                                                                return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{nonOT.toFixed(2)}h</div>;
-                                                            })()}
-                                                        </td>
-                                                        <td style={{ padding: '1rem' }}>
-                                                            {(() => {
-                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                return displayOT > 0 ? (
-                                                                    <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
-                                                                        +{displayOT.toFixed(2)}h
-                                                                    </span>
-                                                                ) : '-';
-                                                            })()}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {filteredAttendance.length === 0 && (
-                                                <tr><td colSpan={12} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
 
-                                {/* Table 2: Payout Details */}
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid #10b981', display: 'inline-block' }}>
-                                        Payout Details
+                                {activeTab === 'attendance' && (
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid var(--accent-primary)', display: 'inline-block' }}>
+                                            Shift Details & Working Hours
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                                            <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
+                                                <tr style={{ textAlign: 'left' }}>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 4</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredAttendance.map((row, i) => {
+                                                    const emp = employees.find(e => e.emp_id === row.empId);
+                                                    const isTemp = emp?.staff_type === 'Temporary';
+                                                    return (
+                                                        <tr key={i} style={{
+                                                            height: '85px',
+                                                            borderBottom: '1px solid var(--glass-border)',
+                                                            background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                        }}>
+                                                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
+                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
+                                                            <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    {row.name}
+                                                                    {isTemp && <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.25rem', fontWeight: 700 }}>TEMP</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                <div style={{
+                                                                    padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
+                                                                    background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                }}>{row.attendance_status || 'Present'}</div>
+                                                            </td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div></td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div></td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
+                                                            <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div></td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                {(() => {
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const nonOT = Math.max(0, total - displayOT);
+                                                                    return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{nonOT.toFixed(2)}h</div>;
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                {(() => {
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    return displayOT > 0 ? (
+                                                                        <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
+                                                                            +{displayOT.toFixed(2)}h
+                                                                        </span>
+                                                                    ) : '-';
+                                                                })()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {filteredAttendance.length === 0 && (
+                                                    <tr><td colSpan={12} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
-                                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
-                                            <tr style={{ textAlign: 'left' }}>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Non OT Pay</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Net Pay</th>
-                                                <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredAttendance.map((row, i) => {
-                                                const emp = employees.find(e => e.emp_id === row.empId);
-                                                const isTemp = emp?.staff_type === 'Temporary';
-                                                return (
-                                                    <tr key={i} style={{
-                                                        height: '85px',
-                                                        borderBottom: '1px solid var(--glass-border)',
-                                                        background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
-                                                    }}>
-                                                        <td style={{ padding: '1rem', fontWeight: 500 }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                                                <span>{row.name}</span>
-                                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{row.date}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
-                                                        <td style={{ padding: '1rem' }}>
-                                                            {(() => {
-                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                return otPay > 0 ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(otPay)}</span> : '-';
-                                                            })()}
-                                                        </td>
-                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
-                                                            {(() => {
-                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
-                                                                return formatCurrency(base + (otPay > 0 ? otPay : 0));
-                                                            })()}
-                                                        </td>
-                                                        <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
-                                                        <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>
-                                                            {(() => {
-                                                                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
-                                                                const deductions = parseFloat(row.deductions) || 0;
-                                                                return formatCurrency(base + (otPay > 0 ? otPay : 0) - deductions);
-                                                            })()}
-                                                        </td>
-                                                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                                                <button onClick={() => { setEditingRecord(row); setShowManualEntry(true); }} style={{ padding: '0.4rem', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#3b82f6', cursor: 'pointer', transition: 'all 0.2s' }} title="Edit Log"><Pencil size={18} /></button>
-                                                                <button onClick={() => handleDelete(row)} style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Delete Log"><Trash2 size={18} /></button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {filteredAttendance.length === 0 && (
-                                                <tr><td colSpan={7} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                )}
+
+                                {activeTab === 'payouts' && canViewPayouts && (
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid #10b981', display: 'inline-block' }}>
+                                            Payout Details
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
+                                            <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
+                                                <tr style={{ textAlign: 'left' }}>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Non OT Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Net Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredAttendance.map((row, i) => {
+                                                    const emp = employees.find(e => e.emp_id === row.empId);
+                                                    const isTemp = emp?.staff_type === 'Temporary';
+                                                    return (
+                                                        <tr key={i} style={{
+                                                            height: '85px',
+                                                            borderBottom: '1px solid var(--glass-border)',
+                                                            background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                        }}>
+                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
+                                                                {row.date}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
+                                                                {row.empId}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                                {row.name}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                {(() => {
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                    return otPay > 0 ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(otPay)}</span> : '-';
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                                                                {(() => {
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                    const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                    return formatCurrency(base + (otPay > 0 ? otPay : 0));
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>
+                                                                {(() => {
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                    const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                    const deductions = parseFloat(row.deductions) || 0;
+                                                                    return formatCurrency(base + (otPay > 0 ? otPay : 0) - deductions);
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                                    <button onClick={() => { setEditingRecord(row); setShowManualEntry(true); }} style={{ padding: '0.4rem', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#3b82f6', cursor: 'pointer', transition: 'all 0.2s' }} title="Edit Log"><Pencil size={18} /></button>
+                                                                    <button onClick={() => handleDelete(row)} style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Delete Log"><Trash2 size={18} /></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {filteredAttendance.length === 0 && (
+                                                    <tr><td colSpan={9} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 </>
-            ) : (
+            )}
+
+            {activeTab === 'payments' && canViewPayouts && (
                 <>
                     {/* Payment Stats */}
                     <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1323,21 +1402,61 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                         }}
                                     />
                                 </div>
-                                <div style={{ position: 'relative' }}>
-                                    <input
-                                        type="date"
-                                        value={dateFilter}
-                                        onChange={(e) => setDateFilter(e.target.value)}
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <select
+                                        value={monthFilter}
+                                        onChange={(e) => setMonthFilter(e.target.value ? parseInt(e.target.value) : '')}
                                         style={{
                                             padding: '0.6rem 0.75rem',
                                             background: 'var(--glass-highlight)',
                                             border: '1px solid var(--glass-border)',
                                             borderRadius: '0.5rem',
                                             color: 'var(--text-primary)',
-                                            fontSize: '0.9rem'
+                                            fontSize: '0.9rem',
+                                            cursor: 'pointer'
                                         }}
-                                    />
+                                    >
+                                        <option value="" style={{ color: '#1e293b' }}>All Months</option>
+                                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                            <option key={m} value={m} style={{ color: '#1e293b' }}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={yearFilter}
+                                        onChange={(e) => setYearFilter(e.target.value ? parseInt(e.target.value) : '')}
+                                        style={{
+                                            padding: '0.6rem 0.75rem',
+                                            background: 'var(--glass-highlight)',
+                                            border: '1px solid var(--glass-border)',
+                                            borderRadius: '0.5rem',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.9rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <option value="" style={{ color: '#1e293b' }}>All Years</option>
+                                        {[...Array(5)].map((_, i) => {
+                                            const y = new Date().getFullYear() - 2 + i;
+                                            return <option key={y} value={y} style={{ color: '#1e293b' }}>{y}</option>;
+                                        })}
+                                    </select>
                                 </div>
+                                {(searchTerm || monthFilter !== '' || yearFilter !== '') && (
+                                    <button
+                                        onClick={() => { setSearchTerm(''); setMonthFilter(new Date().getMonth() + 1); setYearFilter(new Date().getFullYear()); }}
+                                        style={{
+                                            padding: '0.6rem 1rem',
+                                            background: 'rgba(239, 68, 68, 0.1)',
+                                            color: '#ef4444',
+                                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                                            borderRadius: '0.5rem',
+                                            cursor: 'pointer',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        Clear
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div style={{ overflowY: 'auto', maxHeight: '500px' }}>

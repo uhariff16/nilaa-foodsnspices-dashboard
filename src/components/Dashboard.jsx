@@ -17,6 +17,7 @@ import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, S
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
+import YearlyAnalysis from './YearlyAnalysis';
 import logo from '../assets/logo.png'; // Import logo
 import MobileDashboard from './mobile/MobileDashboard';
 import { supabase } from '../lib/supabaseClient';
@@ -1653,6 +1654,22 @@ const Dashboard = (props) => {
                     <Calculator size={18} />
                     Simulator
                 </button>
+
+                {/* YTD Analysis Tab - ADMIN ONLY */}
+                {props.isAdmin && (
+                    <button
+                        onClick={() => setActiveTab('ytd')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'ytd' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'ytd' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'ytd' ? 600 : 400
+                        }}
+                    >
+                        <TrendingUp size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        YTD Analysis
+                    </button>
+                )}
             </div >
 
             {/* Content */}
@@ -2673,12 +2690,22 @@ const Dashboard = (props) => {
                 )
             }
 
-            {/* [NEW] Simulator Tab Content */}
             {
                 activeTab === 'simulator' && (
                     <CostSimulator
                         previousMonthStats={previousMonthStats}
                         selectedMonth={selectedMonth}
+                    />
+                )
+            }
+
+            {/* [NEW] YTD Analysis */}
+            {
+                activeTab === 'ytd' && props.isAdmin && (
+                    <YearlyAnalysis
+                        selectedYear={selectedYear}
+                        transactions={data?.transactions || []}
+                        productionData={props.productionData}
                     />
                 )
             }

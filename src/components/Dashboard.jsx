@@ -1383,7 +1383,7 @@ const Dashboard = (props) => {
                                     color: 'var(--text-primary)',
                                     boxShadow: 'none'
                                 }}
-                                onClick={() => window.open('/attendance', '_blank')}
+                                onClick={() => navigate('/attendance')}
                             >
                                 <Clock size={18} />
                                 Time & Attendance
@@ -1423,7 +1423,7 @@ const Dashboard = (props) => {
                         <button
                             className="btn-primary"
                             style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--glass-border)', color: 'var(--accent-primary)', boxShadow: 'none' }}
-                            onClick={() => window.location.href = '/admin'}
+                            onClick={() => navigate('/admin')}
                         >
                             <Settings size={18} style={{ marginRight: '0.5rem' }} /> Admin
                         </button>

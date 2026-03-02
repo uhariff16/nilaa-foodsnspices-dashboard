@@ -44,6 +44,7 @@ class ErrorBoundary extends React.Component {
 const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false, dashboardOnly = false }) => {
     const { user, role, loading, canAccessAttendance, canViewDashboard, logout } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
 
     if (loading) {
         return <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1.2rem' }}>Authenticating...</div>;
@@ -87,7 +88,7 @@ const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false, d
             <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', color: 'white' }}>
                 <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '1.5rem' }}>Access Denied: Dashboard Access Required</div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    {canAccessAttendance && <button onClick={() => window.location.href = '/attendance'} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Go to Attendance</button>}
+                    {canAccessAttendance && <button onClick={() => navigate('/attendance')} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)' }}>Go to Attendance</button>}
                     <button onClick={logout} className="btn-primary" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>Logout & Change User</button>
                 </div>
             </div>

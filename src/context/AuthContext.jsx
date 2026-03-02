@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext();
@@ -11,6 +11,7 @@ export const AuthProvider = ({ children }) => {
     const [canViewDashboard, setCanViewDashboard] = useState(false);
     const [canManageUsers, setCanManageUsers] = useState(false);
     const [loading, setLoading] = useState(true);
+    const currentUserRef = useRef(null);
 
     const fetchUserRole = async (email) => {
         // EMERGENCY OVERRIDE: Always make uhariff@gmail.com an admin
@@ -22,15 +23,15 @@ export const AuthProvider = ({ children }) => {
         try {
             console.log("Fetching role for:", email);
 
-            // Timeout Promise (3s)
+            // Timeout Promise (10s)
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Role fetch timeout')), 3000)
+                setTimeout(() => reject(new Error('Role fetch timeout')), 10000)
             );
 
             const fetchPromise = supabase
                 .from('user_roles')
                 .select('role, can_access_attendance, can_access_payouts, can_view_dashboard, can_manage_users')
-                .eq('email', email)
+                .ilike('email', email)
                 .single();
 
             // Race against timeout
@@ -56,36 +57,10 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Check active session
-        const checkSession = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    setUser(session.user);
-                    const authData = await fetchUserRole(session.user.email);
-                    setRole(authData.role);
-                    setCanAccessAttendance(authData.can_access_attendance);
-                    setCanAccessPayouts(authData.can_access_payouts);
-                    setCanViewDashboard(authData.can_view_dashboard);
-                    setCanManageUsers(authData.can_manage_users);
-                } else {
-                    setUser(null);
-                    setRole(null);
-                    setCanAccessAttendance(false);
-                    setCanAccessPayouts(false);
-                    setCanViewDashboard(false);
-                    setCanManageUsers(false);
-                }
-            } catch (error) {
-                console.error("Session check error:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
 
-        checkSession();
 
-        // Safety Timeout: Force loading false after 5 seconds to prevent infinite hang
-        const timeout = setTimeout(() => {
+        // Safety Timeout: Force loading false after 10 seconds to prevent infinite hang
+        const safetyTimeout = setTimeout(() => {
             setLoading(prev => {
                 if (prev) {
                     console.warn("Auth check timed out. Forcing load completion.");
@@ -93,21 +68,38 @@ export const AuthProvider = ({ children }) => {
                 }
                 return prev;
             });
-        }, 5000);
+        }, 10000);
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log("Auth State Change:", event, session?.user?.email);
             if (session?.user) {
-                setUser(session.user);
-                // Only fetch role if we don't have it or it's a new user
-                const authData = await fetchUserRole(session.user.email);
-                setRole(authData.role);
-                setCanAccessAttendance(authData.can_access_attendance);
-                setCanAccessPayouts(authData.can_access_payouts);
-                setCanViewDashboard(authData.can_view_dashboard);
-                setCanManageUsers(authData.can_manage_users);
+                // Ignore token refreshes or duplicate events for the same active user to prevent UI locking
+                if (currentUserRef.current === session.user.id && event !== 'SIGNED_OUT') {
+                    setUser(session.user);
+                    return;
+                }
+
+                currentUserRef.current = session.user.id;
+                setLoading(true); // START LOADING LOCK
+                try {
+                    // Only fetch role if we don't have it or it's a new user
+                    const authData = await fetchUserRole(session.user.email);
+
+                    // SET ALL STATE TOGETHER TO PREVENT ROUTER CRASH
+                    setRole(authData.role);
+                    setCanAccessAttendance(authData.can_access_attendance);
+                    setCanAccessPayouts(authData.can_access_payouts);
+                    setCanViewDashboard(authData.can_view_dashboard);
+                    setCanManageUsers(authData.can_manage_users);
+
+                    // Set user LAST so router sees populated permissions
+                    setUser(session.user);
+                } catch (e) {
+                    console.error("Auth Error", e);
+                }
             } else {
+                currentUserRef.current = null;
                 setUser(null);
                 setRole(null);
                 setCanAccessAttendance(false);
@@ -115,7 +107,7 @@ export const AuthProvider = ({ children }) => {
                 setCanViewDashboard(false);
                 setCanManageUsers(false);
             }
-            clearTimeout(timeout);
+            clearTimeout(safetyTimeout);
             setLoading(false);
         });
 
@@ -159,23 +151,29 @@ export const AuthProvider = ({ children }) => {
 
 
     const login = async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-        if (error) throw error;
+        setLoading(true); // START LOADING LOCK
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) throw error;
 
-        if (data?.user) {
-            // Await role fetch to prevent UI race conditions on redirect
-            const authData = await fetchUserRole(data.user.email);
-            setRole(authData.role);
-            setCanAccessAttendance(authData.can_access_attendance);
-            setCanAccessPayouts(authData.can_access_payouts);
-            setCanViewDashboard(authData.can_view_dashboard);
-            setCanManageUsers(authData.can_manage_users);
+            if (data?.user) {
+                // Await role fetch to prevent UI race conditions on redirect
+                const authData = await fetchUserRole(data.user.email);
+                setRole(authData.role);
+                setCanAccessAttendance(authData.can_access_attendance);
+                setCanAccessPayouts(authData.can_access_payouts);
+                setCanViewDashboard(authData.can_view_dashboard);
+                setCanManageUsers(authData.can_manage_users);
+                setUser(data.user);
+            }
+
+            return data;
+        } finally {
+            setLoading(false); // RELEASE LOADING LOCK
         }
-
-        return data;
     };
 
     const logout = async () => {

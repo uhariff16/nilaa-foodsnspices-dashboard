@@ -74,7 +74,7 @@ const AdminUserAccess = () => {
             }
 
             const { error } = await supabase.from('user_roles').insert([{
-                email: newUserEmail,
+                email: newUserEmail.toLowerCase(),
                 role: newUserRole,
                 ...permissions
             }]);
@@ -125,7 +125,7 @@ const AdminUserAccess = () => {
             const { error } = await supabase
                 .from('user_roles')
                 .update({ role: newRole, ...permissions })
-                .eq('email', user.email);
+                .ilike('email', user.email);
 
             if (error) throw error;
             setStatus({ type: 'success', message: `Role updated to ${newRole}.` });
@@ -143,7 +143,7 @@ const AdminUserAccess = () => {
 
         setLoading(true);
         try {
-            const { error } = await supabase.from('user_roles').delete().eq('email', email);
+            const { error } = await supabase.from('user_roles').delete().ilike('email', email);
             if (error) throw error;
             setStatus({ type: 'success', message: "User access revoked." });
             fetchUsers();
@@ -160,7 +160,7 @@ const AdminUserAccess = () => {
             const { error } = await supabase
                 .from('user_roles')
                 .update({ can_view_dashboard: !user.can_view_dashboard })
-                .eq('email', user.email);
+                .ilike('email', user.email);
 
             if (error) throw error;
             setStatus({ type: 'success', message: "Dashboard permission updated." });
@@ -179,7 +179,7 @@ const AdminUserAccess = () => {
             const { error } = await supabase
                 .from('user_roles')
                 .update({ can_access_attendance: !user.can_access_attendance })
-                .eq('email', user.email);
+                .ilike('email', user.email);
 
             if (error) throw error;
             setStatus({ type: 'success', message: "Permission updated." });
@@ -198,7 +198,7 @@ const AdminUserAccess = () => {
             const { error } = await supabase
                 .from('user_roles')
                 .update({ can_access_payouts: !user.can_access_payouts })
-                .eq('email', user.email);
+                .ilike('email', user.email);
 
             if (error) throw error;
             setStatus({ type: 'success', message: "Payout permission updated." });

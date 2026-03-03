@@ -1613,9 +1613,11 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                     date: formData.date,
                     emp_id: formData.empId,
                     emp_name: formData.empName,
-                    type: formData.paymentType,
+                    type: formData.paymentType === 'Salary Payout' ? 'Salary' : formData.paymentType,
                     amount: parseFloat(formData.paymentAmount),
-                    remarks: formData.paymentRemarks
+                    remarks: formData.paymentType === 'Salary Payout'
+                        ? (formData.paymentRemarks ? `Full Payout - ${formData.paymentRemarks}` : `Full Payout`)
+                        : formData.paymentRemarks
                 };
 
                 const { error } = await supabase
@@ -1767,6 +1769,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                     <option value="Advance" style={{ background: 'var(--bg-secondary)' }}>Salary Advance</option>
                                     <option value="Salary" style={{ background: 'var(--bg-secondary)' }}>Salary Installment</option>
                                     <option value="Wages" style={{ background: 'var(--bg-secondary)' }}>Wages</option>
+                                    <option value="Salary Payout" style={{ background: 'var(--bg-secondary)' }}>Salary Payout</option>
                                 </select>
                             </div>
                             <div>

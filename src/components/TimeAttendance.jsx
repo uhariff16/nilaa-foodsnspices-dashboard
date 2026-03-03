@@ -1285,7 +1285,26 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem', fontWeight: 500 }}>
                                                                 {row.name}
                                                             </td>
-                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>{formatCurrency(row.daily_wage || row.dailyWage)}</td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                                                                {(() => {
+                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
+                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                    const totalBackend = parseFloat(row.daily_wage || row.dailyWage) || 0;
+
+                                                                    let nonOtBase = 0;
+                                                                    if (totalBackend > 0) {
+                                                                        // If backend already calculated total cost, extract base by subtracting OT
+                                                                        nonOtBase = Math.max(0, totalBackend - otPay);
+                                                                    } else {
+                                                                        // If backend is missing data (e.g. live ongoing shift), calculate base normally
+                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                        nonOtBase = regH * rate;
+                                                                    }
+
+                                                                    return formatCurrency(nonOtBase);
+                                                                })()}
+                                                            </td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(() => {
                                                                     const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
@@ -1299,8 +1318,14 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                     const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                    const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
-                                                                    return formatCurrency(base + (otPay > 0 ? otPay : 0));
+
+                                                                    let totalPay = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                    if (totalPay === 0) {
+                                                                        // Fallback if backend hasn't processed
+                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                        totalPay = (regH * rate) + otPay;
+                                                                    }
+                                                                    return formatCurrency(totalPay);
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
@@ -1309,9 +1334,14 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                     const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                    const base = parseFloat(row.daily_wage || row.dailyWage) || 0;
+
+                                                                    let totalPay = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                                                                    if (totalPay === 0) {
+                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                        totalPay = (regH * rate) + otPay;
+                                                                    }
                                                                     const deductions = parseFloat(row.deductions) || 0;
-                                                                    return formatCurrency(base + (otPay > 0 ? otPay : 0) - deductions);
+                                                                    return formatCurrency(Math.max(0, totalPay - deductions));
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'center' }}>

@@ -5,6 +5,7 @@ import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLe
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
+import PayslipGenerator from './PayslipGenerator';
 
 // Initial helper for global use
 const formatCurrency = (val) => {
@@ -66,6 +67,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [editingRecord, setEditingRecord] = useState(null);
     const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'payments'
     const [paymentData, setPaymentData] = useState([]);
+    const [isPayslipOpen, setIsPayslipOpen] = useState(false);
 
     // Initial Load from DB
     useEffect(() => {
@@ -828,6 +830,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <Upload size={18} />
                             Upload Sheet
                         </button>
+                        <button onClick={() => setIsPayslipOpen(true)} className="btn-action btn-outline" title="Generate Monthly Payslips" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
+                            <FileText size={18} />
+                            Payslips
+                        </button>
                         <button onClick={downloadTemplate} className="btn-action btn-outline" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem' }}>
                             <Download size={18} />
                             Report
@@ -1562,6 +1568,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     activeTab={activeTab}
                 />
             )}
+
+            <PayslipGenerator
+                isOpen={isPayslipOpen}
+                onClose={() => setIsPayslipOpen(false)}
+                employees={employees}
+                attendanceData={attendanceData}
+                paymentData={paymentData}
+                payrollConfig={payrollConfig}
+            />
         </div>
     );
 };

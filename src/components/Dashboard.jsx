@@ -414,37 +414,42 @@ const Dashboard = (props) => {
     const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
     const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
     const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
-    const marketingKeywords = ['AD', 'PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN']; // [NEW]
+    const marketingKeywords = ['PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN', 'ADVERTISEMENT']; // Removed 'AD' to avoid collisions
 
     const recordedExpenses = expenseTransactions.reduce((sum, t) => {
         const amount = parseFloat(t.parsedAmount) || 0;
         const nameUpper = (t.originalDesc || t.name || '').toUpperCase();
 
+        // [FIX] Extract Expense Type from name (Pattern: "TYPE - PAID TO")
+        const typePart = nameUpper.split(' - ')[0].trim();
+
+        const isWaterType = typePart === 'WATER CANE' || waterKeywords.some(k => nameUpper.includes(k));
+        const isLabourType = ['SALARY', 'WAGES', 'SALARY ADVANCE'].includes(typePart) || (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP'));
+        const isPackagingType = typePart === 'PACKING MATERIALS' || packagingKeywords.some(k => nameUpper.includes(k));
+        const isBillType = ['BILLS', 'RENT'].includes(typePart) || billsKeywords.some(k => nameUpper.includes(k));
+        const isMarketingType = marketingKeywords.some(k => nameUpper.includes(k));
+
         // [FIX] Expanded Logic to match MaterialStats
         const hasPBill = t.invoiceNo && String(t.invoiceNo).trim().toUpperCase().startsWith('P-');
         const isMaterial = (t.parsedType === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
-        const isWater = waterKeywords.some(k => nameUpper.includes(k));
-        const isBill = billsKeywords.some(k => nameUpper.includes(k));
-        const isMarketing = marketingKeywords.some(k => nameUpper.includes(k)); // [NEW]
 
         // [FIX] Exclude ESSENTIAL and OTHER EXP items from Material (force to Other)
-        const isEssential = nameUpper.includes('ESSENTIAL');
-        const isExplicitOther = nameUpper.includes('OTHER EXP'); // [FIX]
+        const isEssential = nameUpper.includes('ESSENTIAL') || typePart === 'ESSENTIAL ITEMS';
+        const isExplicitOther = nameUpper.includes('OTHER EXP') || typePart === 'OTHER EXP'; // [FIX]
 
-        // Categorize
-        if (isMaterial && !isEssential && !isExplicitOther) {
-            rawMaterialExpenses += amount;
-        } else if (isWater) {
-            // Water is now considered a Raw Material but tracked separately for display
+        // Categorize (Water first to ensure it's tracked even if labeled as purchase)
+        if (isWaterType) {
             rawMaterialExpenses += amount;
             waterExpenses += amount;
-        } else if (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) {
+        } else if (isMaterial && !isEssential && !isExplicitOther) {
+            rawMaterialExpenses += amount;
+        } else if (isLabourType) {
             salaryExpenses += amount;
-        } else if (packagingKeywords.some(k => nameUpper.includes(k))) {
+        } else if (isPackagingType) {
             packagingExpenses += amount;
-        } else if (isBill) {
+        } else if (isBillType) {
             billsAndRentExpenses += amount;
-        } else if (isMarketing && !isEssential && !nameUpper.includes('INVOICE DISCOUNT')) { // [FIX] Exclude Essential & Discount from Marketing
+        } else if (isMarketingType && !isEssential && !isExplicitOther && !nameUpper.includes('INVOICE DISCOUNT')) { // [FIX] Exclude Essential & Other Exp from Marketing
             marketingExpenses += amount;
         } else {
             otherExpenses += amount;
@@ -2186,8 +2191,26 @@ const Dashboard = (props) => {
                                         </div>
                                     </div>
                                     <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--danger)', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
-                                    <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                    <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                                         {expenseChartData.length} Categories Tracked
+                                    </div>
+                                    <div style={{
+                                        marginTop: '1.5rem',
+                                        display: 'grid',
+                                        gridTemplateColumns: '1fr 1fr',
+                                        width: '100%',
+                                        gap: '1rem',
+                                        borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+                                        paddingTop: '1.25rem'
+                                    }}>
+                                        <div style={{ background: 'rgba(249, 115, 22, 0.05)', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid rgba(249, 115, 22, 0.2)' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Raw Materials</div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f97316' }}>{formatCurrency(rawMaterialExpenses)}</div>
+                                        </div>
+                                        <div style={{ flex: 1, background: 'rgba(168, 85, 247, 0.05)', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>All Other Expenses</div>
+                                            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: '#a855f7' }}>{formatCurrency(grandTotalExpenses - rawMaterialExpenses)}</div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -2197,7 +2220,7 @@ const Dashboard = (props) => {
                                     background: 'var(--glass-highlight)',
                                     borderRadius: '1rem',
                                     border: '1px solid var(--glass-border)',
-                                    height: '220px',
+                                    minHeight: '250px',
                                     position: 'relative'
                                 }}>
                                     <ResponsiveContainer width="100%" height="100%">
@@ -2242,8 +2265,10 @@ const Dashboard = (props) => {
 
                             {/* Expense Metrics [MOVED DOWN] */}
                             <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                display: 'flex',
+                                flexWrap: 'nowrap',
+                                overflowX: 'auto',
+                                paddingBottom: '0.5rem',
                                 gap: '1rem',
                                 marginBottom: '1.5rem'
                             }}>
@@ -2251,6 +2276,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Material' ? null : 'Material')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Material' ? 'rgba(249, 115, 22, 0.15)' : 'var(--glass-highlight)',
                                         borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Material' ? '#f97316' : 'rgba(249, 115, 22, 0.2)'}`,
@@ -2291,6 +2318,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Labour' ? null : 'Labour')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Labour' ? 'rgba(59, 130, 246, 0.15)' : 'var(--glass-highlight)',
                                         padding: '1rem', borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Labour' ? '#3b82f6' : 'rgba(59, 130, 246, 0.2)'}`,
@@ -2313,6 +2342,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Packaging' ? null : 'Packaging')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Packaging' ? 'rgba(236, 72, 153, 0.15)' : 'var(--glass-highlight)',
                                         padding: '1rem', borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Packaging' ? '#ec4899' : 'rgba(236, 72, 153, 0.2)'}`,
@@ -2330,6 +2361,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Bills' ? null : 'Bills')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Bills' ? 'rgba(14, 165, 233, 0.15)' : 'var(--glass-highlight)',
                                         padding: '1rem', borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Bills' ? '#0ea5e9' : 'rgba(14, 165, 233, 0.2)'}`,
@@ -2347,6 +2380,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Marketing' ? null : 'Marketing')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Marketing' ? 'rgba(234, 179, 8, 0.15)' : 'var(--glass-highlight)',
                                         padding: '1rem', borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Marketing' ? '#eab308' : 'rgba(234, 179, 8, 0.2)'}`,
@@ -2364,6 +2399,8 @@ const Dashboard = (props) => {
                                 <div
                                     onClick={() => setSelectedExpenseCategory(prev => prev === 'Other' ? null : 'Other')}
                                     style={{
+                                        flex: '1 1 auto',
+                                        minWidth: 'max-content',
                                         background: selectedExpenseCategory === 'Other' ? 'rgba(168, 85, 247, 0.15)' : 'var(--glass-highlight)',
                                         padding: '1rem', borderRadius: '0.5rem',
                                         border: `1px solid ${selectedExpenseCategory === 'Other' ? '#a855f7' : 'rgba(168, 85, 247, 0.2)'}`,
@@ -2504,19 +2541,28 @@ const Dashboard = (props) => {
                                                 let badgeBg = 'var(--glass-border)';
 
                                                 const nameUpper = key.toUpperCase();
+                                                const typePart = nameUpper.split(' - ')[0].trim();
+
                                                 const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A', 'DESI 4A'];
                                                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
-                                                const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE'];
+                                                const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
                                                 const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
                                                 const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
-                                                const marketingKeywords = ['AD', 'PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN']; // [NEW]
+                                                const marketingKeywords = ['PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN', 'ADVERTISEMENT'];
 
-                                                if (materialKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
-                                                else if (waterKeywords.some(k => nameUpper.includes(k))) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
-                                                else if (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP')) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
-                                                else if (packagingKeywords.some(k => nameUpper.includes(k))) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
-                                                else if (billsKeywords.some(k => nameUpper.includes(k))) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
-                                                else if (marketingKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('ESSENTIAL') && !nameUpper.includes('INVOICE DISCOUNT')) { category = 'Marketing'; badgeColor = '#eab308'; badgeBg = 'rgba(234, 179, 8, 0.1)'; } // [FIX]
+                                                const isWaterType = typePart === 'WATER CANE' || waterKeywords.some(k => nameUpper.includes(k));
+                                                const isLabourType = ['SALARY', 'WAGES', 'SALARY ADVANCE'].includes(typePart) || (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP'));
+                                                const isPackagingType = typePart === 'PACKING MATERIALS' || packagingKeywords.some(k => nameUpper.includes(k));
+                                                const isBillType = ['BILLS', 'RENT'].includes(typePart) || billsKeywords.some(k => nameUpper.includes(k));
+                                                const isMarketingType = marketingKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('ESSENTIAL') && !nameUpper.includes('INVOICE DISCOUNT');
+                                                const isExplicitOther = nameUpper.includes('OTHER EXP') || typePart === 'OTHER EXP';
+
+                                                if (isWaterType) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
+                                                else if (materialKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP') && typePart !== 'ESSENTIAL ITEMS') { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
+                                                else if (isLabourType) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
+                                                else if (isPackagingType) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
+                                                else if (isBillType) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
+                                                else if (isMarketingType && !isExplicitOther) { category = 'Marketing'; badgeColor = '#eab308'; badgeBg = 'rgba(234, 179, 8, 0.1)'; }
 
                                                 summary[key] = {
                                                     name: key, type, receiver, category, badgeColor, badgeBg,

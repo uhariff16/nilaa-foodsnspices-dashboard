@@ -144,8 +144,8 @@ const DashboardLayout = () => {
                 // [FIX] Deduplication Strategy - Content Based
                 // We ignore the DB ID for unique check because re-uploads might generate new IDs for the same data.
                 // We create a composite key from the business data fields.
-                // Omitting item_name from the key prevents duplicate entries if the name differs slightly (e.g., "DESI GARLIC 4A" vs "DESI 4A").
-                const key = `${t.date}-${t.invoice_no}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}`;
+                // Including item_name in the key ensures that different types of expenses (e.g., Water vs Salary) on the same day with the same amount aren't merged.
+                const key = `${t.date}-${t.invoice_no}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
 
                 if (!uniqueTxnsMap.has(key)) {
                     uniqueTxnsMap.set(key, t);

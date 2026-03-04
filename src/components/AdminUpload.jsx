@@ -73,8 +73,8 @@ const AdminUpload = () => {
                     invoice_no: t.invoiceNo,
                     item_name: t.originalDesc || 'Unknown Item',
                     amount: t.parsedAmount || 0,
-                    quantity: 0,
-                    payment_mode: t.parsedType === 'Expense' ? 'Expense' : 'Sale'
+                    quantity: t.parsedQty || 0, // Preserve parsed quantity
+                    payment_mode: t.parsedType || 'Sale' // Preserve original parsedType
                 };
 
                 // Logging logic for dropped rows

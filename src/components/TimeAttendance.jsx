@@ -48,6 +48,14 @@ const formatTimeFromDec = (decHours) => {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+const formatDuration = (decHours) => {
+    if (decHours === null || decHours === undefined || isNaN(decHours)) return '-';
+    const totalMinutes = Math.round(decHours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${String(m).padStart(2, '0')}m`;
+};
+
 const TimeAttendance = ({ onBack, hideBack = false }) => {
     const { user, role, logout: authLogout, canAccessPayouts } = useAuth();
     const canViewPayouts = role === 'admin' || canAccessPayouts;
@@ -1223,13 +1231,13 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
                                                             <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
                                                             <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{(row.hoursWorked || 0).toFixed(2)}h</div></td>
+                                                            <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{formatDuration(row.hoursWorked)}</div></td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(() => {
                                                                     const total = parseFloat(row.hoursWorked) || 0;
                                                                     const displayOT = parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                     const nonOT = Math.max(0, total - displayOT);
-                                                                    return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{nonOT.toFixed(2)}h</div>;
+                                                                    return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{formatDuration(nonOT)}</div>;
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem' }}>
@@ -1237,7 +1245,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                     const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                     return displayOT > 0 ? (
                                                                         <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
-                                                                            +{displayOT.toFixed(2)}h
+                                                                            +{formatDuration(displayOT)}
                                                                         </span>
                                                                     ) : '-';
                                                                 })()}

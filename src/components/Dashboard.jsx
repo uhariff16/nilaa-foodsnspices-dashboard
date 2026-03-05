@@ -131,12 +131,6 @@ const Dashboard = (props) => {
     const [expenseListView, setExpenseListView] = React.useState('compact'); // 'compact' or 'detailed'
     const [selectedExpenseCategory, setSelectedExpenseCategory] = React.useState(null); // [NEW] Filter State
 
-    // [NEW] Load T&A Stats for preview
-    const [attendanceStats, setAttendanceStats] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem('last_attendance_stats')) || null;
-        } catch (e) { return null; }
-    });
 
 
     // Persist manual expenses
@@ -1996,35 +1990,6 @@ const Dashboard = (props) => {
                                 </div>
                             )}
 
-                            {/* [NEW] Time & Attendance Summary Card (Main Dashboard) */}
-                            {attendanceStats && (
-                                <div style={{
-                                    background: 'rgba(59, 130, 246, 0.05)',
-                                    padding: '1.25rem',
-                                    borderRadius: '1rem',
-                                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                                    marginBottom: '1rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    cursor: 'pointer'
-                                }}
-                                    onClick={() => navigate('/attendance')}
-                                >
-                                    <div>
-                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 0.25rem 0' }}>Payroll Preview</p>
-                                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#3b82f6' }}>
-                                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(attendanceStats.totalCost)}
-                                        </div>
-                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>
-                                            {attendanceStats.totalEmployees} Employees • {attendanceStats.totalHours.toFixed(1)} Hrs
-                                        </p>
-                                    </div>
-                                    <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.5rem' }}>
-                                        <Clock size={20} color="#3b82f6" />
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
 

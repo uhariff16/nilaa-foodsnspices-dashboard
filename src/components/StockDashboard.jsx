@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Package, TrendingUp, TrendingDown, ArrowRight, Activity, Layers, AlertCircle } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, ArrowRight, Activity, Layers, AlertCircle, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronRight } from 'lucide-react';
 import gingerIcon from '../assets/ginger.png';
 import garlicIcon from '../assets/garlic.png';
 
@@ -59,83 +59,130 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
     </div>
 );
 
-const StockCard = ({ title, open, in: inVal, out, closing, unit = 'kg', color = 'blue', nextOpen, isEstimated }) => {
-    return (
-        <div className="glass-panel" style={{ padding: '1.5rem', position: 'relative' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
-                <div style={{ padding: '0.5rem', borderRadius: '0.5rem', background: `rgba(var(--color-${color}-500), 0.1)` }}>
-                    <Package size={24} color={`var(--color-${color}-500)`} />
-                </div>
-            </div>
-
-            <div className="stock-card-grid">
-                {/* Opening */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', fontWeight: 600 }}>Opening</span>
-                    <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)' }}>{open.toLocaleString()}</span>
-                </div>
-
-                {/* In (+ via Proc/Prod) */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '1rem', color: '#10b981', marginBottom: '0.3rem', fontWeight: 600 }}>In</span>
-                    <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#10b981' }}>+{inVal.toLocaleString()}</span>
-                </div>
-
-                {/* Out (- via Usage/Sales) */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '1rem', color: '#ef4444', marginBottom: '0.3rem', fontWeight: 600 }}>Out</span>
-                    <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ef4444', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-                        -{out.toLocaleString()}
-                        {isEstimated && <span style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '4px', fontStyle: 'italic' }}>(Est. Sales)</span>}
-                    </span>
-                </div>
-
-                {/* Closing */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--glass-highlight)', borderRadius: '0.75rem', padding: '1rem' }}>
-                    <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '0.3rem', fontWeight: 600 }}>Closing</span>
-                    <span style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-primary)' }}>{closing.toLocaleString()}</span>
-                </div>
-            </div>
-
-            <div style={{ marginTop: '1rem', paddingTop: '0.5rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center' }}>
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Unit: {unit}</span>
-            </div>
-
-            {/* Shortage Analysis */}
-            {nextOpen > 0 && (
-                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>Next Month Opening</span>
-                        <span style={{ fontWeight: 700, fontSize: '1.4rem', color: 'var(--text-primary)' }}>{nextOpen.toLocaleString()}</span>
-                    </div>
-
-                    {(() => {
-                        const variance = closing - nextOpen;
-                        // Tolerance of 0.1 for float issues
-                        if (Math.abs(variance) < 0.1) return <span style={{ color: '#10b981', fontWeight: 700, fontSize: '1.1rem', padding: '0.5rem 1rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '0.5rem' }}>Stocks Matched ✅</span>;
-
-                        const isShortage = variance > 0;
-
-                        return (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', background: isShortage ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', padding: '0.75rem 1rem', borderRadius: '0.75rem' }}>
-                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontSize: '1rem', fontWeight: 800, marginBottom: '4px' }}>
-                                    {isShortage ? 'SHORTAGE' : 'SURPLUS'}
-                                </span>
-                                <span style={{ color: isShortage ? '#ef4444' : '#10b981', fontWeight: 900, fontSize: '1.8rem' }}>
-                                    {Math.abs(variance).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                                </span>
-                            </div>
-                        );
-                    })()}
-                </div>
-            )}
-        </div>
-    );
-};
-
 const StockDashboard = ({ productionData, salesData, procurementData, selectedMonth, selectedYear }) => {
+    const [searchTerm, setSearchTerm] = React.useState('');
+    const [activeCategory, setActiveCategory] = React.useState('All'); // All, Raw, Processed
+
+    // Thresholds for alerts
+    const THRESHOLDS = {
+        RAW: 100,
+        PEELED: 50,
+        PASTE: 20
+    };
+
+    const getHealthStatus = (title, closing) => {
+        if (closing < 0) return { label: 'Data Error', color: '#ef4444', icon: XCircle, bg: 'rgba(239, 68, 68, 0.1)' };
+
+        let threshold = THRESHOLDS.PASTE;
+        if (title.includes('(Raw)')) threshold = THRESHOLDS.RAW;
+        if (title.includes('(Peeled)')) threshold = THRESHOLDS.PEELED;
+
+        if (closing === 0) return { label: 'Out of Stock', color: '#f59e0b', icon: AlertTriangle, bg: 'rgba(245, 158, 11, 0.1)' };
+        if (closing < threshold) return { label: 'Low Stock', color: '#f59e0b', icon: AlertCircle, bg: 'rgba(245, 158, 11, 0.1)' };
+        return { label: 'Healthy', color: '#10b981', icon: CheckCircle, bg: 'rgba(16, 185, 129, 0.1)' };
+    };
+
+    const StockTable = ({ title, data, icon: Icon, color }) => {
+        if (data.length === 0) return null;
+
+        return (
+            <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem', marginBottom: '2rem', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    <div style={{ padding: '0.5rem', borderRadius: '0.5rem', background: `rgba(var(--color-${color}-500), 0.1)` }}>
+                        <Icon size={20} color={`var(--color-${color}-500)`} />
+                    </div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{title}</h3>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>({data.length} Items)</span>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Item Name & Status</th>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Opening</th>
+                                <th style={{ padding: '1rem 0.5rem', color: '#10b981', fontWeight: 600, textAlign: 'right' }}>Stock In</th>
+                                <th style={{ padding: '1rem 0.5rem', color: '#ef4444', fontWeight: 600, textAlign: 'right' }}>Stock Out</th>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-primary)', fontWeight: 700, textAlign: 'right' }}>Closing</th>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Audit (Next)</th>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Reconciliation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data.map((item, idx) => {
+                                const health = getHealthStatus(item.title, item.closing);
+                                const variance = item.nextOpen > 0 ? (item.closing - item.nextOpen) : 0;
+                                const isMatched = item.nextOpen > 0 && Math.abs(variance) < 0.1;
+
+                                return (
+                                    <tr key={idx} style={{
+                                        borderBottom: idx === data.length - 1 ? 'none' : '1px solid var(--glass-border)',
+                                        background: item.closing < 0 ? 'rgba(239, 68, 68, 0.05)' : 'transparent',
+                                        transition: 'background 0.2s ease'
+                                    }} className="hover-highlight">
+                                        <td style={{ padding: '1rem 0.5rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.title}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.7rem', color: health.color }}>
+                                                    <health.icon size={10} />
+                                                    {health.label}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                            {item.open.toLocaleString()}
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'right', color: '#10b981', fontWeight: 500 }}>
+                                            +{item.in.toLocaleString()}
+                                        </td>
+                                        <td style={{ padding: '1.5rem 0.5rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>
+                                            -{item.out.toLocaleString()}
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>
+                                            <span style={{
+                                                fontWeight: 800,
+                                                fontSize: '1rem',
+                                                color: item.closing < 0 ? '#ef4444' : 'var(--text-primary)',
+                                                display: 'block'
+                                            }}>
+                                                {item.closing.toLocaleString()}
+                                            </span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>kg</span>
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                            {item.nextOpen > 0 ? `${item.nextOpen.toLocaleString()} kg` : '-'}
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>
+                                            {item.nextOpen > 0 ? (
+                                                isMatched ? (
+                                                    <span style={{ color: '#10b981', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem', justifyContent: 'flex-end' }}>
+                                                        <CheckCircle size={12} /> Synced
+                                                    </span>
+                                                ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                        <span style={{
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: 700,
+                                                            color: variance > 0 ? '#ef4444' : '#10b981'
+                                                        }}>
+                                                            {variance > 0 ? `-${Math.abs(variance).toLocaleString()}` : `+${Math.abs(variance).toLocaleString()}`}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.65rem', fontWeight: 700, opacity: 0.8, color: variance > 0 ? '#ef4444' : '#10b981' }}>
+                                                            {variance > 0 ? 'SHORTAGE' : 'SURPLUS'}
+                                                        </span>
+                                                    </div>
+                                                )
+                                            ) : '-'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
 
     const stockStats = useMemo(() => {
         // Raw
@@ -313,52 +360,153 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
     }, [productionData, salesData, selectedMonth, selectedYear]);
 
+    const filteredStocks = useMemo(() => {
+        let items = [
+            { id: 'ginger_raw', title: "Ginger (Raw)", ...stockStats.ginger, color: "amber", category: "Raw" },
+            { id: 'garlic_raw', title: "Garlic (Raw)", ...stockStats.garlic, color: "purple", category: "Raw" },
+            { id: 'ginger_peeled', title: "Ginger (Peeled)", ...stockStats.gingerPeeled, color: "orange", category: "Processed" },
+            { id: 'garlic_peeled', title: "Garlic (Peeled)", ...stockStats.garlicPeeled, color: "indigo", category: "Processed" },
+            { id: 'mix_paste', title: "G&G Paste (Mix)", ...stockStats.paste, color: "green", category: "Processed" },
+            { id: 'ginger_paste', title: "Ginger Paste", ...stockStats.gingerPaste, color: "teal", category: "Processed" },
+            { id: 'garlic_paste', title: "Garlic Paste", ...stockStats.garlicPaste, color: "cyan", category: "Processed" }
+        ];
+
+        if (activeCategory !== 'All') {
+            items = items.filter(i => i.category === activeCategory);
+        }
+
+        if (searchTerm) {
+            items = items.filter(i => i.title.toLowerCase().includes(searchTerm.toLowerCase()));
+        }
+
+        return items;
+    }, [stockStats, activeCategory, searchTerm]);
+
+    const globalStats = useMemo(() => {
+        const total = filteredStocks.length;
+        const low = filteredStocks.filter(s => {
+            const status = getHealthStatus(s.title, s.closing);
+            return status.label === 'Low Stock' || status.label === 'Out of Stock';
+        }).length;
+        const errors = filteredStocks.filter(s => s.closing < 0).length;
+        return { total, low, errors };
+    }, [filteredStocks]);
+
+    const rawMaterialStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Raw'), [filteredStocks]);
+    const processedGoodsStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Processed'), [filteredStocks]);
+
     return (
         <div className="animate-fade-in">
-            {/* Stock Summary Cards (Ginger/Garlic) - Top Section */}
-            <div className="responsive-grid-2" style={{ marginBottom: '2.5rem' }}>
-                <StockSummaryCard
-                    title="Ginger Stock"
-                    icon={gingerIcon}
-                    color="#FCD34D"
-                    opening={stockStats.ginger.open}
-                    purchased={stockStats.ginger.in}
-                    total={stockStats.ginger.open + stockStats.ginger.in}
-                    available={stockStats.ginger.closing}
-                />
-                <StockSummaryCard
-                    title="Garlic Stock"
-                    icon={garlicIcon}
-                    color="#818cf8"
-                    opening={stockStats.garlic.open}
-                    purchased={stockStats.garlic.in}
-                    total={stockStats.garlic.open + stockStats.garlic.in}
-                    available={stockStats.garlic.closing}
-                />
+            {/* Search & Filter Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--glass-highlight)', padding: '0.4rem', borderRadius: '0.75rem' }}>
+                    {['All', 'Raw', 'Processed'].map(cat => (
+                        <button
+                            key={cat}
+                            onClick={() => setActiveCategory(cat)}
+                            style={{
+                                padding: '0.5rem 1.25rem',
+                                borderRadius: '0.5rem',
+                                border: 'none',
+                                background: activeCategory === cat ? 'var(--accent-primary)' : 'transparent',
+                                color: activeCategory === cat ? 'white' : 'var(--text-secondary)',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            {cat}
+                        </button>
+                    ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+                            {globalStats.total} Total
+                        </div>
+                        {globalStats.low > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
+                                <AlertCircle size={14} />
+                                {globalStats.low} Low Stock
+                            </div>
+                        )}
+                        {globalStats.errors > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', fontWeight: 600 }}>
+                                <XCircle size={14} />
+                                {globalStats.errors} Issues
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ position: 'relative' }}>
+                        <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search stock..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{
+                                background: 'var(--glass-highlight)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)',
+                                padding: '0.6rem 1rem 0.6rem 2.8rem',
+                                borderRadius: '0.75rem',
+                                width: '250px',
+                                fontSize: '0.9rem'
+                            }}
+                        />
+                    </div>
+                </div>
             </div>
 
-            {/* Main Stock Analysis Section */}
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
-                Stock Analysis (Live)
-            </h2>
+            {/* Quick Summary row - Only shown in All mode to avoid redundancy */}
+            {activeCategory === 'All' && !searchTerm && (
+                <div className="responsive-grid-2" style={{ marginBottom: '2.5rem' }}>
+                    <StockSummaryCard
+                        title="Ginger Stock"
+                        icon={gingerIcon}
+                        color="#FCD34D"
+                        opening={stockStats.ginger.open}
+                        purchased={stockStats.ginger.in}
+                        total={stockStats.ginger.open + stockStats.ginger.in}
+                        available={stockStats.ginger.closing}
+                    />
+                    <StockSummaryCard
+                        title="Garlic Stock"
+                        icon={garlicIcon}
+                        color="#818cf8"
+                        opening={stockStats.garlic.open}
+                        purchased={stockStats.garlic.in}
+                        total={stockStats.garlic.open + stockStats.garlic.in}
+                        available={stockStats.garlic.closing}
+                    />
+                </div>
+            )}
 
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Raw Materials</h3>
-            <div className="responsive-grid-2" style={{ marginBottom: '2rem' }}>
-                <StockCard title="Ginger (Raw)" {...stockStats.ginger} color="amber" />
-                <StockCard title="Garlic (Raw)" {...stockStats.garlic} color="purple" />
-            </div>
+            {/* Tables Section */}
+            <StockTable
+                title="Raw Materials"
+                data={rawMaterialStocks}
+                icon={Package}
+                color="amber"
+            />
 
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Processed Goods</h3>
-            <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
-                {/* Peeled Items - Flow naturally with Paste */}
-                <StockCard title="Ginger (Peeled)" {...stockStats.gingerPeeled} color="orange" />
-                <StockCard title="Garlic (Peeled)" {...stockStats.garlicPeeled} color="indigo" />
+            <StockTable
+                title="Processed Goods"
+                data={processedGoodsStocks}
+                icon={Activity}
+                color="green"
+            />
 
-                {/* Paste Items */}
-                <StockCard title="G&G Paste (Mix)" {...stockStats.paste} color="green" />
-                <StockCard title="Ginger Paste" {...stockStats.gingerPaste} color="teal" />
-                <StockCard title="Garlic Paste" {...stockStats.garlicPaste} color="cyan" />
-            </div>
+            {filteredStocks.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-secondary)' }}>
+                    <Package size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+                    <p>No matching stock items found.</p>
+                </div>
+            )}
         </div>
     );
 };

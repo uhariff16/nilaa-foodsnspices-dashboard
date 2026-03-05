@@ -855,10 +855,12 @@ const Dashboard = (props) => {
         let rawOpenStockKG = 0;
         let processedOpenStockKG = 0;
         let openStockDetails = [];
+        let inputKG = 0; // [NEW] Define at top level of memo
 
 
         // New: Aggregation Maps
         const procurementMap = {};
+        const productionInputMap = {}; // [NEW] Track all inputs
         const productionMap = {};
 
         // 1. Procurement (Stock In)
@@ -898,6 +900,20 @@ const Dashboard = (props) => {
                     }
                 }
             });
+
+            // 1.1 Production Input (Total Work Basis)
+            if (props.productionData.preProduction) {
+                props.productionData.preProduction.forEach(item => {
+                    if (item.date && item.date.startsWith(targetPrefix)) {
+                        const weight = parseFloat(item.weight || 0);
+                        inputKG += weight;
+
+                        const matName = (item.material || 'Production Input').trim();
+                        if (!productionInputMap[matName]) productionInputMap[matName] = 0;
+                        productionInputMap[matName] += weight;
+                    }
+                });
+            }
 
             // 2. Production (Output)
             props.productionData.postProduction.forEach(item => {
@@ -997,6 +1013,7 @@ const Dashboard = (props) => {
 
         return {
             procurement: procKG,
+            productionInput: inputKG, // [NEW]
             production: prodKG,
             sales: salesQty,
             rawOpeningStock: rawOpenStockKG,
@@ -1007,6 +1024,7 @@ const Dashboard = (props) => {
             overheadCost: finalOverheadCost,
             totalProductionCost: finalTotalCost,
             procurementDetails: toSortedArray(procurementMap),
+            productionInputDetails: toSortedArray(productionInputMap), // [NEW] Track detailed inputs
             productionDetails: toSortedArray(productionMap),
             salesDetails: salesDetails.sort((a, b) => b.weight - a.weight)
         };
@@ -1958,20 +1976,23 @@ const Dashboard = (props) => {
                             </div>
 
                             {/* Efficiency Bar Check */}
-                            {materialStats.procurement > 0 && (
+                            {materialStats.productionInput > 0 && (
                                 <div style={{ marginTop: '1rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                                        <span>Procurement to Production Conversion</span>
-                                        <span>{((materialStats.production / materialStats.procurement) * 100).toFixed(1)}% Yield</span>
+                                        <span>Production Efficiency (Input vs Paste/Peeled)</span>
+                                        <span>{((materialStats.production / materialStats.productionInput) * 100).toFixed(1)}% Yield</span>
                                     </div>
                                     <div style={{ width: '100%', height: '8px', background: 'var(--glass-border)', borderRadius: '4px', overflow: 'hidden' }}>
                                         <div style={{
-                                            width: Math.min((materialStats.production / materialStats.procurement) * 100, 100) + '%',
+                                            width: Math.min((materialStats.production / materialStats.productionInput) * 100, 100) + '%',
                                             height: '100%',
-                                            background: 'linear-gradient(90deg, #f59e0b, #3b82f6)',
+                                            background: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
                                             borderRadius: '4px'
                                         }}></div>
                                     </div>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                                        * Based on material inputs vs finished products (Pastes & Peeled).
+                                    </p>
                                 </div>
                             )}
 

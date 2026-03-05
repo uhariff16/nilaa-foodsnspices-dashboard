@@ -93,13 +93,11 @@ export const parseProductionFile = (files) => {
 
                     debugLog.push(`Sheet: ${sheetName}. StartRow: ${startRow}`);
 
-                    // Dynamic Column Detection
                     let stockInIdx = -1;
                     let preProdIdx = -1;
-                    let postProdIdx = -1;
+                    let postProdIndices = []; // [NEW] Support multiple output columns
 
-                    // Strategy 1: "Weight" Column Detection (Most Robust for this layout)
-                    // If we found the start ROW based on "Weight" or "Material", let's inspect that row for multiple "Weight" headers
+                    // Strategy 1: "Weight" Column Detection
                     if (startRow > 0) {
                         const headerRow = jsonData[startRow - 1];
                         const weightIndices = [];
@@ -109,43 +107,22 @@ export const parseProductionFile = (files) => {
                             }
                         });
 
-                        if (weightIndices.length >= 3) {
-                            // Assume simplified layout: Date | Material | Weight
-                            debugLog.push(`Strategy 1 (Weight Cols) Success: Found indices ${weightIndices.join(',')}`);
+                        if (weightIndices.length >= 2) {
+                            debugLog.push(`Strategy 1 (Weight Cols) Success: Found ${weightIndices.length} columns`);
                             stockInIdx = weightIndices[0] - 2;
                             preProdIdx = weightIndices[1] - 2;
-                            postProdIdx = weightIndices[2] - 2;
+                            // Any column from index 2 onwards is an Output column
+                            postProdIndices = weightIndices.slice(2).map(idx => idx - 2);
                         }
                     }
 
-                    // Strategy 2: Section Headers (Fallback)
+                    // Strategy 2: Fallback (Simplified)
                     if (stockInIdx === -1) {
-                        let headersFound = false;
-                        // Scan backwards from startRow to find Section Headers (Stock-in, Pre-Production, etc.)
-                        for (let r = startRow - 1; r >= Math.max(0, startRow - 5); r--) {
-                            const hRow = jsonData[r];
-                            if (!hRow) continue;
-
-                            hRow.forEach((cell, idx) => {
-                                const str = String(cell).toLowerCase().replace(/[^a-z]/g, '');
-
-                                if (str.includes('stockin')) { stockInIdx = idx; headersFound = true; }
-                                if (str.includes('preproduction')) { preProdIdx = idx; headersFound = true; }
-                                if (str.includes('postproduction')) { postProdIdx = idx; headersFound = true; }
-                            });
-
-                            if (headersFound) break;
-                        }
-
-                        // Fallbacks
-                        if (stockInIdx === -1) stockInIdx = 0;
-                        if (preProdIdx === -1) preProdIdx = 4;
-                        if (postProdIdx === -1) postProdIdx = 8;
-
-                        debugLog.push(`Strategy 2 (Headers/Fallback): StockIn: ${stockInIdx}, PreProd: ${preProdIdx}, PostProd: ${postProdIdx}`);
+                        stockInIdx = 0;
+                        preProdIdx = 4;
+                        postProdIndices = [8];
+                        debugLog.push(`Strategy 2 (Defaults): StockIn: 0, PreProd: 4, PostProd: [8]`);
                     }
-
-                    debugLog.push(`Indices -> StockIn: ${stockInIdx}, PreProd: ${preProdIdx}, PostProd: ${postProdIdx}`);
 
                     let counts = { s: 0, pre: 0, post: 0, fail: 0 };
 
@@ -175,12 +152,6 @@ export const parseProductionFile = (files) => {
                             const mat = row[preProdIdx + 1];
                             const weight = parseFloat(row[preProdIdx + 2] || 0);
 
-                            // Debug failure for first few rows
-                            if (!date && counts.pre === 0 && counts.fail < 3) {
-                                debugLog.push(`PreProd Fail Row ${i}: RawDate: ${row[preProdIdx]} -> Norm: ${date}. Mat: ${mat}`);
-                                counts.fail++;
-                            }
-
                             if (date && mat && weight > 0) {
                                 productionData.preProduction.push({
                                     id: `pre-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
@@ -192,21 +163,24 @@ export const parseProductionFile = (files) => {
                             }
                         }
 
-                        // Section 3: Post-Production
-                        if (row[postProdIdx] !== undefined) {
-                            const date = normalizeDate(row[postProdIdx]);
-                            const mat = row[postProdIdx + 1];
-                            const weight = parseFloat(row[postProdIdx + 2] || 0);
-                            if (date && mat && weight > 0) {
-                                productionData.postProduction.push({
-                                    id: `post-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
-                                    date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
-                                });
-                                counts.post++;
+                        // Section 3: Multiple Post-Production / Output Stages [NEW]
+                        postProdIndices.forEach((idx, stageIdx) => {
+                            if (row[idx] !== undefined) {
+                                const date = normalizeDate(row[idx]);
+                                const mat = row[idx + 1];
+                                const weight = parseFloat(row[idx + 2] || 0);
+                                if (date && mat && weight > 0) {
+                                    productionData.postProduction.push({
+                                        id: `post-${stageIdx}-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
+                                        date, material: mat, weight,
+                                        stage: stageIdx,
+                                        source_sheet: sheetName,
+                                        source_file: file.name
+                                    });
+                                    counts.post++;
+                                }
                             }
-                        }
+                        });
                     }
                     debugLog.push(`Sheet Result: StockIn=${counts.s}, PreProd=${counts.pre}, PostProd=${counts.post}`);
                 });

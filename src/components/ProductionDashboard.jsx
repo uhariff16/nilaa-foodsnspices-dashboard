@@ -518,7 +518,12 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6);
 
-        const toStr = (d) => d.toISOString().split('T')[0];
+        const toStr = (d) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+        };
 
         return {
             today: getStatsForRange(toStr(today), toStr(today), "Today"),

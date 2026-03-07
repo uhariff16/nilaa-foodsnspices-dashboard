@@ -54,20 +54,20 @@ const EmployeeMaster = () => {
     };
 
     const getNextEmpId = (existingEmployees) => {
-        if (!existingEmployees || existingEmployees.length === 0) return 'NFS1001';
+        if (!existingEmployees || existingEmployees.length === 0) return 'NFS-1001';
 
-        // Extract numeric parts from IDs like "NFS1001"
+        // Extract numeric parts from IDs like "NFS-1001" or "NFS-TEMP-1001"
         const ids = existingEmployees
             .map(emp => {
-                const match = emp.emp_id.match(/NFS(\d+)/);
-                return match ? parseInt(match[1]) : null;
+                const match = emp.emp_id.match(/(\d{4,})$/);
+                return match ? parseInt(match[0]) : null;
             })
             .filter(id => id !== null);
 
-        if (ids.length === 0) return 'NFS1001';
+        if (ids.length === 0) return 'NFS-1001';
 
         const maxId = Math.max(...ids);
-        return `NFS${maxId + 1}`;
+        return `NFS-${maxId + 1}`;
     };
 
     const handleOpenModal = (emp = null) => {

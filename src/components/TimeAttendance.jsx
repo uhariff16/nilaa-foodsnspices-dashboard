@@ -1620,12 +1620,33 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 ...prev,
                 empId: id.toUpperCase(),
                 empName: emp.name,
-                rate: emp.hourly_rate || config.default_hourly_rate
+                rate: emp.hourly_rate || config.default_hourly_rate,
+                isNewTemp: false // If found, it's not a NEW temp (might be existing temp)
             }));
         } else {
             setFormData(prev => ({ ...prev, empId: id.toUpperCase() }));
         }
     };
+
+    // Unified ID Logic for Temporary Staff
+    useEffect(() => {
+        if (formData.isNewTemp && !initialData) {
+            const allIds = (employees || []).map(e => {
+                const match = e.emp_id.match(/(\d{4,})$/);
+                return match ? parseInt(match[0]) : null;
+            }).filter(n => n !== null);
+
+            const maxId = allIds.length > 0 ? Math.max(...allIds) : 1000;
+            const nextId = `NFS-TEMP-${maxId + 1}`;
+
+            setFormData(prev => ({
+                ...prev,
+                empId: nextId,
+                empName: prev.empName || '',
+                rate: prev.rate || config.default_hourly_rate
+            }));
+        }
+    }, [formData.isNewTemp, employees, initialData, config.default_hourly_rate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -1655,26 +1676,26 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
 
             const isPresent = formData.attendance_status === 'Present';
 
-            // --- Quick Entry: Auto-create Temporary Employee ---
-            if (formData.isNewTemp && !initialData) {
-                const { data: existingEmp } = await supabase
-                    .from('employees')
-                    .select('id')
-                    .eq('emp_id', formData.empId)
-                    .single();
+            const existingEmp = (employees || []).find(e => e.emp_id === formData.empId);
 
-                if (!existingEmp) {
-                    const { error: empError } = await supabase
-                        .from('employees')
-                        .insert([{
-                            emp_id: formData.empId,
-                            name: formData.empName,
-                            hourly_rate: parseFloat(formData.rate),
-                            staff_type: 'Temporary',
-                            is_active: true
-                        }]);
-                    if (empError) throw new Error("Could not create temporary employee: " + empError.message);
+            // --- Strict Creation Validation ---
+            if (!existingEmp && !initialData) {
+                if (!formData.isNewTemp) {
+                    alert("Employee ID not found. Only Temporary staff can be created here.\n\nFor Permanent staff (ID format: NFS-XXXX), please use the Employee Master in Admin Console.");
+                    setIsSaving(false);
+                    return;
                 }
+
+                const { error: empError } = await supabase
+                    .from('employees')
+                    .insert([{
+                        emp_id: formData.empId,
+                        name: formData.empName,
+                        hourly_rate: parseFloat(formData.rate),
+                        staff_type: 'Temporary',
+                        is_active: true
+                    }]);
+                if (empError) throw new Error("Could not create temporary employee: " + empError.message);
             }
 
             let totalH = 0;
@@ -1745,7 +1766,27 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                         </div>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Emp ID</label>
-                            <input type="text" list="emp-list" required disabled={!!initialData} value={formData.empId} onChange={e => handleIdChange(e.target.value)} placeholder="e.g. NFS1001" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', opacity: initialData ? 0.7 : 1 }} />
+                            <input
+                                type="text"
+                                list="emp-list"
+                                required
+                                disabled={!!initialData || formData.isNewTemp}
+                                value={formData.empId}
+                                onChange={e => handleIdChange(e.target.value)}
+                                placeholder={formData.isNewTemp ? "Generating..." : "e.g. NFS-1001"}
+                                style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', opacity: (initialData || formData.isNewTemp) ? 0.7 : 1 }}
+                            />
+                            {!initialData && (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.isNewTemp}
+                                        onChange={e => setFormData({ ...formData, isNewTemp: e.target.checked })}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    New Temporary Employee
+                                </label>
+                            )}
                             <datalist id="emp-list">
                                 {employees.map(e => <option key={e.id} value={e.emp_id}>{e.name}</option>)}
                             </datalist>

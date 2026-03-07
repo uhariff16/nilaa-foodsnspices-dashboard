@@ -30,7 +30,12 @@ export const parseProductionFile = (files) => {
                 if (typeof dateVal === 'number') {
                     if (dateVal < 36526) return null; // Filter dates before 2000
                     const dateObj = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
-                    return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : null;
+                    if (isNaN(dateObj)) return null;
+
+                    const y = dateObj.getFullYear();
+                    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const d = String(dateObj.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
                 }
 
                 const dateStr = String(dateVal).trim();
@@ -46,148 +51,129 @@ export const parseProductionFile = (files) => {
                     return `${y}-${m}-${d}`;
                 }
 
-                // 3. Handle DD-MMM-YY (e.g. 01-Dec-25)
-                if (/^\d{1,2}[-/.\s_][a-zA-Z]{3}[-/.\s_]\d{2,4}$/.test(dateStr)) {
-                    const parts = dateStr.split(/[-/.\s_]+/);
-                    const d = parts[0];
-                    const mStr = parts[1];
-                    let yStr = parts[2];
+                // 3. Handle DD-MMM-YY (e.g. 01-Dec-25 or 1-Mar-26)
+                const dmmmRegex = /^(\d{1,2})[-/.\s_]([a-zA-Z]{3})[-/.\s_](\d{2,4})$/;
+                const dmmmMatch = dateStr.match(dmmmRegex);
+                if (dmmmMatch) {
+                    const d = dmmmMatch[1].padStart(2, '0');
+                    const mStr = dmmmMatch[2].toLowerCase();
+                    let yStr = dmmmMatch[3];
                     if (yStr.length === 2) yStr = '20' + yStr;
 
                     const monthMap = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
-                    const m = monthMap[mStr.toLowerCase().substring(0, 3)];
-                    if (m) return `${yStr}-${m}-${d.padStart(2, '0')}`;
+                    const m = monthMap[mStr.substring(0, 3)];
+                    if (m) return `${yStr}-${m}-${d}`;
                 }
 
                 // 4. ISO Fallback
                 const attempt = new Date(dateStr);
-                if (!isNaN(attempt)) return attempt.toISOString().split('T')[0];
+                if (!isNaN(attempt)) {
+                    const y = attempt.getFullYear();
+                    const m = String(attempt.getMonth() + 1).padStart(2, '0');
+                    const d = String(attempt.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                }
                 return null;
             };
 
-            for (const file of files) {
-                debugLog.push(`Processing file: ${file.name}`);
-                const workbook = await readFile(file);
+            const generateUUID = (str) => {
+                // Simple deterministic UUID-like hash (MD5-ish but simple for browsers)
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const char = str.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash |= 0;
+                }
+                const base = Math.abs(hash).toString(16).padEnd(32, '0');
+                return `${base.slice(0, 8)}-${base.slice(8, 12)}-4${base.slice(12, 15)}-a${base.slice(15, 18)}-${base.slice(18, 30)}`;
+            };
 
+            for (const file of files) {
+                const workbook = await readFile(file);
                 workbook.SheetNames.forEach(sheetName => {
                     const worksheet = workbook.Sheets[sheetName];
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
-                    // Find the start row by looking for "Weight" or "Material" keywords
                     let startRow = -1;
                     for (let i = 0; i < Math.min(jsonData.length, 30); i++) {
                         const row = jsonData[i];
-                        if (row && row.some(cell => {
-                            const str = String(cell).toLowerCase();
-                            return str.includes('weight') || str.includes('material') || str.includes('particulars');
-                        })) {
-                            startRow = i + 1; // Data starts after header
+                        if (row && row.filter(cell => cell && String(cell).toLowerCase().includes('weight')).length >= 2) {
+                            startRow = i + 1;
                             break;
                         }
                     }
 
-                    if (startRow === -1) {
-                        debugLog.push(`Skipping sheet ${sheetName}: Could not find 'Weight'/'Material' header row.`);
-                        return; // Skip sheets without recognizable headers
+                    if (startRow === -1) return;
+
+                    let stockInIdx = -1, preProdIdx = -1, postProdIndices = [];
+                    const headerRow = jsonData[startRow - 1];
+                    const weightIndices = [];
+                    headerRow.forEach((cell, idx) => {
+                        if (cell && String(cell).toLowerCase().includes('weight')) weightIndices.push(idx);
+                    });
+
+                    if (weightIndices.length >= 2) {
+                        stockInIdx = weightIndices[0] - 2;
+                        preProdIdx = weightIndices[1] - 2;
+                        postProdIndices = weightIndices.slice(2).map(idx => idx - 2);
+                    } else {
+                        stockInIdx = 0; preProdIdx = 4; postProdIndices = [8];
                     }
-
-                    debugLog.push(`Sheet: ${sheetName}. StartRow: ${startRow}`);
-
-                    let stockInIdx = -1;
-                    let preProdIdx = -1;
-                    let postProdIndices = []; // [NEW] Support multiple output columns
-
-                    // Strategy 1: "Weight" Column Detection
-                    if (startRow > 0) {
-                        const headerRow = jsonData[startRow - 1];
-                        const weightIndices = [];
-                        headerRow.forEach((cell, idx) => {
-                            if (cell && String(cell).toLowerCase().includes('weight')) {
-                                weightIndices.push(idx);
-                            }
-                        });
-
-                        if (weightIndices.length >= 2) {
-                            debugLog.push(`Strategy 1 (Weight Cols) Success: Found ${weightIndices.length} columns`);
-                            stockInIdx = weightIndices[0] - 2;
-                            preProdIdx = weightIndices[1] - 2;
-                            // Any column from index 2 onwards is an Output column
-                            postProdIndices = weightIndices.slice(2).map(idx => idx - 2);
-                        }
-                    }
-
-                    // Strategy 2: Fallback (Simplified)
-                    if (stockInIdx === -1) {
-                        stockInIdx = 0;
-                        preProdIdx = 4;
-                        postProdIndices = [8];
-                        debugLog.push(`Strategy 2 (Defaults): StockIn: 0, PreProd: 4, PostProd: [8]`);
-                    }
-
-                    let counts = { s: 0, pre: 0, post: 0, fail: 0 };
 
                     for (let i = startRow; i < jsonData.length; i++) {
                         const row = jsonData[i];
                         if (!row) continue;
 
+                        // Identify the primary date for this row (shared across sections usually)
+                        const primaryDate = normalizeDate(row[stockInIdx]) || normalizeDate(row[preProdIdx]);
+
                         // Section 1: Stock In
                         if (row[stockInIdx] !== undefined) {
-                            const date = normalizeDate(row[stockInIdx]);
+                            const date = normalizeDate(row[stockInIdx]) || primaryDate;
                             const mat = row[stockInIdx + 1];
                             const weight = parseFloat(row[stockInIdx + 2] || 0);
                             if (date && mat && weight > 0) {
                                 productionData.stockIn.push({
-                                    id: `stk-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
+                                    id: generateUUID(`stk-${date}-${mat}-${i}-${sheetName}`),
                                     date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
+                                    source_sheet: sheetName, source_file: file.name
                                 });
-                                counts.s++;
                             }
                         }
 
                         // Section 2: Pre-Production
                         if (row[preProdIdx] !== undefined) {
-                            const date = normalizeDate(row[preProdIdx]);
+                            const date = normalizeDate(row[preProdIdx]) || primaryDate;
                             const mat = row[preProdIdx + 1];
                             const weight = parseFloat(row[preProdIdx + 2] || 0);
-
                             if (date && mat && weight > 0) {
                                 productionData.preProduction.push({
-                                    id: `pre-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
+                                    id: generateUUID(`pre-${date}-${mat}-${i}-${sheetName}`),
                                     date, material: mat, weight,
-                                    source_sheet: sheetName,
-                                    source_file: file.name
+                                    source_sheet: sheetName, source_file: file.name
                                 });
-                                counts.pre++;
                             }
                         }
 
-                        // Section 3: Multiple Post-Production / Output Stages [NEW]
+                        // Section 3: Multiple Post-Production
                         postProdIndices.forEach((idx, stageIdx) => {
-                            if (row[idx] !== undefined) {
-                                const date = normalizeDate(row[idx]);
+                            if (row[idx] !== undefined || row[idx + 1] !== undefined) {
+                                const date = normalizeDate(row[idx]) || primaryDate;
                                 const mat = row[idx + 1];
                                 const weight = parseFloat(row[idx + 2] || 0);
                                 if (date && mat && weight > 0) {
                                     productionData.postProduction.push({
-                                        id: `post-${stageIdx}-${date}-${mat.replace(/[^a-z0-9]/gi, '')}-${weight}`,
-                                        date, material: mat, weight,
-                                        stage: stageIdx,
-                                        source_sheet: sheetName,
-                                        source_file: file.name
+                                        id: generateUUID(`post-${stageIdx}-${date}-${mat}-${i}-${sheetName}`),
+                                        date, material: mat, weight, stage: stageIdx,
+                                        source_sheet: sheetName, source_file: file.name
                                     });
-                                    counts.post++;
                                 }
                             }
                         });
                     }
-                    debugLog.push(`Sheet Result: StockIn=${counts.s}, PreProd=${counts.pre}, PostProd=${counts.post}`);
                 });
             }
-
             resolve({ ...productionData, debugLog });
-
         } catch (error) {
             reject(error);
         }

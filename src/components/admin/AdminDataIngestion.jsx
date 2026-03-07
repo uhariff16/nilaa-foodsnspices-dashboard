@@ -538,47 +538,32 @@ const AdminDataIngestion = () => {
             return { success: false, message: "No valid production logs found." };
         }
 
-        const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
-        if (allDates.length === 0) return { success: false, message: "No dates found in data." };
+        const formatRows = (items, type) => items.map(item => ({
+            id: item.id,
+            date: item.date,
+            type: type, // 'stock_in', 'usage', 'production'
+            material: item.material,
+            weight: item.weight || 0,
+            remarks: `Sheet: ${item.source_sheet || 'N/A'}`,
+            source_file: item.source_file || file.name
+        })).filter(row => row.date && row.weight);
 
-        const minDate = allDates[0];
-        const maxDate = allDates[allDates.length - 1];
+        const allRows = [
+            ...formatRows(data.stockIn, 'stock_in'),
+            ...formatRows(data.preProduction, 'usage'),
+            ...formatRows(data.postProduction, 'production')
+        ];
 
-        const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
-
-        const createSig = (d) => {
-            let dateStr = String(d.date || '').trim();
-            if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
-            return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
-        };
-        const existingSet = new Set(existingLogs.map(createSig));
-
-        const filterNew = (items, type) => {
-            return items
-                .map(i => ({ ...i, type }))
-                .filter(i => {
-                    const sig = createSig(i);
-                    return !existingSet.has(sig);
-                })
-                .map(({ id, source_sheet, ...rest }) => rest);
-        };
-
-        const newStockIn = filterNew(data.stockIn, 'stock_in');
-        const newPreProd = filterNew(data.preProduction, 'usage');
-        const newPostProd = filterNew(data.postProduction, 'production');
-        const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
-
-        if (totalNew > 0) {
-            if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
-            if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
-            if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
+        if (allRows.length > 0) {
+            const { error } = await supabase.from('production_logs').upsert(allRows);
+            if (error) throw error;
         }
 
         return {
             success: true,
-            totalNew,
-            details: `Stock-In: ${newStockIn.length}, Pre-Prod: ${newPreProd.length}, Post-Prod: ${newPostProd.length}`,
-            message: `Added ${totalNew} new records.`
+            totalNew: allRows.length,
+            details: `Stock-In: ${data.stockIn.length}, Usage: ${data.preProduction.length}, Production: ${data.postProduction.length}`,
+            message: `Added ${allRows.length} records.`
         };
     };
 
@@ -654,54 +639,17 @@ const AdminDataIngestion = () => {
 
                 try {
                     if (type === 'production') {
-                        const data = await parseProductionFile([file]);
+                        const result = await processProductionData(file);
 
-                        // Check if valid data found
-                        if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
-                            // Not an error, just empty/irrelevant file
-                            skipCount++;
-                            continue;
-                        }
-
-                        // Dedup Logic (Per File)
-                        const allDates = [...data.stockIn.map(d => d.date), ...data.preProduction.map(d => d.date), ...data.postProduction.map(d => d.date)].filter(d => d).sort();
-                        if (allDates.length === 0) { skipCount++; continue; }
-
-                        const minDate = allDates[0];
-                        const maxDate = allDates[allDates.length - 1];
-
-                        // Fetch existing for this range
-                        const existingLogs = await fetchAllRecords('production_logs', 'date, material, weight, type', minDate, maxDate);
-
-                        const createSig = (d) => {
-                            let dateStr = String(d.date || '').trim();
-                            if (dateStr.includes('T')) dateStr = dateStr.split('T')[0];
-                            return `${dateStr}|${String(d.material).trim().toLowerCase()}|${Number(d.weight).toFixed(2)}|${d.type}`;
-                        };
-                        const existingSet = new Set(existingLogs.map(createSig));
-
-                        const filterNew = (items, type) => {
-                            return items
-                                .map(i => ({ ...i, type }))
-                                .filter(i => !existingSet.has(createSig(({ ...i, type }))))
-                                .map(({ id, source_sheet, source_file, ...rest }) => rest);
-                        };
-
-                        const newStockIn = filterNew(data.stockIn, 'stock_in');
-                        const newPreProd = filterNew(data.preProduction, 'usage');
-                        const newPostProd = filterNew(data.postProduction, 'production');
-                        const totalNew = newStockIn.length + newPreProd.length + newPostProd.length;
-
-                        if (totalNew > 0) {
-                            if (newStockIn.length) await supabase.from('production_logs').insert(newStockIn);
-                            if (newPreProd.length) await supabase.from('production_logs').insert(newPreProd);
-                            if (newPostProd.length) await supabase.from('production_logs').insert(newPostProd);
-                            newRecordsCount += totalNew;
+                        if (result.success && result.totalNew > 0) {
+                            newRecordsCount += result.totalNew;
                             successCount++;
+                        } else if (!result.success && result.message === "No valid production logs found.") {
+                            skipCount++;
                         } else {
+                            // Already exists or 0 rows
                             skipCount++;
                         }
-
                     } else if (type === 'sales') {
                         const result = await parseExcelFile([file]);
                         const data = result.transactions || [];
@@ -898,15 +846,15 @@ const AdminDataIngestion = () => {
 
                     setWatchLogs(prev => [`New file detected: ${entry.name}`, ...prev]);
                     const file = await entry.getFile();
-                    const data = await parseProductionFile([file]);
+                    const result = await processProductionData(file);
 
-                    let inserted = 0;
-                    if (data.stockIn.length) { await supabase.from('production_logs').insert(data.stockIn.map(d => ({ ...d, type: 'stock_in' }))); inserted++; }
-                    if (data.preProduction.length) { await supabase.from('production_logs').insert(data.preProduction.map(d => ({ ...d, type: 'usage' }))); inserted++; }
-                    if (data.postProduction.length) { await supabase.from('production_logs').insert(data.postProduction.map(d => ({ ...d, type: 'production' }))); inserted++; }
-
-                    if (inserted > 0) setWatchLogs(prev => [`✅ Uploaded: ${entry.name}`, ...prev]);
-                    else setWatchLogs(prev => [`⚠️ Empty/Invalid: ${entry.name}`, ...prev]);
+                    if (result.success && result.totalNew > 0) {
+                        setWatchLogs(prev => [`✅ Uploaded: ${entry.name} (${result.totalNew} rows)`, ...prev]);
+                    } else if (!result.success) {
+                        setWatchLogs(prev => [`⚠️ Skipped: ${entry.name} (${result.message})`, ...prev]);
+                    } else {
+                        setWatchLogs(prev => [`ℹ️ No new data: ${entry.name}`, ...prev]);
+                    }
                 }
             }
             checkDbStatus();

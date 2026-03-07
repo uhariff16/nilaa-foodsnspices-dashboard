@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition, startTransition } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Users, Plus, Edit2, Trash2, Save, X, Search, RefreshCw, IndianRupee } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Save, X, Search, RefreshCw, IndianRupee, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const EmployeeMaster = () => {
     const [employees, setEmployees] = useState([]);
@@ -9,6 +9,9 @@ const EmployeeMaster = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, employeeId: null, employeeName: '' });
+    const [alertConfig, setAlertConfig] = useState({ isOpen: false, message: '', type: 'error' });
+    const [isPending, startUpdateTransition] = useTransition();
     const [editingEmployee, setEditingEmployee] = useState(null);
     const [formData, setFormData] = useState({
         emp_id: '',
@@ -151,16 +154,19 @@ const EmployeeMaster = () => {
                 if (error) throw error;
             }
             setIsModalOpen(false);
-            fetchData();
+            startTransition(() => {
+                fetchData();
+            });
         } catch (err) {
-            alert("Error saving employee: " + err.message);
+            setAlertConfig({ isOpen: true, message: "Error saving employee: " + err.message, type: 'error' });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this employee?")) return;
+    const handleDelete = async () => {
+        const id = confirmModal.employeeId;
+        setConfirmModal({ isOpen: false, employeeId: null, employeeName: '' });
         setLoading(true);
         try {
             const { error } = await supabase
@@ -168,9 +174,12 @@ const EmployeeMaster = () => {
                 .delete()
                 .eq('id', id);
             if (error) throw error;
-            fetchData();
+
+            startTransition(() => {
+                fetchData();
+            });
         } catch (err) {
-            alert("Error deleting employee: " + err.message);
+            setAlertConfig({ isOpen: true, message: "Error deleting employee: " + err.message, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -286,7 +295,12 @@ const EmployeeMaster = () => {
                                         <button onClick={() => handleOpenModal(emp)} className="btn-icon" title="Edit Employee">
                                             <Edit2 size={16} />
                                         </button>
-                                        <button onClick={() => handleDelete(emp.id)} className="btn-icon" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }} title="Delete Employee">
+                                        <button
+                                            onClick={() => setConfirmModal({ isOpen: true, employeeId: emp.id, employeeName: emp.name })}
+                                            className="btn-icon"
+                                            style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                                            title="Delete Employee"
+                                        >
                                             <Trash2 size={16} color="#ef4444" />
                                         </button>
                                     </div>
@@ -526,6 +540,64 @@ const EmployeeMaster = () => {
                     </div>
                 </div>
             )}
+
+            {/* Custom Confirmation Modal */}
+            {confirmModal.isOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(8px)' }}>
+                    <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2rem', textAlign: 'center' }}>
+                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', margin: '0 auto 1.5rem' }}>
+                            <AlertTriangle size={32} />
+                        </div>
+                        <h3 style={{ margin: '0 0 1rem 0' }}>Confirm Deletion</h3>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
+                            Are you sure you want to delete <strong>{confirmModal.employeeName}</strong>? This action cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <button
+                                onClick={() => setConfirmModal({ isOpen: false, employeeId: null, employeeName: '' })}
+                                className="btn-action"
+                                style={{ flex: 1, justifyContent: 'center' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                className="btn-action"
+                                style={{ flex: 1, justifyContent: 'center', background: '#ef4444', color: 'white' }}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Alert */}
+            {alertConfig.isOpen && (
+                <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1200, animation: 'slideIn 0.3s ease-out' }}>
+                    <div className="glass-panel" style={{
+                        padding: '1rem 1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        borderLeft: `4px solid ${alertConfig.type === 'error' ? '#ef4444' : '#10b981'}`,
+                        minWidth: '300px'
+                    }}>
+                        {alertConfig.type === 'error' ? <AlertTriangle size={20} color="#ef4444" /> : <CheckCircle size={20} color="#10b981" />}
+                        <span style={{ fontSize: '0.9rem', flex: 1 }}>{alertConfig.message}</span>
+                        <button onClick={() => setAlertConfig({ ...alertConfig, isOpen: false })} className="btn-icon" style={{ padding: '0.2rem' }}>
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            `}</style>
         </div >
     );
 };

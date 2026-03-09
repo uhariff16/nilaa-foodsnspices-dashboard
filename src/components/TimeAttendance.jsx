@@ -683,8 +683,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             { header: 'In 4', key: 'in4', width: 12 },
             { header: 'Out 4', key: 'out4', width: 12 },
             { header: 'Break (min)', key: 'break', width: 15 },
-            { header: 'Deductions', key: 'deductions', width: 15 },
-            { header: 'Deduction Reason', key: 'deductionReason', width: 20 }
+            { header: 'Salary Advance', key: 'salaryAdvance', width: 18 },
+            { header: 'Other Deductions', key: 'deductions', width: 18 },
+            { header: 'Deduction Reason', key: 'deductionReason', width: 25 }
         ];
 
         // Prepare Break Dropdown list (0-240 mins)
@@ -697,6 +698,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
         // Add Existing Attendance Data
         attendanceData.forEach((rec) => {
+            const isAdvance = rec.deductionReason === 'Salary Advance' || (rec.deduction_reason === 'Salary Advance');
             attendanceSheet.addRow({
                 date: new Date(rec.date),
                 id: rec.empId,
@@ -710,14 +712,36 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 in4: rec.shifts?.[3]?.in === '-' ? null : rec.shifts?.[3]?.in,
                 out4: rec.shifts?.[3]?.out === '-' ? null : rec.shifts?.[3]?.out,
                 break: Math.round((rec.breakHours || 0) * 60),
-                break: Math.round((rec.breakHours || 0) * 60),
-                deductions: rec.deductions || 0,
-                deductionReason: rec.deductionReason || ''
+                salaryAdvance: isAdvance ? (rec.deductions || 0) : 0,
+                deductions: isAdvance ? 0 : (rec.deductions || 0),
+                deductionReason: rec.deductionReason || rec.deduction_reason || ''
             });
         });
 
         // Add blank rows
         for (let i = 0; i < 50; i++) attendanceSheet.addRow({});
+
+        // Apply styles and alignment
+        attendanceSheet.getRow(1).font = { bold: true };
+        attendanceSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+        attendanceSheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Align all data rows and set borders
+        attendanceSheet.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+                    left: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } },
+                    right: { style: 'thin', color: { argb: 'FFD4D4D4' } }
+                };
+            });
+        });
 
         // Apply formatting and validation (1-based index)
         const totalSheetRows = attendanceSheet.rowCount;
@@ -764,8 +788,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 formulae: [`'Lists'!$C$2:$C$${breakOptions.length + 1}`]
             };
 
-            // Deduction Reason Dropdown (Col 14)
-            row.getCell(14).dataValidation = {
+            // Deduction Reason Dropdown (Col 15)
+            row.getCell(15).dataValidation = {
                 type: 'list',
                 allowBlank: true,
                 formulae: [`'Lists'!$D$2:$D$${deductionReasons.length + 1}`]

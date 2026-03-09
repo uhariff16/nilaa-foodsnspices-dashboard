@@ -1198,6 +1198,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1249,6 +1250,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                         </span>
                                                                     ) : '-';
                                                                 })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                                    <button onClick={() => { setEditingRecord(row); setShowManualEntry(true); }} style={{ padding: '0.4rem', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#3b82f6', cursor: 'pointer', transition: 'all 0.2s' }} title="Edit Log"><Pencil size={18} /></button>
+                                                                    <button onClick={() => handleDelete(row)} style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Delete Log"><Trash2 size={18} /></button>
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     );

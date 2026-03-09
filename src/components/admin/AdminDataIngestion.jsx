@@ -510,13 +510,20 @@ const AdminDataIngestion = () => {
         // 2. Receivables (Replace Strategy)
         if (hasReceivables) {
             const mappedReceivables = receivablesData.map(r => ({
+                status: r.status,
+                invoice_no: r.invoiceNo,
+                date: r.date,
                 customer_name: r.customerName,
                 address: r.address,
                 city: r.city,
-                contact: r.contact,
+                gstin: r.gstin,
+                amount: r.amount,
                 balance: r.balanceDue,
+                due_date: r.dueDate,
+                aging: r.aging,
                 updated_at: new Date()
             }));
+
 
             await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
             const { error } = await supabase.from('customer_receivables').insert(mappedReceivables);

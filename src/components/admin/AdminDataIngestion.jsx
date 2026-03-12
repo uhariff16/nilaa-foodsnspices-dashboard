@@ -726,11 +726,17 @@ const AdminDataIngestion = () => {
                         // 2. Receivables (Direct Insert/Update)
                         if (receivablesData.length > 0) {
                             const mappedReceivables = receivablesData.map(r => ({
+                                status: r.status,
+                                invoice_no: r.invoiceNo,
+                                date: r.date,
                                 customer_name: r.customerName,
                                 address: r.address,
                                 city: r.city,
-                                contact: r.contact,
+                                gstin: r.gstin,
+                                amount: r.amount,
                                 balance: r.balanceDue,
+                                due_date: r.dueDate,
+                                aging: r.aging,
                                 updated_at: new Date()
                             }));
                             // 2. Receivables

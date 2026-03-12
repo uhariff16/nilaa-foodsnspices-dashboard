@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart } from 'recharts';
-import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory } from 'lucide-react';
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -9,6 +9,35 @@ const formatCurrency = (val) => {
         maximumFractionDigits: 0
     }).format(val || 0);
 };
+
+const normalizeName = (name) => {
+    if (!name) return "";
+    let n = name.toUpperCase()
+        .replace(/^NFS\s+/, '') // Remove NFS prefix
+        .replace(/\s+/g, ' ')   // Normalize internal spacing
+        .replace(/\(.*\)/g, '') // Remove everything in parentheses
+        .replace(/\b\d+\s*(KG|G|GM|GMS|ML|L|PKT|PACKET|PACK|BOX|PCS|PC|G)\b/g, '') // Expanded units
+        .replace(/\b(WITHOUT|PACKET|PKT|BOTTLE|JAR|TIN|PACK|PACKS)\b/g, '') // Specific keywords to ignore
+        .replace(/[^\w\s]/g, ' ') // Replace non-alphanumeric with spaces
+        .trim();
+    // Sort words to handle "GARLIC PEELED" vs "PEELED GARLIC"
+    return n.split(/\s+/).filter(Boolean).sort().join(" ");
+};
+
+const getPackWeight = (desc) => {
+    if (!desc) return 1;
+    const d = desc.toUpperCase();
+    const match = d.match(/(\d+(?:\.\d+)?)\s*(KG|GM|GMS|G|ML|L)/);
+    if (match) {
+        const val = parseFloat(match[1]);
+        const unit = match[2];
+        if (unit.startsWith('K') || unit === 'L') return val;
+        if (unit.startsWith('G') || unit.startsWith('M')) return val / 1000;
+    }
+    return 1; // Default to 1kg if no unit found (bulk/loose/standard)
+};
+
+const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
 const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }) => {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -21,14 +50,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 showGrowth: true,
                 showUnitEconomics: true,
                 showExpenseComposition: true,
-                showQuarterly: true
+                showQuarterly: true,
+                showItemAnalysis: true
             };
         } catch (e) {
-            return { showGrowth: true, showUnitEconomics: true, showExpenseComposition: true, showQuarterly: true };
+            return { showGrowth: true, showUnitEconomics: true, showExpenseComposition: true, showQuarterly: true, showItemAnalysis: true };
         }
     });
 
     const [showSettingsDropdown, setShowSettingsDropdown] = React.useState(false);
+    const [analysisViewMode, setAnalysisViewMode] = React.useState('monthly'); // 'monthly' | 'yearly'
+    const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
 
     React.useEffect(() => {
         localStorage.setItem('ytd_view_settings', JSON.stringify(viewSettings));
@@ -49,6 +81,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
             let bills = 0;
             let marketing = 0;
             let other = 0;
+            let itemProduction = {}; // { itemName: weight }
+            let itemSalesData = {}; // { itemName: { revenue: 0, qty: 0 } }
 
             let salesKg = 0;
             let productionKgValue = 0; // Final Paste
@@ -95,14 +129,15 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     });
 
                     invoiceMap.forEach(group => {
-                        if (group.totals.length > 0) {
+                        // CRITICAL: Prefer granular items over Invoice Totals for per-item analysis
+                        if (group.granular.length > 0) {
+                            selectedSalesRows.push(...group.granular);
+                        } else if (group.totals.length > 0) {
                             if (group.totals.length === 1) selectedSalesRows.push(group.totals[0]);
                             else {
                                 const sorted = [...group.totals].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
                                 selectedSalesRows.push(sorted[0]);
                             }
-                        } else {
-                            selectedSalesRows.push(...group.granular);
                         }
                     });
                 }
@@ -115,8 +150,36 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 const finalSales = Array.from(uniqueSalesMap.values());
 
                 finalSales.forEach(t => {
-                    revenue += Math.abs(parseFloat(t.parsedAmount || 0));
-                    salesKg += parseFloat(t.parsedQty || 0);
+                    const amt = Math.abs(parseFloat(t.parsedAmount || 0));
+                    const qty = parseFloat(t.parsedQty || 0);
+                    revenue += amt;
+                    salesKg += qty;
+
+                    const rawName = (t.originalDesc || 'Generic Item').trim().toUpperCase();
+                    
+                    // Filter out accounting noise and summary rows
+                    const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) || 
+                                         rawName === 'ITEM' || rawName === 'PRODUCT' || 
+                                         rawName === 'AMOUNT' || rawName === 'SUBTOTAL';
+                    
+                    if (isBlacklisted) return;
+
+                    const normName = normalizeName(rawName);
+                    const packWeight = getPackWeight(rawName);
+                    const totalWeightKg = qty * packWeight;
+
+                    if (!itemSalesData[normName]) itemSalesData[normName] = { revenue: 0, weight: 0, minPrice: Infinity, maxPrice: -Infinity, originalNames: new Set() };
+                    itemSalesData[normName].revenue += amt;
+                    itemSalesData[normName].weight += totalWeightKg;
+                    itemSalesData[normName].originalNames.add(rawName);
+                    
+                    if (totalWeightKg > 0) {
+                        const pricePerKg = amt / totalWeightKg;
+                        if (pricePerKg > 0) {
+                            itemSalesData[normName].minPrice = Math.min(itemSalesData[normName].minPrice, pricePerKg);
+                            itemSalesData[normName].maxPrice = Math.max(itemSalesData[normName].maxPrice, pricePerKg);
+                        }
+                    }
                 });
 
                 // --- EXPENSES LOGIC ---
@@ -181,7 +244,12 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
             if (productionData?.postProduction) {
                 productionData.postProduction.forEach(item => {
                     if (item.date && item.date.startsWith(targetPrefix)) {
-                        productionKgValue += parseFloat(item.weight || 0);
+                        const weight = parseFloat(item.weight || 0);
+                        productionKgValue += weight;
+                        
+                        const name = (item.material || item.item || 'Generic Product').trim().toUpperCase();
+                        if (!itemProduction[name]) itemProduction[name] = 0;
+                        itemProduction[name] += weight;
                     }
                 });
             }
@@ -208,6 +276,74 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 purchasesKg: purchasesKgValue,
                 peeledKg: productionInputKgValue,
                 productionKg: effectiveOutput,
+                itemBreakdown: (() => {
+                    const breakdown = [];
+                    const usedSalesKeys = new Set();
+
+                    // 1. Process Produced Items
+                    Object.entries(itemProduction).forEach(([originalName, weight]) => {
+                        const normKey = normalizeName(originalName);
+                        const share = effectiveOutput > 0 ? weight / effectiveOutput : 0;
+                        const sales = itemSalesData[normKey] || { revenue: 0, weight: 0, minPrice: Infinity, maxPrice: -Infinity };
+                        
+                        usedSalesKeys.add(normKey);
+
+                        const itemAsp = sales.weight > 0 ? sales.revenue / sales.weight : 0;
+                        const itemUnitCost = weight > 0 ? (share * totalExpenses) / weight : 0;
+                        const itemProfitPerKg = itemAsp > 0 ? (itemAsp - itemUnitCost) : (0 - itemUnitCost);
+                        const itemMargin = itemAsp > 0 ? (itemProfitPerKg / itemAsp) * 100 : 0;
+
+                        breakdown.push({
+                            name: originalName,
+                            weight,
+                            share,
+                            allocatedCost: share * totalExpenses,
+                            materials: share * materialsCost,
+                            labour: share * labour,
+                            packaging: share * packaging,
+                            bills: share * bills,
+                            other: share * other,
+                            asp: itemAsp,
+                            minPrice: sales.minPrice === Infinity ? 0 : sales.minPrice,
+                            maxPrice: sales.maxPrice === -Infinity ? 0 : sales.maxPrice,
+                            profitPerKg: itemProfitPerKg,
+                            margin: itemMargin,
+                            revenue: sales.revenue,
+                            qty: sales.weight,
+                            isProduct: true
+                        });
+                    });
+
+                    // 2. Add Unmatched Sales (Traded items or items without production logs)
+                    Object.entries(itemSalesData).forEach(([normKey, data]) => {
+                        if (!usedSalesKeys.has(normKey) && data.revenue > 10) {
+                            const name = Array.from(data.originalNames)[0];
+                            const itemAsp = data.weight > 0 ? data.revenue / data.weight : 0;
+                            
+                            breakdown.push({
+                                name: name,
+                                weight: 0,
+                                share: 0,
+                                allocatedCost: 0,
+                                materials: 0,
+                                labour: 0,
+                                packaging: 0,
+                                bills: 0,
+                                other: 0,
+                                asp: itemAsp,
+                                minPrice: data.minPrice === Infinity ? 0 : data.minPrice,
+                                maxPrice: data.maxPrice === -Infinity ? 0 : data.maxPrice,
+                                profitPerKg: itemAsp,
+                                margin: 100,
+                                revenue: data.revenue,
+                                qty: data.weight,
+                                isProduct: false
+                            });
+                        }
+                    });
+
+                    return breakdown;
+                })(),
                 netProfit,
                 margin,
                 costPerKg,
@@ -232,6 +368,16 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
             };
         });
     }, [selectedYear, transactions, productionData]);
+
+    // Set default analysis month to the latest active month
+    React.useEffect(() => {
+        if (!selectedAnalysisMonth && yearlyData.length > 0) {
+            const activeMonths = yearlyData.filter(d => d.isActive);
+            if (activeMonths.length > 0) {
+                setSelectedAnalysisMonth(activeMonths[activeMonths.length - 1].name);
+            }
+        }
+    }, [yearlyData, selectedAnalysisMonth]);
 
     const quarterlyData = useMemo(() => {
         const quarters = [
@@ -431,6 +577,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
                                     <input type="checkbox" checked={viewSettings.showExpenseComposition} onChange={() => setViewSettings({ ...viewSettings, showExpenseComposition: !viewSettings.showExpenseComposition })} />
                                     Expense Composition
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                    <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} />
+                                    Itemized Cost Analysis
                                 </label>
                             </div>
                         </div>
@@ -709,6 +859,132 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     </div>
                 </div>
             </div>
+            {/* Itemized Production Cost Analysis Table */}
+            {viewSettings.showItemAnalysis && (
+                <div className="glass-panel" style={{ marginBottom: '2rem', overflow: 'hidden' }}>
+                    <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                                <Factory size={18} color="#f59e0b" />
+                                Itemized Production {analysisViewMode === 'yearly' ? 'Yearly' : 'Monthly'} Cost Analysis ({selectedYear})
+                            </h3>
+                            
+                            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                <button 
+                                    onClick={() => setAnalysisViewMode('monthly')}
+                                    style={{
+                                        padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                        background: analysisViewMode === 'monthly' ? '#3b82f6' : 'transparent',
+                                        color: analysisViewMode === 'monthly' ? 'white' : 'var(--text-secondary)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >Monthly</button>
+                                <button 
+                                    onClick={() => setAnalysisViewMode('yearly')}
+                                    style={{
+                                        padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                        background: analysisViewMode === 'yearly' ? '#3b82f6' : 'transparent',
+                                        color: analysisViewMode === 'yearly' ? 'white' : 'var(--text-secondary)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >Yearly</button>
+                            </div>
+                        </div>
+
+                        {analysisViewMode === 'monthly' && (
+                            <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', maxWidth: '400px', paddingBottom: '2px' }}>
+                                {yearlyData.filter(m => m.isActive).map(m => (
+                                    <button
+                                        key={m.name}
+                                        onClick={() => setSelectedAnalysisMonth(m.name)}
+                                        style={{
+                                            padding: '0.3rem 0.6rem', fontSize: '0.7rem', borderRadius: '0.4rem', 
+                                            border: `1px solid ${selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--glass-border)'}`,
+                                            background: selectedAnalysisMonth === m.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
+                                            color: selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--text-secondary)',
+                                            cursor: 'pointer', whiteSpace: 'nowrap'
+                                        }}
+                                    >{m.name}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ overflowX: 'auto', padding: '0 1.5rem 1.5rem 1.5rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'left', padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>ITEM NAME</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PRODUCTION (KG)</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>ALLOCATED COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MATERIALS</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>LABOUR</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>UNIT COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>SELL PRICE</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PROFIT/KG</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MARGIN %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(() => {
+                                    const aggregatedItems = {};
+                                    const dataToProcess = analysisViewMode === 'yearly' 
+                                        ? yearlyData 
+                                        : yearlyData.filter(m => m.name === selectedAnalysisMonth);
+
+                                    dataToProcess.forEach(m => {
+                                        if (m.itemBreakdown) {
+                                            m.itemBreakdown.forEach(item => {
+                                                if (!aggregatedItems[item.name]) {
+                                                    aggregatedItems[item.name] = { weight: 0, allocatedCost: 0, materials: 0, labour: 0, packaging: 0, bills: 0, revenue: 0, weightSold: 0, minPrice: Infinity, maxPrice: -Infinity };
+                                                }
+                                                aggregatedItems[item.name].weight += item.weight;
+                                                aggregatedItems[item.name].allocatedCost += item.allocatedCost;
+                                                aggregatedItems[item.name].materials += item.materials;
+                                                aggregatedItems[item.name].labour += item.labour;
+                                                aggregatedItems[item.name].packaging += (item.packaging || 0);
+                                                aggregatedItems[item.name].bills += (item.bills || 0);
+                                                aggregatedItems[item.name].revenue += (item.revenue || 0);
+                                                aggregatedItems[item.name].weightSold += (item.qty || 0); // Correctly using qty (which is weight now)
+                                                if (item.minPrice > 0) aggregatedItems[item.name].minPrice = Math.min(aggregatedItems[item.name].minPrice, item.minPrice);
+                                                if (item.maxPrice > 0) aggregatedItems[item.name].maxPrice = Math.max(aggregatedItems[item.name].maxPrice, item.maxPrice);
+                                            });
+                                        }
+                                    });
+
+                                    return Object.entries(aggregatedItems)
+                                        .sort((a, b) => b[1].weight - a[1].weight)
+                                        .map(([name, data]) => (
+                                            <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.85rem' }}>{name}</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>{data.weight.toLocaleString()} kg</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(data.allocatedCost)}</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.materials)}</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.labour)}</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#ef4444' }}>
+                                                    ₹{data.weight > 0 ? (data.allocatedCost / data.weight).toFixed(1) : '0'}/kg
+                                                </td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600 }}>
+                                                    <div>₹{data.weightSold > 0 ? (data.revenue / data.weightSold).toFixed(1) : '0'}/kg</div>
+                                                    {data.minPrice !== Infinity && data.minPrice > 0 && (
+                                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                                                            (₹{data.minPrice.toFixed(0)}-₹{data.maxPrice.toFixed(0)})
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue/data.weightSold - (data.weight > 0 ? data.allocatedCost/data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
+                                                    ₹{data.weightSold > 0 ? (data.revenue/data.weightSold - (data.weight > 0 ? data.allocatedCost/data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost/data.weight).toFixed(1)}` : '0')}/kg
+                                                </td>
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost/data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
+                                                    {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost/data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
+                                                </td>
+                                            </tr>
+                                        ));
+                                })()}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Detailed Data Table */}
             <div className="glass-panel" style={{ overflow: 'hidden' }}>

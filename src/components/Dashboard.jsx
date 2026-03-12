@@ -12,6 +12,7 @@ import ProcurementDashboard from './ProcurementDashboard';
 import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
+import CustomerDetailedAnalysis from './CustomerDetailedAnalysis';
 
 import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';

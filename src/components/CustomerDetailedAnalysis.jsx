@@ -283,25 +283,25 @@ const CustomerDetailedAnalysis = ({ data, receivables = [] }) => {
                                                 <td style={{ padding: '1rem' }}>
                                                     <span style={{
                                                         padding: '0.2rem 0.6rem', borderRadius: '0.4rem', fontSize: '0.7rem', fontWeight: 600,
-                                                        background: inv.status?.toLowerCase().includes('pending') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                                        color: inv.status?.toLowerCase().includes('pending') ? '#ef4444' : '#10b981',
-                                                        border: `1px solid ${inv.status?.toLowerCase().includes('pending') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`
+                                                        background: String(inv.status || '').toLowerCase().includes('pending') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                        color: String(inv.status || '').toLowerCase().includes('pending') ? '#ef4444' : '#10b981',
+                                                        border: `1px solid ${String(inv.status || '').toLowerCase().includes('pending') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`
                                                     }}>
                                                         {inv.status || 'N/A'}
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '1rem', fontSize: '0.85rem', fontFamily: 'monospace' }}>#{inv.invoice_no || 'N/A'}</td>
-                                                <td style={{ padding: '1rem', fontWeight: 500, textTransform: 'uppercase' }}>{inv.customerName}</td>
+                                                <td style={{ padding: '1rem', fontWeight: 500, textTransform: 'uppercase' }}>{inv.customerName || inv.customer_name || 'UNKNOWN'}</td>
                                                 <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{inv.date || '-'}</td>
                                                 <td style={{ padding: '1rem', textAlign: 'center' }}>
                                                     <span style={{
-                                                        color: inv.aging > 30 ? '#ef4444' : (inv.aging > 15 ? '#f59e0b' : 'inherit'),
-                                                        fontWeight: inv.aging > 15 ? 700 : 400
+                                                        color: (inv.aging || 0) > 30 ? '#ef4444' : ((inv.aging || 0) > 15 ? '#f59e0b' : 'inherit'),
+                                                        fontWeight: (inv.aging || 0) > 15 ? 700 : 400
                                                     }}>
-                                                        {inv.aging}
+                                                        {inv.aging || 0}
                                                     </span>
                                                 </td>
-                                                <td style={{ textAlign: 'right', padding: '1rem', fontWeight: 700, color: '#ef4444' }}>{formatINR(inv.balance)}</td>
+                                                <td style={{ textAlign: 'right', padding: '1rem', fontWeight: 700, color: '#ef4444' }}>{formatINR(inv.balance || inv.balanceDue || 0)}</td>
                                             </tr>
                                         ))
                                     )}

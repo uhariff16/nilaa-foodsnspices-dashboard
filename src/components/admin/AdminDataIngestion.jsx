@@ -527,7 +527,12 @@ const AdminDataIngestion = () => {
 
             await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
             const { error } = await supabase.from('customer_receivables').insert(mappedReceivables);
-            if (!error) addedRec = mappedReceivables.length;
+            if (!error) {
+                addedRec = mappedReceivables.length;
+            } else {
+                console.error("Receivables Schema Insert Error:", error);
+                throw new Error(`Receivables DB Error: ${error.message}. Please ensure customer_receivables table has columns: status, invoice_no, date, amount, due_date, aging, gstin.`);
+            }
         }
 
         return {
@@ -748,7 +753,12 @@ const AdminDataIngestion = () => {
                             }
 
                             const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
-                            if (!recError) fileAddedCount += mappedReceivables.length;
+                            if (!recError) {
+                                fileAddedCount += mappedReceivables.length;
+                            } else {
+                                console.error("Receivables Schema Insert Error:", recError);
+                                throw new Error(`Receivables DB Error: ${recError.message}. Please ensure customer_receivables table schema is up to date.`);
+                            }
                         }
 
                         // 3. Customer Stats (Restored)

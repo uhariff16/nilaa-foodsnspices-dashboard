@@ -12,7 +12,7 @@ import ProcurementDashboard from './ProcurementDashboard';
 import StockDashboard from './StockDashboard';
 import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
-import CustomerDetailedAnalysis from './CustomerDetailedAnalysis';
+
 
 import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -1653,20 +1653,7 @@ const Dashboard = (props) => {
                     Customers
                 </button>
 
-                {props.isAdmin && (
-                    <button
-                        onClick={() => setActiveTab('customer_analysis')}
-                        style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
-                            color: activeTab === 'customer_analysis' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                            borderBottom: activeTab === 'customer_analysis' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'customer_analysis' ? 600 : 400
-                        }}
-                    >
-                        <BarChart2 size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        Customer Analysis
-                    </button>
-                )}
+
 
 
 
@@ -2726,11 +2713,7 @@ const Dashboard = (props) => {
                     <CustomerAnalysis data={filteredCustomers} receivables={props.data?.receivables || []} />
                 )
             }
-            {
-                activeTab === 'customer_analysis' && props.isAdmin && (
-                    <CustomerDetailedAnalysis data={filteredCustomers} receivables={props.data?.receivables || []} />
-                )
-            }
+
             {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} isAdmin={isAdmin} />}
             {

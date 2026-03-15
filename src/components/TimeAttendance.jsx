@@ -1544,7 +1544,6 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                         <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Type</th>
                                         <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Amount</th>
                                         <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Remarks</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Emp. Balance</th>
                                         <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Actions</th>
                                     </tr>
                                 </thead>
@@ -1569,9 +1568,6 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                             </td>
                                             <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(row.amount)}</td>
                                             <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{row.remarks || '-'}</td>
-                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: (employeeBalances[row.emp_id]?.earned - employeeBalances[row.emp_id]?.paid) >= 0 ? '#10b981' : '#ef4444' }}>
-                                                {formatCurrency((employeeBalances[row.emp_id]?.earned || 0) - (employeeBalances[row.emp_id]?.paid || 0))}
-                                            </td>
                                             <td style={{ padding: '1rem', textAlign: 'right' }}>
                                                 <button
                                                     onClick={() => deletePayment(row.id)}

@@ -45,16 +45,36 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     // Dashboard View Settings
     const [viewSettings, setViewSettings] = React.useState(() => {
         try {
-            const saved = localStorage.getItem('ytd_view_settings');
+            const saved = localStorage.getItem('ytd_view_settings_v2');
             return saved ? JSON.parse(saved) : {
-                showGrowth: true,
-                showUnitEconomics: true,
-                showExpenseComposition: true,
+                // KPIs
+                showTotalRev: true,
+                showTotalExp: true,
+                showNetProfit: true,
+                showYtdProd: true,
+
+                // Performance
                 showQuarterly: true,
+                showRecommendations: true,
+
+                // Charts
+                showFinancialTrends: true,
+                showGrowthTrends: true,
+                showUnitEconomics: true,
+                showExpenseComp: true,
+                showProdYield: true,
+                
+                // Tables
+                showEfficiencyBench: true,
                 showItemAnalysis: true
             };
         } catch (e) {
-            return { showGrowth: true, showUnitEconomics: true, showExpenseComposition: true, showQuarterly: true, showItemAnalysis: true };
+            return {
+                showTotalRev: true, showTotalExp: true, showNetProfit: true, showYtdProd: true,
+                showQuarterly: true, showRecommendations: true, showFinancialTrends: true,
+                showGrowthTrends: true, showUnitEconomics: true, showExpenseComp: true,
+                showProdYield: true, showEfficiencyBench: true, showItemAnalysis: true
+            };
         }
     });
 
@@ -63,7 +83,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
 
     React.useEffect(() => {
-        localStorage.setItem('ytd_view_settings', JSON.stringify(viewSettings));
+        localStorage.setItem('ytd_view_settings_v2', JSON.stringify(viewSettings));
     }, [viewSettings]);
 
     const yearlyData = useMemo(() => {
@@ -561,27 +581,73 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             minWidth: '220px'
                         }}>
                             <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Toggle Sections</p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={viewSettings.showQuarterly} onChange={() => setViewSettings({ ...viewSettings, showQuarterly: !viewSettings.showQuarterly })} />
-                                    Quarterly Summary
-                                </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={viewSettings.showGrowth} onChange={() => setViewSettings({ ...viewSettings, showGrowth: !viewSettings.showGrowth })} />
-                                    Growth Trends
-                                </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={viewSettings.showUnitEconomics} onChange={() => setViewSettings({ ...viewSettings, showUnitEconomics: !viewSettings.showUnitEconomics })} />
-                                    Unit Economics
-                                </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={viewSettings.showExpenseComposition} onChange={() => setViewSettings({ ...viewSettings, showExpenseComposition: !viewSettings.showExpenseComposition })} />
-                                    Expense Composition
-                                </label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                    <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} />
-                                    Itemized Cost Analysis
-                                </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                {/* KPIs */}
+                                <div>
+                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>KPI CARDS</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showTotalRev} onChange={() => setViewSettings({ ...viewSettings, showTotalRev: !viewSettings.showTotalRev })} /> Total YTD Revenue
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showTotalExp} onChange={() => setViewSettings({ ...viewSettings, showTotalExp: !viewSettings.showTotalExp })} /> Total YTD Expenses
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showNetProfit} onChange={() => setViewSettings({ ...viewSettings, showNetProfit: !viewSettings.showNetProfit })} /> Net YTD Profit
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showYtdProd} onChange={() => setViewSettings({ ...viewSettings, showYtdProd: !viewSettings.showYtdProd })} /> YTD Production
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Performance Options */}
+                                <div>
+                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>PERFORMANCE</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showQuarterly} onChange={() => setViewSettings({ ...viewSettings, showQuarterly: !viewSettings.showQuarterly })} /> Quarterly Summary
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showRecommendations} onChange={() => setViewSettings({ ...viewSettings, showRecommendations: !viewSettings.showRecommendations })} /> Strategic Recommendations
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Charts */}
+                                <div>
+                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>CHARTS & TRENDS</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showFinancialTrends} onChange={() => setViewSettings({ ...viewSettings, showFinancialTrends: !viewSettings.showFinancialTrends })} /> Financial Trends
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showGrowthTrends} onChange={() => setViewSettings({ ...viewSettings, showGrowthTrends: !viewSettings.showGrowthTrends })} /> Growth Trends
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showUnitEconomics} onChange={() => setViewSettings({ ...viewSettings, showUnitEconomics: !viewSettings.showUnitEconomics })} /> Unit Economics
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showExpenseComp} onChange={() => setViewSettings({ ...viewSettings, showExpenseComp: !viewSettings.showExpenseComp })} /> Expense Composition
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showProdYield} onChange={() => setViewSettings({ ...viewSettings, showProdYield: !viewSettings.showProdYield })} /> Production & Yield
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Tables */}
+                                <div>
+                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>TABLES</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showEfficiencyBench} onChange={() => setViewSettings({ ...viewSettings, showEfficiencyBench: !viewSettings.showEfficiencyBench })} /> Efficiency Benchmarks
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} /> Itemized Cost Analysis
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -643,39 +709,47 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
             )}
 
             {/* Header Totals */}
-            <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
-                <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <DollarSign size={14} /> Total YTD Revenue
-                    </p>
-                    <h3 style={{ fontSize: '1.5rem', margin: 0, color: '#10b981' }}>{formatCurrency(totalStats.revenue)}</h3>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Activity size={14} /> Total YTD Expenses
-                    </p>
-                    <h3 style={{ fontSize: '1.5rem', margin: 0, color: '#ef4444' }}>{formatCurrency(totalStats.expenses)}</h3>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <TrendingUp size={14} /> Net YTD Profit
-                    </p>
-                    <h3 style={{ fontSize: '1.5rem', margin: 0, color: totalStats.profit >= 0 ? '#10b981' : '#f59e0b' }}>
-                        {formatCurrency(totalStats.profit)}
-                    </h3>
-                </div>
-                <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Wheat size={14} /> YTD Production
-                    </p>
-                    <h3 style={{ fontSize: '1.5rem', margin: 0, color: 'var(--accent-primary)' }}>
-                        {totalStats.production.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>kg</span>
-                    </h3>
-                </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '2rem' }}>
+                {viewSettings.showTotalRev && (
+                    <div className="glass-panel" style={{ padding: '1.25rem', flex: '1 1 min(100%, 250px)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <DollarSign size={14} /> Total YTD Revenue
+                        </p>
+                        <h3 style={{ fontSize: '1.5rem', margin: 0, color: '#10b981' }}>{formatCurrency(totalStats.revenue)}</h3>
+                    </div>
+                )}
+                {viewSettings.showTotalExp && (
+                    <div className="glass-panel" style={{ padding: '1.25rem', flex: '1 1 min(100%, 250px)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <Activity size={14} /> Total YTD Expenses
+                        </p>
+                        <h3 style={{ fontSize: '1.5rem', margin: 0, color: '#ef4444' }}>{formatCurrency(totalStats.expenses)}</h3>
+                    </div>
+                )}
+                {viewSettings.showNetProfit && (
+                    <div className="glass-panel" style={{ padding: '1.25rem', flex: '1 1 min(100%, 250px)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <TrendingUp size={14} /> Net YTD Profit
+                        </p>
+                        <h3 style={{ fontSize: '1.5rem', margin: 0, color: totalStats.profit >= 0 ? '#10b981' : '#f59e0b' }}>
+                            {formatCurrency(totalStats.profit)}
+                        </h3>
+                    </div>
+                )}
+                {viewSettings.showYtdProd && (
+                    <div className="glass-panel" style={{ padding: '1.25rem', flex: '1 1 min(100%, 250px)' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <Wheat size={14} /> YTD Production
+                        </p>
+                        <h3 style={{ fontSize: '1.5rem', margin: 0, color: 'var(--accent-primary)' }}>
+                            {totalStats.production.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>kg</span>
+                        </h3>
+                    </div>
+                )}
             </div>
 
             {/* Strategic Recommendations */}
-            {recommendations.length > 0 && (
+            {viewSettings.showRecommendations && recommendations.length > 0 && (
                 <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                     <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.1rem' }}>
                         <Target size={20} color="#3b82f6" />
@@ -705,31 +779,35 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: viewSettings.showGrowth ? '1fr 1fr' : '1fr', gap: '2rem', marginBottom: '2rem' }}>
+            {/* Flexbox container for ALL charts/tables so they auto-flow visually */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', marginBottom: '2rem' }}>
+                
                 {/* Financial Trend */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
-                        <TrendingUp size={18} color="#3b82f6" />
-                        Financial Trends
-                    </h3>
-                    <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <ComposedChart data={yearlyData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
-                                <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Legend wrapperStyle={{ paddingTop: '1rem', fontSize: 12 }} />
-                                <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} opacity={0.8} />
-                                <Line type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                            </ComposedChart>
-                        </ResponsiveContainer>
+                {viewSettings.showFinancialTrends && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
+                        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                            <TrendingUp size={18} color="#3b82f6" />
+                            Financial Trends
+                        </h3>
+                        <div style={{ width: '100%', height: 300 }}>
+                            <ResponsiveContainer>
+                                <ComposedChart data={yearlyData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
+                                    <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} tickFormatter={(val) => `₹${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend wrapperStyle={{ paddingTop: '1rem', fontSize: 12 }} />
+                                    <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} opacity={0.8} />
+                                    <Line type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Growth Trends */}
-                {viewSettings.showGrowth && (
-                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                {viewSettings.showGrowthTrends && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
                         <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                             <TrendingUp size={18} color="#10b981" />
                             Month-over-Month Growth
@@ -749,12 +827,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         </div>
                     </div>
                 )}
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
                 {/* Unit Economics Chart */}
                 {viewSettings.showUnitEconomics && (
-                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
                         <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                             <DollarSign size={18} color="#3b82f6" />
                             Unit Economics (₹ / kg)
@@ -776,8 +852,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 )}
 
                 {/* Expense Composition Chart */}
-                {viewSettings.showExpenseComposition && (
-                    <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                {viewSettings.showExpenseComp && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
                         <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
                             <Activity size={18} color="#ef4444" />
                             Expense Composition
@@ -799,65 +875,67 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         </div>
                     </div>
                 )}
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
                 {/* Production Trend */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
-                        <Wheat size={18} color="#f59e0b" />
-                        Production & Yield Trends
-                    </h3>
-                    <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <ComposedChart data={yearlyData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
-                                <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(val) => `${val}%`} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Legend wrapperStyle={{ paddingTop: '1rem', fontSize: 12 }} />
-                                <Bar yAxisId="left" dataKey="productionKg" name="Paste Output (kg)" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                                <Line yAxisId="right" type="monotone" dataKey="yieldPercent" name="Yield %" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
-                            </ComposedChart>
-                        </ResponsiveContainer>
+                {viewSettings.showProdYield && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
+                        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                            <Wheat size={18} color="#f59e0b" />
+                            Production & Yield Trends
+                        </h3>
+                        <div style={{ width: '100%', height: 300 }}>
+                            <ResponsiveContainer>
+                                <ComposedChart data={yearlyData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
+                                    <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                    <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(val) => `${val}%`} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend wrapperStyle={{ paddingTop: '1rem', fontSize: 12 }} />
+                                    <Bar yAxisId="left" dataKey="productionKg" name="Paste Output (kg)" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={25} />
+                                    <Line yAxisId="right" type="monotone" dataKey="yieldPercent" name="Yield %" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Efficiency Analysis Table (Mini) */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
-                        <Target size={18} color="#3b82f6" />
-                        Key Efficiency Benchmarks
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {yearlyData.filter(d => d.isActive).slice(-3).reverse().map((m, idx) => (
-                            <div key={idx} style={{
-                                padding: '1rem',
-                                background: 'rgba(255,255,255,0.02)',
-                                borderRadius: '0.75rem',
-                                border: '1px solid var(--glass-border)'
-                            }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                    <span style={{ fontWeight: 600 }}>{m.name} {selectedYear}</span>
-                                    <span style={{ color: m.yieldPercent >= 70 ? '#10b981' : '#f59e0b', fontSize: '0.8rem', fontWeight: 600 }}>
-                                        {m.yieldPercent.toFixed(1)}% Yield
-                                    </span>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>ASP</p>
-                                        <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#10b981' }}>₹{m.revenuePerKg.toFixed(1)}/kg</p>
+                {viewSettings.showEfficiencyBench && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
+                        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                            <Target size={18} color="#3b82f6" />
+                            Key Efficiency Benchmarks
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {yearlyData.filter(d => d.isActive).slice(-3).reverse().map((m, idx) => (
+                                <div key={idx} style={{
+                                    padding: '1rem',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    borderRadius: '0.75rem',
+                                    border: '1px solid var(--glass-border)'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                                        <span style={{ fontWeight: 600 }}>{m.name} {selectedYear}</span>
+                                        <span style={{ color: m.yieldPercent >= 70 ? '#10b981' : '#f59e0b', fontSize: '0.8rem', fontWeight: 600 }}>
+                                            {m.yieldPercent.toFixed(1)}% Yield
+                                        </span>
                                     </div>
-                                    <div>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Unit Cost</p>
-                                        <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#ef4444' }}>₹{m.costPerKg.toFixed(1)}/kg</p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>ASP</p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#10b981' }}>₹{m.revenuePerKg.toFixed(1)}/kg</p>
+                                        </div>
+                                        <div>
+                                            <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Unit Cost</p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#ef4444' }}>₹{m.costPerKg.toFixed(1)}/kg</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
             {/* Itemized Production Cost Analysis Table */}
             {viewSettings.showItemAnalysis && (

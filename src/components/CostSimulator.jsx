@@ -9,9 +9,9 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     const [presets, setPresets] = useState(() => {
         try {
             const saved = localStorage.getItem('simulator_presets');
-            return saved ? JSON.parse(saved) : { gingerRate: 0, garlicRate: 0, waterRate: 0 };
+            return saved ? JSON.parse(saved) : { gingerRate: 0, garlicRate: 0, smallOnionRate: 0, waterRate: 0 };
         } catch (e) {
-            return { gingerRate: 0, garlicRate: 0, waterRate: 0 };
+            return { gingerRate: 0, garlicRate: 0, smallOnionRate: 0, waterRate: 0 };
         }
     });
 
@@ -24,7 +24,8 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         { productType: 'paste', pasteVariant: 'ginger', label: 'Ginger Paste' },
         { productType: 'paste', pasteVariant: 'garlic', label: 'Garlic Paste' },
         { productType: 'ginger_peeled', label: 'Ginger Peeled' },
-        { productType: 'garlic_peeled', label: 'Garlic Peeled' }
+        { productType: 'garlic_peeled', label: 'Garlic Peeled' },
+        { productType: 'small_onion_peeled', label: 'Small Onion Peeled' }
     ];
 
     // State for inputs
@@ -33,19 +34,22 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         productType: 'paste', // 'paste', 'ginger_peeled', 'garlic_peeled'
         pasteVariant: 'mix', // 'mix', 'ginger', 'garlic' (Only for productType === 'paste')
         gingerKg: 100,
-        gingerRate: presets.gingerRate || 0, // Load Preset
+        gingerRate: presets.gingerRate || 0,
         garlicKg: 100,
-        garlicRate: presets.garlicRate || 0, // Load Preset
-        labourCost: 15, // Default estimate
-        billsCost: 5,   // Portion of Overhead (Bills)
-        otherCost: 5,   // Portion of Overhead (Other)
-        packagingCost: 0, // Packaging Cost
+        garlicRate: presets.garlicRate || 0,
+        smallOnionKg: 100,
+        smallOnionRate: presets.smallOnionRate || 0,
+        labourCost: 15,
+        billsCost: 5,
+        otherCost: 5,
+        packagingCost: 0,
         gingerWastage: 10,
         garlicWastage: 20,
-        waterLiters: 40, // Default ~20% of 200kg
-        waterRate: presets.waterRate || 0, // Load Preset
-        profitMargin: 30, // Default 30% margin
-        useSmartDefaults: true // Toggle to enable/disable auto-calc
+        smallOnionWastage: 25,
+        waterLiters: 40,
+        waterRate: presets.waterRate || 0,
+        profitMargin: 30,
+        useSmartDefaults: true
     });
 
     const [results, setResults] = useState({
@@ -72,10 +76,12 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             } else if (currentInputs.pasteVariant === 'garlic') {
                 projectedOutput = garlicNet + Number(currentInputs.waterLiters);
             }
-        } else {
+        } else if (currentInputs.productType === 'ginger_peeled' || currentInputs.productType === 'garlic_peeled') {
             const weight = currentInputs.productType === 'ginger_peeled' ? currentInputs.gingerKg : currentInputs.garlicKg;
             const wastage = currentInputs.productType === 'ginger_peeled' ? currentInputs.gingerWastage : currentInputs.garlicWastage;
             projectedOutput = weight * (1 - wastage / 100);
+        } else if (currentInputs.productType === 'small_onion_peeled') {
+            projectedOutput = currentInputs.smallOnionKg * (1 - currentInputs.smallOnionWastage / 100);
         }
 
         const capLabour = stats.avgMonthlyLabour || Infinity;
@@ -145,6 +151,10 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             totalMaterialCost = currentInputs.garlicKg * currentInputs.garlicRate;
             totalOutput = currentInputs.garlicKg * (1 - currentInputs.garlicWastage / 100);
             totalInput = Number(currentInputs.garlicKg);
+        } else if (currentInputs.productType === 'small_onion_peeled') {
+            totalMaterialCost = currentInputs.smallOnionKg * currentInputs.smallOnionRate;
+            totalOutput = currentInputs.smallOnionKg * (1 - currentInputs.smallOnionWastage / 100);
+            totalInput = Number(currentInputs.smallOnionKg);
         }
 
         // [FIX] Scaled Operational Costs for Batch Items
@@ -289,7 +299,9 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
 
         const variantLabel = inputs.productType === 'paste'
             ? (inputs.pasteVariant === 'mix' ? 'G & G Paste' : inputs.pasteVariant === 'ginger' ? 'Ginger Paste' : 'Garlic Paste')
-            : (inputs.productType === 'ginger_peeled' ? 'Ginger Peeled' : 'Garlic Peeled');
+            : inputs.productType === 'ginger_peeled' ? 'Ginger Peeled' 
+            : inputs.productType === 'garlic_peeled' ? 'Garlic Peeled'
+            : 'Small Onion Peeled';
 
         const tableName = inputs.salesChannel === 'retail' ? 'simulated_costs_retail' : 'simulated_costs_wholesale';
 
@@ -471,6 +483,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     // Helper to check active inputs
     const showGinger = (inputs.productType === 'paste' && (inputs.pasteVariant === 'mix' || inputs.pasteVariant === 'ginger')) || inputs.productType === 'ginger_peeled';
     const showGarlic = (inputs.productType === 'paste' && (inputs.pasteVariant === 'mix' || inputs.pasteVariant === 'garlic')) || inputs.productType === 'garlic_peeled';
+    const showSmallOnion = inputs.productType === 'small_onion_peeled';
     const showWater = inputs.productType === 'paste';
 
     const totalOperationalCost = Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost) + Number(inputs.packagingCost);
@@ -573,7 +586,8 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                         {[
                             { id: 'paste', label: 'Paste/Mix' },
                             { id: 'ginger_peeled', label: 'Ginger Peeled' },
-                            { id: 'garlic_peeled', label: 'Garlic Peeled' }
+                            { id: 'garlic_peeled', label: 'Garlic Peeled' },
+                            { id: 'small_onion_peeled', label: 'Small Onion Peeled' }
                         ].map(type => (
                             <button
                                 key={type.id}
@@ -697,6 +711,33 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                                 type="number"
                                                 value={inputs.garlicRate}
                                                 onChange={(e) => handleInput('garlicRate', e.target.value)}
+                                                style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
+                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {showSmallOnion && (
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Onion Weight (kg)</label>
+                                            <input
+                                                type="number"
+                                                value={inputs.smallOnionKg}
+                                                onChange={(e) => handleInput('smallOnionKg', e.target.value)}
+                                                style={inputStyle}
+                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(255, 255, 255, 0.1)', background: 'rgba(15, 23, 42, 0.6)' })}
+                                            />
+                                        </div>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Onion Rate (₹/kg)</label>
+                                            <input
+                                                type="number"
+                                                value={inputs.smallOnionRate}
+                                                onChange={(e) => handleInput('smallOnionRate', e.target.value)}
                                                 style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
                                                 onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
@@ -871,6 +912,20 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                                 type="number"
                                                 value={inputs.garlicWastage}
                                                 onChange={(e) => handleInput('garlicWastage', e.target.value)}
+                                                style={{ ...inputStyle, background: 'transparent', border: 'none', padding: 0, fontSize: '1.5rem', color: '#ef4444' }}
+                                            />
+                                            <span style={{ color: '#ef4444', fontWeight: '700' }}>%</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {showSmallOnion && (
+                                    <div style={{ ...cardStyle, width: '140px' }}>
+                                        <label style={{ ...labelStyle, marginBottom: '0.25rem' }}>Onion Waste</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input
+                                                type="number"
+                                                value={inputs.smallOnionWastage}
+                                                onChange={(e) => handleInput('smallOnionWastage', e.target.value)}
                                                 style={{ ...inputStyle, background: 'transparent', border: 'none', padding: 0, fontSize: '1.5rem', color: '#ef4444' }}
                                             />
                                             <span style={{ color: '#ef4444', fontWeight: '700' }}>%</span>
@@ -1235,12 +1290,23 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                         style={inputStyle}
                                     />
                                 </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Default Onion Rate (₹/Kg)</label>
+                                    <input
+                                        type="number"
+                                        defaultValue={presets.smallOnionRate}
+                                        id="preset-onion"
+                                        style={inputStyle}
+                                    />
+                                </div>
                                 <button
                                     onClick={() => {
                                         const gRate = parseFloat(document.getElementById('preset-ginger').value) || 0;
-                                        const gaRate = parseFloat(document.getElementById('preset-garlic').value) || 0;
+                                        const glRate = parseFloat(document.getElementById('preset-garlic').value) || 0;
+                                        const oRate = parseFloat(document.getElementById('preset-onion').value) || 0;
                                         const wRate = parseFloat(document.getElementById('preset-water').value) || 0;
-                                        savePresets({ gingerRate: gRate, garlicRate: gaRate, waterRate: wRate });
+                                        const newPresets = { gingerRate: gRate, garlicRate: glRate, smallOnionRate: oRate, waterRate: wRate };
+                                        savePresets(newPresets);
                                     }}
                                     style={{
                                         marginTop: '1rem', width: '100%', padding: '0.75rem',

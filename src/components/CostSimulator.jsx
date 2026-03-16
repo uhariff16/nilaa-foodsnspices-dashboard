@@ -734,83 +734,108 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                         </div>
                         {/* 2. Operational Costs */}
                         <div style={sectionStyle}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h3 style={{ ...sectionHeaderStyle('#a855f7'), marginBottom: 0 }}>
-                                    <Zap size={18} color="#a855f7" />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                <h3 style={{ 
+                                    fontSize: '0.85rem', 
+                                    fontWeight: '700', 
+                                    color: '#f1f5f9', 
+                                    textTransform: 'uppercase', 
+                                    letterSpacing: '0.1em', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '0.75rem' 
+                                }}>
+                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#a855f7' }}></div>
                                     Operational Costs
                                 </h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(15, 23, 42, 0.4)', padding: '0.3rem 0.6rem', borderRadius: '0.4rem', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Smart Auto-fill:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <input
                                         type="checkbox"
+                                        id="auto-fill-toggle"
                                         checked={inputs.useSmartDefaults}
                                         onChange={(e) => setInputs(prev => ({ ...prev, useSmartDefaults: e.target.checked }))}
-                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#3b82f6' }}
                                     />
+                                    <label htmlFor="auto-fill-toggle" style={{ fontSize: '0.9rem', color: '#f1f5f9', cursor: 'pointer', fontWeight: '500' }}>Auto-fill</label>
                                 </div>
                             </div>
 
-                            {inputs.useSmartDefaults && previousMonthStats && (
-                                <div style={{ 
-                                    marginBottom: '1.5rem', 
-                                    padding: '0.85rem 1rem', 
-                                    background: 'rgba(59, 130, 246, 0.1)', 
-                                    borderRadius: '0.75rem', 
-                                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.75rem',
-                                    fontSize: '0.8rem',
-                                    color: '#60a5fa'
-                                }}>
-                                    <Info size={16} />
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                        <span>Based on <strong>{previousMonthStats.month}</strong> averages: Labour ₹{previousMonthStats.labourPerKg?.toFixed(2)}/kg, Bills ₹{previousMonthStats.billsPerKg?.toFixed(2)}/kg</span>
-                                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Operational Cost Caps: Labour ₹{Math.round(previousMonthStats.avgMonthlyLabour)}, Bills ₹{Math.round(previousMonthStats.avgMonthlyBills)}</span>
-                                    </div>
+                            {previousMonthStats && (
+                                <div style={{ fontSize: '0.85rem', color: '#60a5fa', marginBottom: '1.5rem', fontWeight: '500', opacity: 0.9 }}>
+                                    Based on {previousMonthStats.month} actuals 
+                                    ({previousMonthStats.labourPerKg?.toFixed(2)}/kg, {previousMonthStats.billsPerKg?.toFixed(2)}/kg, Pkg: {previousMonthStats.packagingPerKg?.toFixed(2)}/kg)
                                 </div>
                             )}
 
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
                                 {[
-                                    { key: 'labourCost', label: 'Labour Cost' },
-                                    { key: 'billsCost', label: 'Electricity/Bills' },
-                                    { key: 'otherCost', label: 'Other Overheads' },
-                                    { key: 'packagingCost', label: 'Packaging Cost' }
-                                ].map(field => (
-                                    <div key={field.key} style={{ width: '160px' }}>
-                                        <label style={labelStyle}>{field.label}</label>
-                                        <div style={{ position: 'relative' }}>
-                                            <input
-                                                type="number"
-                                                value={inputs[field.key]}
-                                                onChange={(e) => {
-                                                    handleInput(field.key, e.target.value);
-                                                    if (inputs.useSmartDefaults) setInputs(prev => ({ ...prev, useSmartDefaults: false }));
-                                                }}
-                                                style={{ ...inputStyle, borderColor: inputs.useSmartDefaults ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.1)' }}
-                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: inputs.useSmartDefaults ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)', background: 'rgba(15, 23, 42, 0.6)' })}
-                                            />
-                                            <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', color: '#64748b' }}>₹</span>
+                                    { key: 'labourCost', label: 'Labour', rateKey: 'labourPerKg', capKey: 'avgMonthlyLabour' },
+                                    { key: 'billsCost', label: 'Bills & Rent', rateKey: 'billsPerKg', capKey: 'avgMonthlyBills' },
+                                    { key: 'otherCost', label: 'Other Exp', rateKey: 'otherPerKg', capKey: 'avgMonthlyOther', isVar: true },
+                                    { key: 'packagingCost', label: 'Pkg Cost', rateKey: 'packagingPerKg' }
+                                ].map(field => {
+                                    const rate = previousMonthStats ? (previousMonthStats[field.rateKey] || 0) : 0;
+                                    const cap = previousMonthStats ? (previousMonthStats[field.capKey] || 0) : 0;
+                                    const eff = results.totalOutputKg > 0 ? (inputs[field.key] / results.totalOutputKg) : 0;
+
+                                    return (
+                                        <div key={field.key} style={{ flex: '1 1 160px', minWidth: '140px' }}>
+                                            <label style={{ ...labelStyle, fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem' }}>{field.label}</label>
+                                            <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+                                                <input
+                                                    type="number"
+                                                    value={inputs[field.key]}
+                                                    onChange={(e) => {
+                                                        handleInput(field.key, e.target.value);
+                                                        if (inputs.useSmartDefaults) setInputs(prev => ({ ...prev, useSmartDefaults: false }));
+                                                    }}
+                                                    style={{ 
+                                                        ...inputStyle, 
+                                                        maxWidth: 'none',
+                                                        padding: '0.65rem 1rem 0.65rem 2.25rem',
+                                                        fontSize: '1.25rem',
+                                                        textAlign: 'center',
+                                                        background: 'rgba(30, 41, 59, 0.4)',
+                                                        borderColor: 'rgba(255, 255, 255, 0.08)',
+                                                        borderRadius: '0.75rem'
+                                                    }}
+                                                    onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                    onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(255, 255, 255, 0.08)', background: 'rgba(30, 41, 59, 0.4)' })}
+                                                />
+                                                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.1rem', color: '#94a3b8' }}>₹</span>
+                                            </div>
+                                            
+                                            {/* Labels below input */}
+                                            {previousMonthStats && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', fontSize: '0.75rem', color: '#94a3b8', paddingRight: '0.5rem' }}>
+                                                    <div style={{ fontWeight: '500' }}>Rate: ₹{rate.toFixed(2)}/kg{field.isVar ? ' (Var)' : ''}</div>
+                                                    {cap > 0 && <div style={{ fontWeight: '500' }}>Cap: ₹{Math.round(cap)}</div>}
+                                                    <div style={{ color: '#60a5fa', fontWeight: '600' }}>Eff: ₹{eff.toFixed(2)}/kg</div>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
-                            <div style={{ 
-                                marginTop: '1.5rem', 
-                                padding: '1.25rem', 
-                                background: 'rgba(0,0,0,0.2)', 
-                                borderRadius: '1rem', 
-                                border: '1px solid rgba(255,255,255,0.05)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
-                            }}>
-                                <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: '600' }}>Total Operational Cost:</span>
-                                <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '0.6rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                                    <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#a855f7' }}>₹{totalOperationalCost.toFixed(2)}</span>
+                            {/* Total Op Cost Summary Bar */}
+                            <div style={{ marginBottom: '0.5rem' }}>
+                                <label style={{ ...labelStyle, color: '#a855f7', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'none' }}>Total Op. Cost</label>
+                                <div style={{ 
+                                    width: '100%',
+                                    padding: '1rem 1.5rem', 
+                                    background: 'rgba(168, 85, 247, 0.05)', 
+                                    borderRadius: '0.85rem', 
+                                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                    <span style={{ fontSize: '1.25rem', color: '#a855f7', opacity: 0.8 }}>₹</span>
+                                    <span style={{ fontSize: '1.75rem', fontWeight: '800', color: '#a855f7', letterSpacing: '0.02em' }}>
+                                        {Math.round(totalOperationalCost).toLocaleString()}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -895,7 +920,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                             gap: '1.5rem'
                         }}>
                             <div>
-                                <span style={{ fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: '700' }}>Net Production Cost</span>
+                                <span style={{ fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: '700' }}>Production Cost</span>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
                                     <span style={{ fontSize: '2rem', color: '#64748b', fontWeight: '500', marginTop: '0.75rem' }}>₹</span>
                                     <span style={{ fontSize: '5.5rem', fontWeight: '900', color: '#f8fafc', lineHeight: 1, letterSpacing: '-0.03em', textShadow: '0 0 40px rgba(59, 130, 246, 0.3)' }}>
@@ -1101,8 +1126,8 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                         <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>DATE</th>
                                         <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>ITEM</th>
                                         <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>OUTPUT</th>
-                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>UNIT COST</th>
-                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>REC. PRICE</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>PRODUCTION COST</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>REC. SELLING PRICE</th>
                                         <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', textAlign: 'right' }}>ACTION</th>
                                     </tr>
                                 </thead>

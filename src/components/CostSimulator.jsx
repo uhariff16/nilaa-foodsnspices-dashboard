@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Calculator, DollarSign, Info, Settings, Save, X } from 'lucide-react';
+import { RefreshCw, Calculator, DollarSign, Info, Settings, Save, X, Database, History, Trash2, CheckCircle2, Loader2, Zap, Percent } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
     // [NEW] Presets Logic
@@ -12,6 +13,18 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
             return { gingerRate: 0, garlicRate: 0, waterRate: 0 };
         }
     });
+
+    // History and Status State
+
+
+    // Constant for all product combinations
+    const ALL_VARIANTS = [
+        { productType: 'paste', pasteVariant: 'mix', label: 'G & G Paste' },
+        { productType: 'paste', pasteVariant: 'ginger', label: 'Ginger Paste' },
+        { productType: 'paste', pasteVariant: 'garlic', label: 'Garlic Paste' },
+        { productType: 'ginger_peeled', label: 'Ginger Peeled' },
+        { productType: 'garlic_peeled', label: 'Garlic Peeled' }
+    ];
 
     // State for inputs
     const [inputs, setInputs] = useState({
@@ -43,123 +56,324 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         yieldPercent: 0
     });
 
-    // Smart Defaults Logic
+    // [NEW] Shared logic for operational cost scaling
+    const getEstimatedOverheads = (currentInputs, stats) => {
+        if (!stats) return { labour: 0, bills: 0, other: 0, packaging: 0 };
+
+        let projectedOutput = 0;
+        if (currentInputs.productType === 'paste') {
+            const gingerNet = currentInputs.gingerKg * (1 - currentInputs.gingerWastage / 100);
+            const garlicNet = currentInputs.garlicKg * (1 - currentInputs.garlicWastage / 100);
+            if (currentInputs.pasteVariant === 'mix') {
+                projectedOutput = gingerNet + garlicNet + Number(currentInputs.waterLiters);
+            } else if (currentInputs.pasteVariant === 'ginger') {
+                projectedOutput = gingerNet + Number(currentInputs.waterLiters);
+            } else if (currentInputs.pasteVariant === 'garlic') {
+                projectedOutput = garlicNet + Number(currentInputs.waterLiters);
+            }
+        } else {
+            const weight = currentInputs.productType === 'ginger_peeled' ? currentInputs.gingerKg : currentInputs.garlicKg;
+            const wastage = currentInputs.productType === 'ginger_peeled' ? currentInputs.gingerWastage : currentInputs.garlicWastage;
+            projectedOutput = weight * (1 - wastage / 100);
+        }
+
+        const capLabour = stats.avgMonthlyLabour || Infinity;
+        const estLabour = Math.min(projectedOutput * (stats.labourPerKg || 0), capLabour);
+
+        const capBills = stats.avgMonthlyBills || Infinity;
+        const estBills = Math.min(projectedOutput * (stats.billsPerKg || 0), capBills);
+
+        const estOther = projectedOutput * (stats.otherPerKg || 0);
+        const estPackaging = projectedOutput * (stats.packagingPerKg || 0);
+
+        return {
+            labour: Math.round(estLabour),
+            bills: Math.round(estBills),
+            other: Math.round(estOther),
+            packaging: Math.round(estPackaging)
+        };
+    };
+
+    // Smart Defaults Logic - Keep UI updated when inputs change
     useEffect(() => {
         if (inputs.useSmartDefaults && previousMonthStats) {
-            let projectedOutput = 0;
-
-            if (inputs.productType === 'paste') {
-                const gingerNet = inputs.gingerKg * (1 - inputs.gingerWastage / 100);
-                const garlicNet = inputs.garlicKg * (1 - inputs.garlicWastage / 100);
-
-                let baseWeight = 0;
-                if (inputs.pasteVariant === 'mix') {
-                    baseWeight = inputs.gingerKg + inputs.garlicKg;
-                    projectedOutput = gingerNet + garlicNet + Number(inputs.waterLiters);
-                } else if (inputs.pasteVariant === 'ginger') {
-                    baseWeight = inputs.gingerKg;
-                    projectedOutput = gingerNet + Number(inputs.waterLiters);
-                } else if (inputs.pasteVariant === 'garlic') {
-                    baseWeight = inputs.garlicKg;
-                    projectedOutput = garlicNet + Number(inputs.waterLiters);
-                }
-
-            } else if (inputs.productType === 'ginger_peeled') {
-                projectedOutput = inputs.gingerKg * (1 - inputs.gingerWastage / 100);
-            } else if (inputs.productType === 'garlic_peeled') {
-                projectedOutput = inputs.garlicKg * (1 - inputs.garlicWastage / 100);
-            }
-
-            // Apply Previous Month's Per-KG operational costs
-            // [FIX] Capped Logic for Labour as well
-            const capLabour = previousMonthStats.avgMonthlyLabour || Infinity;
-            const rateLabour = projectedOutput * (previousMonthStats.labourPerKg || 0);
-            const estLabour = Math.min(rateLabour, capLabour);
-
-            // [FIX] Capped Logic: Scale linearly but Cap at Monthly Average
-            // If output is small -> Use Rate. If output is huge -> Use Total Monthly Bill (Cap).
-            const capBills = previousMonthStats.avgMonthlyBills || Infinity;
-            const rateBills = projectedOutput * (previousMonthStats.billsPerKg || 0);
-            const estBills = Math.min(rateBills, capBills);
-
-            // [FIX] Other Expenses are VARIABLE (e.g. Fuel, repairs often scale) - User Request to Uncap
-            const estOther = projectedOutput * (previousMonthStats.otherPerKg || 0);
-
-            const estPackaging = projectedOutput * (previousMonthStats.packagingPerKg || 0);
-
+            const estimates = getEstimatedOverheads(inputs, previousMonthStats);
             setInputs(prev => ({
                 ...prev,
-                labourCost: Math.round(estLabour),
-                billsCost: Math.round(estBills),
-                otherCost: Math.round(estOther),
-                packagingCost: Math.round(estPackaging)
+                labourCost: estimates.labour,
+                billsCost: estimates.bills,
+                otherCost: estimates.other,
+                packagingCost: estimates.packaging
             }));
         }
     }, [inputs.gingerKg, inputs.garlicKg, inputs.gingerWastage, inputs.garlicWastage, inputs.waterLiters, inputs.useSmartDefaults, previousMonthStats, inputs.productType, inputs.pasteVariant]);
 
-    // Calculation Logic
-    useEffect(() => {
+
+
+    // [REFACTOR] Pure calculation function for reuse
+    const calculateResults = (currentInputs, stats) => {
         let totalMaterialCost = 0;
         let totalOutput = 0;
         let totalInput = 0;
 
-        if (inputs.productType === 'paste') {
-            const gingerCost = inputs.gingerKg * inputs.gingerRate;
-            const garlicCost = inputs.garlicKg * inputs.garlicRate;
+        if (currentInputs.productType === 'paste') {
+            const gingerCost = currentInputs.gingerKg * currentInputs.gingerRate;
+            const garlicCost = currentInputs.garlicKg * currentInputs.garlicRate;
+            const gingerNet = currentInputs.gingerKg * (1 - currentInputs.gingerWastage / 100);
+            const garlicNet = currentInputs.garlicKg * (1 - currentInputs.garlicWastage / 100);
+            const waterCost = currentInputs.waterLiters * currentInputs.waterRate;
 
-            const gingerNet = inputs.gingerKg * (1 - inputs.gingerWastage / 100);
-            const garlicNet = inputs.garlicKg * (1 - inputs.garlicWastage / 100);
-
-            const waterCost = inputs.waterLiters * inputs.waterRate;
-
-            if (inputs.pasteVariant === 'mix') {
+            if (currentInputs.pasteVariant === 'mix') {
                 totalMaterialCost = gingerCost + garlicCost + waterCost;
-                totalOutput = gingerNet + garlicNet + Number(inputs.waterLiters);
-                totalInput = Number(inputs.gingerKg) + Number(inputs.garlicKg) + Number(inputs.waterLiters);
-            } else if (inputs.pasteVariant === 'ginger') {
+                totalOutput = gingerNet + garlicNet + Number(currentInputs.waterLiters);
+                totalInput = Number(currentInputs.gingerKg) + Number(currentInputs.garlicKg);
+            } else if (currentInputs.pasteVariant === 'ginger') {
                 totalMaterialCost = gingerCost + waterCost;
-                totalOutput = gingerNet + Number(inputs.waterLiters);
-                totalInput = Number(inputs.gingerKg) + Number(inputs.waterLiters);
-            } else if (inputs.pasteVariant === 'garlic') {
+                totalOutput = gingerNet + Number(currentInputs.waterLiters);
+                totalInput = Number(currentInputs.gingerKg);
+            } else if (currentInputs.pasteVariant === 'garlic') {
                 totalMaterialCost = garlicCost + waterCost;
-                totalOutput = garlicNet + Number(inputs.waterLiters);
-                totalInput = Number(inputs.garlicKg) + Number(inputs.waterLiters);
+                totalOutput = garlicNet + Number(currentInputs.waterLiters);
+                totalInput = Number(currentInputs.garlicKg);
             }
-
-        } else if (inputs.productType === 'ginger_peeled') {
-            totalMaterialCost = inputs.gingerKg * inputs.gingerRate;
-            totalOutput = inputs.gingerKg * (1 - inputs.gingerWastage / 100);
-            totalInput = Number(inputs.gingerKg);
-
-        } else if (inputs.productType === 'garlic_peeled') {
-            totalMaterialCost = inputs.garlicKg * inputs.garlicRate;
-            totalOutput = inputs.garlicKg * (1 - inputs.garlicWastage / 100);
-            totalInput = Number(inputs.garlicKg);
+        } else if (currentInputs.productType === 'ginger_peeled') {
+            totalMaterialCost = currentInputs.gingerKg * currentInputs.gingerRate;
+            totalOutput = currentInputs.gingerKg * (1 - currentInputs.gingerWastage / 100);
+            totalInput = Number(currentInputs.gingerKg);
+        } else if (currentInputs.productType === 'garlic_peeled') {
+            totalMaterialCost = currentInputs.garlicKg * currentInputs.garlicRate;
+            totalOutput = currentInputs.garlicKg * (1 - currentInputs.garlicWastage / 100);
+            totalInput = Number(currentInputs.garlicKg);
         }
 
-        // Operational Cost Logic
-        let effectiveOverhead = Number(inputs.billsCost) + Number(inputs.otherCost);
-        // Retail: Add Packaging. Wholesale: Exclude Packaging (Separate line item in reality, but for cost calc per kg?)
-        // Logic: Retail Cost = Labour + (Bills + Other + Pkg)
-        //        Wholesale Cost = Labour + (Bills + Other) --> Pkg is separate usually? Or just excluded from "Overhead" bucket? 
-        // Based on previous logic: 
-        if (inputs.salesChannel === 'retail') {
-            effectiveOverhead += Number(inputs.packagingCost);
+        // [FIX] Scaled Operational Costs for Batch Items
+        let currentLabour = Number(currentInputs.labourCost);
+        let currentBills = Number(currentInputs.billsCost);
+        let currentOther = Number(currentInputs.otherCost);
+        let currentPkg = Number(currentInputs.packagingCost);
+
+        if (currentInputs.useSmartDefaults && stats) {
+            const scaled = getEstimatedOverheads(currentInputs, stats);
+            currentLabour = scaled.labour;
+            currentBills = scaled.bills;
+            currentOther = scaled.other;
+            currentPkg = scaled.packaging;
         }
 
-        const totalMfgCost = totalMaterialCost + Number(inputs.labourCost) + effectiveOverhead;
+        let effectiveOverhead = currentBills + currentOther;
+        if (currentInputs.salesChannel === 'retail') {
+            effectiveOverhead += currentPkg;
+        }
+
+        const totalMfgCost = totalMaterialCost + currentLabour + effectiveOverhead;
         const costPerKg = totalOutput > 0 ? totalMfgCost / totalOutput : 0;
-        const suggestedPrice = totalOutput > 0 ? (totalMfgCost * (1 + inputs.profitMargin / 100)) / totalOutput : 0;
+        const suggestedPrice = totalOutput > 0 ? (totalMfgCost * (1 + currentInputs.profitMargin / 100)) / totalOutput : 0;
 
-        setResults({
+        return {
             totalInputKg: totalInput,
             totalOutputKg: totalOutput,
             totalCost: totalMfgCost,
             costPerKg: costPerKg,
-            recPrice: suggestedPrice, // Renamed to suggestedPrice in calculation, but state key is recPrice
+            recPrice: suggestedPrice,
             yieldPercent: totalInput > 0 ? (totalOutput / totalInput) * 100 : 0
-        });
+        };
+    };
+
+    // Replace effect logic with refactored function
+    useEffect(() => {
+        const calculated = calculateResults(inputs, previousMonthStats);
+        setResults(calculated);
     }, [inputs]);
+
+    // History and Status State
+    const [historyRetail, setHistoryRetail] = useState([]);
+    const [historyWholesale, setHistoryWholesale] = useState([]);
+    const [historyTab, setHistoryTab] = useState('retail'); // 'retail', 'wholesale'
+    const [selectedIds, setSelectedIds] = useState([]); // Array of IDs selected in current tab
+    const [isSaving, setIsSaving] = useState(false);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [saveStatus, setSaveStatus] = useState(null);
+
+    // Fetch saved simulations from split tables
+    const fetchHistory = async () => {
+        setLoadingHistory(true);
+        setSelectedIds([]); // Clear selection on refresh
+        try {
+            const [retailRes, wholesaleRes] = await Promise.all([
+                supabase.from('simulated_costs_retail').select('*').order('created_at', { ascending: false }),
+                supabase.from('simulated_costs_wholesale').select('*').order('created_at', { ascending: false })
+            ]);
+
+            if (retailRes.error) throw retailRes.error;
+            if (wholesaleRes.error) throw wholesaleRes.error;
+
+            setHistoryRetail(retailRes.data || []);
+            setHistoryWholesale(wholesaleRes.data || []);
+        } catch (err) {
+            console.error("Error fetching simulation history:", err);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    const handleBatchSaveAll = async () => {
+        setIsSaving(true);
+        setSaveStatus(null);
+
+        try {
+            const retailData = [];
+            const wholesaleData = [];
+
+            for (const item of ALL_VARIANTS) {
+                // Retail calculation
+                const rInputs = { ...inputs, ...item, salesChannel: 'retail' };
+                const rResults = calculateResults(rInputs, previousMonthStats);
+                retailData.push({
+                    item_name: item.label,
+                    product_type: item.productType,
+                    variant: item.pasteVariant || null,
+                    total_output: rResults.totalOutputKg,
+                    total_spend: rResults.totalCost,
+                    unit_cost: rResults.costPerKg,
+                    margin: inputs.profitMargin,
+                    suggested_price: rResults.recPrice,
+                    calculation_method: 'auto', // Batch is always auto-scaled
+                    input_parameters: rInputs
+                });
+
+                // Wholesale calculation
+                const wInputs = { ...inputs, ...item, salesChannel: 'wholesale' };
+                const wResults = calculateResults(wInputs, previousMonthStats);
+                wholesaleData.push({
+                    item_name: item.label,
+                    product_type: item.productType,
+                    variant: item.pasteVariant || null,
+                    total_output: wResults.totalOutputKg,
+                    total_spend: wResults.totalCost,
+                    unit_cost: wResults.costPerKg,
+                    margin: inputs.profitMargin,
+                    suggested_price: wResults.recPrice,
+                    calculation_method: 'auto', // Batch is always auto-scaled
+                    input_parameters: wInputs
+                });
+            }
+
+            // Bulk Insert
+            const [retailErr, wholesaleErr] = await Promise.all([
+                supabase.from('simulated_costs_retail').insert(retailData),
+                supabase.from('simulated_costs_wholesale').insert(wholesaleData)
+            ]);
+
+            if (retailErr.error) throw retailErr.error;
+            if (wholesaleErr.error) throw wholesaleErr.error;
+
+            setSaveStatus('success');
+            fetchHistory();
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (err) {
+            console.error("Error batch saving simulations:", err);
+            setSaveStatus('error');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSaveSimulation = async () => {
+        setIsSaving(true);
+        setSaveStatus(null);
+
+        const variantLabel = inputs.productType === 'paste'
+            ? (inputs.pasteVariant === 'mix' ? 'G & G Paste' : inputs.pasteVariant === 'ginger' ? 'Ginger Paste' : 'Garlic Paste')
+            : (inputs.productType === 'ginger_peeled' ? 'Ginger Peeled' : 'Garlic Peeled');
+
+        const tableName = inputs.salesChannel === 'retail' ? 'simulated_costs_retail' : 'simulated_costs_wholesale';
+
+        try {
+            const { error } = await supabase
+                .from(tableName)
+                .insert([{
+                    item_name: variantLabel,
+                    product_type: inputs.productType,
+                    variant: inputs.pasteVariant || null,
+                    total_output: results.totalOutputKg,
+                    total_spend: results.totalCost,
+                    unit_cost: results.costPerKg,
+                    margin: inputs.profitMargin,
+                    suggested_price: results.recPrice,
+                    calculation_method: inputs.useSmartDefaults ? 'auto' : 'manual',
+                    input_parameters: inputs
+                }]);
+
+            if (error) throw error;
+
+            setSaveStatus('success');
+            fetchHistory();
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (err) {
+            console.error("Error saving simulation:", err);
+            setSaveStatus('error');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteSimulation = async (id, channel) => {
+        if (!window.confirm('Are you sure you want to delete this record?')) return;
+        const tableName = channel === 'retail' ? 'simulated_costs_retail' : 'simulated_costs_wholesale';
+
+        try {
+            const { error } = await supabase.from(tableName).delete().eq('id', id);
+            if (error) throw error;
+            fetchHistory();
+        } catch (err) {
+            console.error("Error deleting simulation:", err);
+            alert("Failed to delete record.");
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedIds.length) return;
+        if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} records?`)) return;
+
+        const tableName = historyTab === 'retail' ? 'simulated_costs_retail' : 'simulated_costs_wholesale';
+
+        try {
+            setIsSaving(true);
+            const { error } = await supabase
+                .from(tableName)
+                .delete()
+                .in('id', selectedIds);
+
+            if (error) throw error;
+
+            setSelectedIds([]);
+            fetchHistory();
+        } catch (err) {
+            console.error("Error in bulk delete:", err);
+            alert("Failed to delete selected records.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const toggleRow = (id) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const toggleAll = () => {
+        const currentData = historyTab === 'retail' ? historyRetail : historyWholesale;
+        if (selectedIds.length === currentData.length && currentData.length > 0) {
+            setSelectedIds([]);
+        } else {
+            setSelectedIds(currentData.map(d => d.id));
+        }
+    };
 
     const handleInput = (key, value) => {
         setInputs(prev => ({
@@ -186,88 +400,155 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         }
     };
 
-    const inputStyle = {
-        background: 'var(--glass-highlight)',
-        border: '1px solid var(--glass-border)',
-        color: 'var(--text-primary)',
+    const sectionStyle = {
+        background: 'rgba(255, 255, 255, 0.03)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '1.25rem',
+        padding: '1.25rem',
+        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+    };
+
+    const cardStyle = {
         padding: '0.75rem',
+        borderRadius: '0.85rem',
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(8px)',
+        transition: 'all 0.3s ease'
+    };
+
+    const inputStyle = {
+        background: 'rgba(15, 23, 42, 0.6)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        color: '#f8fafc',
+        padding: '0.35rem 0.6rem',
         borderRadius: '0.5rem',
         width: '100%',
-        fontSize: '1rem',
+        maxWidth: '140px',
+        fontSize: '0.85rem',
         outline: 'none',
-        transition: 'all 0.2s',
-        textAlign: 'right'
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        textAlign: 'left',
+        paddingLeft: '1.65rem',
+        fontWeight: '500',
+        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)'
     };
 
     const focusStyle = {
         borderColor: 'var(--accent-primary)',
-        background: 'rgba(255, 255, 255, 0.08)'
+        background: 'rgba(15, 23, 42, 0.8)',
+        boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.2), inset 0 2px 4px rgba(0,0,0,0.1)'
     };
+
+    const labelStyle = {
+        display: 'block',
+        fontSize: '0.7rem',
+        color: '#64748b',
+        marginBottom: '0.35rem',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em'
+    };
+
+    const sectionHeaderStyle = (color) => ({
+        fontSize: '0.85rem',
+        fontWeight: '700',
+        color: '#f1f5f9',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        marginBottom: '1.25rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        borderLeft: `3px solid ${color}`,
+        paddingLeft: '0.75rem',
+        marginLeft: '-0.75rem'
+    });
 
     // Helper to check active inputs
     const showGinger = (inputs.productType === 'paste' && (inputs.pasteVariant === 'mix' || inputs.pasteVariant === 'ginger')) || inputs.productType === 'ginger_peeled';
     const showGarlic = (inputs.productType === 'paste' && (inputs.pasteVariant === 'mix' || inputs.pasteVariant === 'garlic')) || inputs.productType === 'garlic_peeled';
     const showWater = inputs.productType === 'paste';
 
+    const totalOperationalCost = Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost) + Number(inputs.packagingCost);
+
     return (
         <div className="animate-fade-in responsive-sidebar-layout">
             <div className="flex flex-col h-full gap-6">
 
                 {/* Header */}
-                <div style={{ paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ 
+                    padding: '1.5rem 2rem', 
+                    background: 'rgba(30, 41, 59, 0.4)', 
+                    borderRadius: '1.5rem',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '0.5rem',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+                }}>
                     <div>
-                        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <Calculator size={24} color="#f59e0b" />
+                        <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.75rem', margin: 0 }}>
+                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '0.6rem', borderRadius: '0.75rem', display: 'flex' }}>
+                                <Calculator size={26} color="#f59e0b" />
+                            </div>
                             Production Cost Simulator
-                            {/* [NEW] Settings Button */}
                             <button
                                 onClick={() => setShowSettings(true)}
                                 style={{
-                                    background: 'var(--glass-highlight)',
-                                    border: '1px solid var(--glass-border)',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
                                     borderRadius: '0.5rem',
                                     padding: '0.5rem',
-                                    color: 'var(--text-secondary)',
+                                    color: '#94a3b8',
                                     cursor: 'pointer',
                                     marginLeft: '0.5rem',
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    transition: 'all 0.2s'
                                 }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
                                 title="Default Rates"
                             >
                                 <Settings size={18} />
                             </button>
                         </h2>
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                            Forecasting for: <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>{selectedMonth}</span>
+                        <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span>Forecasting for: <strong style={{ color: '#f1f5f9' }}>{selectedMonth}</strong></span>
+                            <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.1)' }}></div>
                             {previousMonthStats ? (
-                                <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginTop: '0.25rem' }}>
-                                    ✓ Auto-filling operational costs from previous month averages.
-                                </div>
+                                <span style={{ color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem' }}>
+                                    <CheckCircle2 size={14} /> Smart Auto-fill Active
+                                </span>
                             ) : (
-                                <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '0.25rem' }}>
-                                    ⚠ No history available for auto-fill.
-                                </div>
+                                <span style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem' }}>
+                                    <Info size={14} /> Manual Mode Only
+                                </span>
                             )}
                         </div>
                     </div>
 
                     {/* Sales Channel Toggle */}
-                    <div style={{ display: 'flex', background: 'var(--glass-highlight)', padding: '0.25rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                    <div style={{ display: 'flex', background: 'rgba(15, 23, 42, 0.6)', padding: '0.35rem', borderRadius: '0.85rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         {['retail', 'wholesale'].map(channel => (
                             <button
                                 key={channel}
                                 onClick={() => handleInput('salesChannel', channel)}
                                 style={{
-                                    padding: '0.5rem 1rem',
-                                    borderRadius: '0.35rem',
+                                    padding: '0.6rem 1.25rem',
+                                    borderRadius: '0.65rem',
                                     border: 'none',
                                     background: inputs.salesChannel === channel ? 'var(--accent-primary)' : 'transparent',
-                                    color: inputs.salesChannel === channel ? '#fff' : 'var(--text-secondary)',
+                                    color: inputs.salesChannel === channel ? '#fff' : '#64748b',
                                     cursor: 'pointer',
                                     fontSize: '0.85rem',
-                                    fontWeight: inputs.salesChannel === channel ? '600' : 'normal',
-                                    textTransform: 'capitalize',
-                                    transition: 'all 0.2s'
+                                    fontWeight: '700',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                                 }}
                             >
                                 {channel}
@@ -276,13 +557,20 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     </div>
                 </div>
 
-                {/* Toolbar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-
-                    {/* Main Type Tabs */}
-                    <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+                {/* Toolbar / Tabs */}
+                <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '1.5rem', 
+                    background: 'rgba(15, 23, 42, 0.4)', 
+                    padding: '0.85rem 1.5rem', 
+                    borderRadius: '1.25rem', 
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+                }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
                         {[
-                            { id: 'paste', label: 'Paste' },
+                            { id: 'paste', label: 'Paste/Mix' },
                             { id: 'ginger_peeled', label: 'Ginger Peeled' },
                             { id: 'garlic_peeled', label: 'Garlic Peeled' }
                         ].map(type => (
@@ -291,15 +579,15 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                 onClick={() => handleInput('productType', type.id)}
                                 style={{
                                     padding: '0.6rem 1.25rem',
-                                    borderRadius: '0.5rem',
+                                    borderRadius: '0.85rem',
                                     border: '1px solid',
                                     borderColor: inputs.productType === type.id ? 'var(--accent-primary)' : 'transparent',
-                                    background: inputs.productType === type.id ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
-                                    color: inputs.productType === type.id ? '#fff' : 'var(--text-secondary)',
+                                    background: inputs.productType === type.id ? 'var(--accent-primary)' : 'transparent',
+                                    color: inputs.productType === type.id ? '#fff' : '#94a3b8',
                                     cursor: 'pointer',
                                     fontSize: '0.9rem',
-                                    fontWeight: inputs.productType === type.id ? '600' : 'normal',
-                                    transition: 'all 0.2s',
+                                    fontWeight: '700',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                     whiteSpace: 'nowrap'
                                 }}
                             >
@@ -310,9 +598,8 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
 
                     {/* Sub-Variant Tabs (Only for Paste) */}
                     {inputs.productType === 'paste' && (
-                        <div className="animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingLeft: '0.5rem' }}>
-                            <div style={{ height: '20px', width: '1px', background: 'var(--glass-border)' }}></div>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Variant:</span>
+                        <div className="animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.1)' }}></div>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 {[
                                     { id: 'mix', label: 'G & G Paste' },
@@ -323,15 +610,15 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                                         key={variant.id}
                                         onClick={() => handleInput('pasteVariant', variant.id)}
                                         style={{
-                                            padding: '0.25rem 0.75rem',
+                                            padding: '0.4rem 1rem',
                                             borderRadius: '999px',
                                             border: '1px solid',
-                                            borderColor: inputs.pasteVariant === variant.id ? 'rgba(96, 165, 250, 0.5)' : 'transparent',
-                                            background: inputs.pasteVariant === variant.id ? 'rgba(96, 165, 250, 0.1)' : 'transparent',
-                                            color: inputs.pasteVariant === variant.id ? '#60a5fa' : 'var(--text-secondary)',
+                                            borderColor: inputs.pasteVariant === variant.id ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
+                                            background: inputs.pasteVariant === variant.id ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                            color: inputs.pasteVariant === variant.id ? '#60a5fa' : '#64748b',
                                             cursor: 'pointer',
                                             fontSize: '0.8rem',
-                                            fontWeight: inputs.pasteVariant === variant.id ? '600' : 'normal',
+                                            fontWeight: '600',
                                             transition: 'all 0.2s'
                                         }}
                                     >
@@ -343,442 +630,538 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     )}
                 </div>
 
-                {/* Content Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
-
-                    {/* Left Panel: Inputs */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-                        {/* Material Section */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--glass-highlight)' }}>
-                            <h3 style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6' }}></span>
-                                Raw Material Inputs
+                {/* Centered Content Wrapper */}
+                <div style={{ maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+                    {/* Main Content Grid - 2 Column Layout */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(500px, 1.2fr) 400px',
+                        gap: '1.5rem',
+                        alignItems: 'start'
+                    }}>
+                    {/* Left Panel: Configuration */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '850px' }}>
+                        
+                        {/* 1. Raw Materials */}
+                        <div style={sectionStyle}>
+                            <h3 style={sectionHeaderStyle('#3b82f6')}>
+                                <RefreshCw size={18} color="#3b82f6" />
+                                Material Inputs
                             </h3>
 
-                            <div style={{ display: 'grid', gap: '1rem' }}>
-                                {/* Ginger Row */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {showGinger && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Ginger (Kg)</label>
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Ginger Weight (kg)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.gingerKg}
                                                 onChange={(e) => handleInput('gingerKg', e.target.value)}
                                                 style={inputStyle}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(255, 255, 255, 0.1)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Rate (₹/Kg)</label>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Ginger Rate (₹/kg)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.gingerRate}
                                                 onChange={(e) => handleInput('gingerRate', e.target.value)}
-                                                style={{ ...inputStyle, color: '#f59e0b', fontWeight: '500' }}
+                                                style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Garlic Row */}
                                 {showGarlic && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Garlic (Kg)</label>
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Garlic Weight (kg)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.garlicKg}
                                                 onChange={(e) => handleInput('garlicKg', e.target.value)}
                                                 style={inputStyle}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(255, 255, 255, 0.1)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Rate (₹/Kg)</label>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Garlic Rate (₹/kg)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.garlicRate}
                                                 onChange={(e) => handleInput('garlicRate', e.target.value)}
-                                                style={{ ...inputStyle, color: '#f59e0b', fontWeight: '500' }}
+                                                style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
                                     </div>
-
                                 )}
 
-                                {/* Water Row */}
                                 {showWater && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'center' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Water (Liters)</label>
+                                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Water Added (Liters)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.waterLiters}
                                                 onChange={(e) => handleInput('waterLiters', e.target.value)}
-                                                style={{ ...inputStyle, color: '#60a5fa' }}
+                                                style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Rate (₹/L)</label>
+                                        <div style={{ width: '140px' }}>
+                                            <label style={labelStyle}>Water Rate (₹/L)</label>
                                             <input
                                                 type="number"
                                                 value={inputs.waterRate}
                                                 onChange={(e) => handleInput('waterRate', e.target.value)}
-                                                style={{ ...inputStyle, color: '#f59e0b', fontWeight: '500' }}
+                                                style={{ ...inputStyle, borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
                                                 onFocus={(e) => Object.assign(e.target.style, focusStyle)}
-                                                onBlur={(e) => {
-                                                    e.target.style.borderColor = 'var(--glass-border)';
-                                                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                                                }}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: 'rgba(59, 130, 246, 0.4)', background: 'rgba(15, 23, 42, 0.6)' })}
                                             />
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
-
-                        {/* Operational Section */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--glass-highlight)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <div>
-                                    <h3 style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#a855f7' }}></span>
-                                        Operational Costs
-                                    </h3>
-                                    {inputs.useSmartDefaults && previousMonthStats && (
-                                        <div style={{ fontSize: '0.7rem', color: '#60a5fa', marginTop: '0.25rem' }}>
-                                            Based on {previousMonthStats.month} actuals ({previousMonthStats.labourPerKg?.toFixed(2)}/kg, {previousMonthStats.overheadPerKg?.toFixed(2)}/kg{previousMonthStats.packagingPerKg ? `, Pkg: ${previousMonthStats.packagingPerKg.toFixed(2)}/kg` : ''})
-                                        </div>
-                                    )}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {/* 2. Operational Costs */}
+                        <div style={sectionStyle}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ ...sectionHeaderStyle('#a855f7'), marginBottom: 0 }}>
+                                    <Zap size={18} color="#a855f7" />
+                                    Operational Costs
+                                </h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(15, 23, 42, 0.4)', padding: '0.3rem 0.6rem', borderRadius: '0.4rem', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Smart Auto-fill:</span>
                                     <input
                                         type="checkbox"
                                         checked={inputs.useSmartDefaults}
                                         onChange={(e) => setInputs(prev => ({ ...prev, useSmartDefaults: e.target.checked }))}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                                     />
-                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Auto-fill</span>
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', alignItems: 'start' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Labour</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="number"
-                                            value={inputs.labourCost}
-                                            onChange={(e) => {
-                                                handleInput('labourCost', e.target.value);
-                                                setInputs(prev => ({ ...prev, useSmartDefaults: false }));
-                                            }}
-                                            style={{ ...inputStyle, paddingLeft: '1.5rem' }}
-                                        />
+                            {inputs.useSmartDefaults && previousMonthStats && (
+                                <div style={{ 
+                                    marginBottom: '1.5rem', 
+                                    padding: '0.85rem 1rem', 
+                                    background: 'rgba(59, 130, 246, 0.1)', 
+                                    borderRadius: '0.75rem', 
+                                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.75rem',
+                                    fontSize: '0.8rem',
+                                    color: '#60a5fa'
+                                }}>
+                                    <Info size={16} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <span>Based on <strong>{previousMonthStats.month}</strong> averages: Labour ₹{previousMonthStats.labourPerKg?.toFixed(2)}/kg, Bills ₹{previousMonthStats.billsPerKg?.toFixed(2)}/kg</span>
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Operational Cost Caps: Labour ₹{Math.round(previousMonthStats.avgMonthlyLabour)}, Bills ₹{Math.round(previousMonthStats.avgMonthlyBills)}</span>
                                     </div>
-                                    {previousMonthStats && inputs.useSmartDefaults && (
-                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
-                                            Rate: ₹{previousMonthStats.labourPerKg?.toFixed(2)}/kg <br />
-                                            Cap: ₹{Math.round(previousMonthStats.avgMonthlyLabour || 0)}<br />
-                                            <span style={{ color: '#60a5fa' }}>Eff: ₹{(results.totalOutputKg > 0 ? inputs.labourCost / results.totalOutputKg : 0).toFixed(2)}/kg</span>
-                                        </div>
-                                    )}
-                                </div>
-                                {/* Overhead Group: Bills & Other */}
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Bills & Rent</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="number"
-                                            value={inputs.billsCost}
-                                            onChange={(e) => {
-                                                handleInput('billsCost', e.target.value);
-                                                setInputs(prev => ({ ...prev, useSmartDefaults: false }));
-                                            }}
-                                            style={{ ...inputStyle, paddingLeft: '1.5rem' }}
-                                        />
-                                    </div>
-                                    {previousMonthStats && inputs.useSmartDefaults && (
-                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
-                                            Rate: ₹{previousMonthStats.billsPerKg?.toFixed(2)}/kg <br />
-                                            Cap: ₹{Math.round(previousMonthStats.avgMonthlyBills || 0)} <br />
-                                            <span style={{ color: '#60a5fa' }}>Eff: ₹{(results.totalOutputKg > 0 ? inputs.billsCost / results.totalOutputKg : 0).toFixed(2)}/kg</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Other Exp</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="number"
-                                            value={inputs.otherCost}
-                                            onChange={(e) => {
-                                                handleInput('otherCost', e.target.value);
-                                                setInputs(prev => ({ ...prev, useSmartDefaults: false }));
-                                            }}
-                                            style={{ ...inputStyle, paddingLeft: '1.5rem' }}
-                                        />
-                                    </div>
-                                    {previousMonthStats && inputs.useSmartDefaults && (
-                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
-                                            Rate: ₹{previousMonthStats.otherPerKg?.toFixed(2)}/kg (Var)
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Packaging Component Input */}
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Pkg Cost</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="number"
-                                            value={inputs.packagingCost}
-                                            onChange={(e) => handleInput('packagingCost', e.target.value)}
-                                            style={{ ...inputStyle, paddingLeft: '1.5rem', borderColor: inputs.salesChannel === 'wholesale' ? 'var(--accent-primary)' : 'var(--glass-border)' }}
-                                        />
-                                    </div>
-                                    {previousMonthStats && inputs.useSmartDefaults && (
-                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.2rem', textAlign: 'right' }}>
-                                            Rate: ₹{previousMonthStats.packagingPerKg?.toFixed(2)}/kg
-                                        </div>
-                                    )}
-                                </div>
-                                <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
-                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#a78bfa', marginBottom: '0.35rem' }}>Total Op. Cost</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: '0.9rem' }}>₹</span>
-                                        <input
-                                            type="text"
-                                            readOnly
-                                            value={(inputs.salesChannel === 'wholesale' ? (Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost)) : (Number(inputs.labourCost) + Number(inputs.billsCost) + Number(inputs.otherCost) + Number(inputs.packagingCost))).toFixed(0)}
-                                            style={{ ...inputStyle, background: 'rgba(167, 139, 250, 0.1)', borderColor: '#a78bfa', color: '#a78bfa', paddingLeft: '1.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            {inputs.salesChannel === 'wholesale' && Number(inputs.packagingCost) > 0 && (
-                                <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', marginTop: '0.5rem', textAlign: 'right' }}>
-                                    * Wholesale: Subtracting packaging (₹{inputs.packagingCost}) from overhead.
                                 </div>
                             )}
-                        </div>
 
-                        {/* Wastage & Water Section */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--glass-highlight)' }}>
-                            <h3 style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
-                                Yield & Process Factors
-                            </h3>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1rem' }}>
-                                {showWater && (
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Water</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#60a5fa' }}>(Added)</span>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                <input
-                                                    type="number"
-                                                    value={(() => {
-                                                        const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
-                                                            inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
-                                                                inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
-                                                        return totalSolid > 0 ? ((inputs.waterLiters / totalSolid) * 100).toFixed(0) : 0;
-                                                    })()}
-                                                    onChange={(e) => {
-                                                        const pct = parseFloat(e.target.value) || 0;
-                                                        const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
-                                                            inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
-                                                                inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
-                                                        const newLiters = (totalSolid * pct) / 100;
-                                                        handleInput('waterLiters', newLiters.toFixed(2));
-                                                    }}
-                                                    style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontWeight: 'bold', width: '50px', fontSize: '1.2rem', textAlign: 'right', outline: 'none' }}
-                                                />
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>%</span>
-                                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                                {[
+                                    { key: 'labourCost', label: 'Labour Cost' },
+                                    { key: 'billsCost', label: 'Electricity/Bills' },
+                                    { key: 'otherCost', label: 'Other Overheads' },
+                                    { key: 'packagingCost', label: 'Packaging Cost' }
+                                ].map(field => (
+                                    <div key={field.key} style={{ width: '160px' }}>
+                                        <label style={labelStyle}>{field.label}</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type="number"
+                                                value={inputs[field.key]}
+                                                onChange={(e) => {
+                                                    handleInput(field.key, e.target.value);
+                                                    if (inputs.useSmartDefaults) setInputs(prev => ({ ...prev, useSmartDefaults: false }));
+                                                }}
+                                                style={{ ...inputStyle, borderColor: inputs.useSmartDefaults ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.1)' }}
+                                                onFocus={(e) => Object.assign(e.target.style, focusStyle)}
+                                                onBlur={(e) => Object.assign(e.target.style, { borderColor: inputs.useSmartDefaults ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)', background: 'rgba(15, 23, 42, 0.6)' })}
+                                            />
+                                            <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', color: '#64748b' }}>₹</span>
                                         </div>
                                     </div>
-                                )}
+                                ))}
+                            </div>
+
+                            <div style={{ 
+                                marginTop: '1.5rem', 
+                                padding: '1.25rem', 
+                                background: 'rgba(0,0,0,0.2)', 
+                                borderRadius: '1rem', 
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: '600' }}>Total Operational Cost:</span>
+                                <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '0.6rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                    <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#a855f7' }}>₹{totalOperationalCost.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Yield & Process Factors */}
+                        <div style={sectionStyle}>
+                            <h3 style={sectionHeaderStyle('#ef4444')}>
+                                <Percent size={18} color="#ef4444" />
+                                Yield & Process Factors
+                            </h3>
+                            
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem' }}>
                                 {showGinger && (
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Ginger</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>(Waste)</span>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                <input
-                                                    type="number"
-                                                    value={inputs.gingerWastage}
-                                                    onChange={(e) => handleInput('gingerWastage', e.target.value)}
-                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 'bold', width: '50px', fontSize: '1.2rem', textAlign: 'right', outline: 'none' }}
-                                                />
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>%</span>
-                                            </div>
+                                    <div style={{ ...cardStyle, width: '140px' }}>
+                                        <label style={{ ...labelStyle, marginBottom: '0.25rem' }}>Ginger Waste</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input
+                                                type="number"
+                                                value={inputs.gingerWastage}
+                                                onChange={(e) => handleInput('gingerWastage', e.target.value)}
+                                                style={{ ...inputStyle, background: 'transparent', border: 'none', padding: 0, fontSize: '1.5rem', color: '#ef4444' }}
+                                            />
+                                            <span style={{ color: '#ef4444', fontWeight: '700' }}>%</span>
                                         </div>
                                     </div>
                                 )}
                                 {showGarlic && (
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Garlic</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>(Waste)</span>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                <input
-                                                    type="number"
-                                                    value={inputs.garlicWastage}
-                                                    onChange={(e) => handleInput('garlicWastage', e.target.value)}
-                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 'bold', width: '50px', fontSize: '1.2rem', textAlign: 'right', outline: 'none' }}
-                                                />
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>%</span>
-                                            </div>
+                                    <div style={{ ...cardStyle, width: '140px' }}>
+                                        <label style={{ ...labelStyle, marginBottom: '0.25rem' }}>Garlic Waste</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input
+                                                type="number"
+                                                value={inputs.garlicWastage}
+                                                onChange={(e) => handleInput('garlicWastage', e.target.value)}
+                                                style={{ ...inputStyle, background: 'transparent', border: 'none', padding: 0, fontSize: '1.5rem', color: '#ef4444' }}
+                                            />
+                                            <span style={{ color: '#ef4444', fontWeight: '700' }}>%</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {showWater && (
+                                    <div style={{ ...cardStyle, width: '140px' }}>
+                                        <label style={{ ...labelStyle, marginBottom: '0.25rem' }}>Water Added</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input
+                                                type="number"
+                                                value={(() => {
+                                                    const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
+                                                        inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
+                                                            inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
+                                                    return totalSolid > 0 ? ((inputs.waterLiters / totalSolid) * 100).toFixed(0) : 0;
+                                                })()}
+                                                onChange={(e) => {
+                                                    const pct = parseFloat(e.target.value) || 0;
+                                                    const totalSolid = (inputs.pasteVariant === 'mix' ? (inputs.gingerKg + inputs.garlicKg) :
+                                                        inputs.pasteVariant === 'ginger' ? inputs.gingerKg :
+                                                            inputs.pasteVariant === 'garlic' ? inputs.garlicKg : 0);
+                                                    const newLiters = (totalSolid * pct) / 100;
+                                                    handleInput('waterLiters', newLiters.toFixed(2));
+                                                }}
+                                                style={{ ...inputStyle, background: 'transparent', border: 'none', padding: 0, fontSize: '1.5rem', color: '#60a5fa' }}
+                                            />
+                                            <span style={{ color: '#60a5fa', fontWeight: '700' }}>%</span>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
-
                     </div>
 
-                    {/* Right Panel: Results */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {/* Main Results Card */}
-                        <div className="glass-panel" style={{
-                            padding: '2.5rem 2rem',
+                    {/* Right Panel: Results (Sticky) */}
+                    <div style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Main Results Dashboard */}
+                        <div style={{
+                            ...sectionStyle,
+                            padding: '2.5rem 1.5rem',
+                            background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                            textAlign: 'center',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            textAlign: 'center',
-                            background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                            border: '1px solid var(--glass-border)',
-                            boxShadow: '0 20px 40px -10px rgba(0,0,0,0.5)',
-                            position: 'relative',
-                            overflow: 'hidden',
-                            borderRadius: '1.5rem'
+                            gap: '1.5rem'
                         }}>
-
-                            {/* Glow Effects */}
-                            <div style={{ position: 'absolute', top: '-50%', left: '50%', transform: 'translateX(-50%)', width: '200px', height: '200px', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)', borderRadius: '50%', filter: 'blur(40px)' }}></div>
-
-                            <div style={{ position: 'relative', zIndex: 10, width: '100%' }}>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: '600', marginBottom: '1rem' }}>
-                                    Production Cost
-                                </div>
-
-                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', lineHeight: 1, marginBottom: '0.5rem' }}>
-                                    <span style={{ fontSize: '2.5rem', color: '#64748b', fontWeight: '400', marginTop: '0.5rem', marginRight: '0.25rem' }}>₹</span>
-                                    <span style={{ fontSize: '5rem', fontWeight: '800', color: 'var(--text-primary)', letterSpacing: '-0.02em', textShadow: '0 0 30px rgba(248, 250, 252, 0.2)' }}>
+                            <div>
+                                <span style={{ fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: '700' }}>Net Production Cost</span>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
+                                    <span style={{ fontSize: '2rem', color: '#64748b', fontWeight: '500', marginTop: '0.75rem' }}>₹</span>
+                                    <span style={{ fontSize: '5.5rem', fontWeight: '900', color: '#f8fafc', lineHeight: 1, letterSpacing: '-0.03em', textShadow: '0 0 40px rgba(59, 130, 246, 0.3)' }}>
                                         {results.costPerKg.toFixed(2)}
                                     </span>
                                 </div>
-                                <div style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>per Kg Output</div>
+                                <span style={{ fontSize: '1.1rem', color: '#64748b', fontWeight: '500' }}>per kilogram output</span>
+                            </div>
 
-                                <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent)', width: '80%', margin: '2.5rem auto' }}></div>
+                            <div style={{ width: '80%', height: '1px', background: 'linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.2), transparent)' }}></div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', width: '100%' }}>
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Total Output</div>
-                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                                            {results.totalOutputKg.toFixed(1)} <span style={{ fontSize: '0.9rem', fontWeight: '500', color: '#64748b' }}>kg</span>
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: results.yieldPercent < 75 ? '#ef4444' : '#10b981', marginTop: '0.25rem', fontWeight: '500' }}>
-                                            {results.yieldPercent.toFixed(1)}% Yield
-                                        </div>
+                            {/* Key Stats Grid */}
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                <div style={{ ...cardStyle, width: '140px' }}>
+                                    <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Yield Output</span>
+                                    <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f1f5f9' }}>{results.totalOutputKg.toFixed(1)}kg</span>
+                                    <div style={{ fontSize: '0.75rem', color: results.yieldPercent < 75 ? '#ef4444' : '#10b981', marginTop: '0.25rem', fontWeight: '600' }}>
+                                        {results.yieldPercent.toFixed(1)}% Efficiency
                                     </div>
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Total Spend</div>
-                                        <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                                            ₹{Math.round(results.totalCost).toLocaleString()}
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>All Inclusive</div>
-                                    </div>
+                                </div>
+                                <div style={{ ...cardStyle, width: '140px' }}>
+                                    <span style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total Spend</span>
+                                    <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f1f5f9' }}>₹{Math.round(results.totalCost).toLocaleString()}</span>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>Materials + Op.</div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Rec Price Card */}
+                        {/* Margin & Recommended Price */}
                         <div style={{
-                            padding: '1.5rem 2rem',
-                            background: 'rgba(5, 150, 105, 0.1)',
-                            border: '1px solid rgba(5, 150, 105, 0.3)',
-                            borderRadius: '1rem',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+                            ...sectionStyle,
+                            background: 'rgba(16, 185, 129, 0.05)',
+                            borderColor: 'rgba(16, 185, 129, 0.2)',
+                            padding: '1.5rem'
                         }}>
-                            <div>
-                                <div style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    Rec. Selling Price
-                                    <br />
-                                    <span style={{ fontSize: '0.7rem', opacity: 0.8, fontWeight: 'normal' }}>(Inc. Margin)</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <input
-                                            type="number"
-                                            value={inputs.profitMargin}
-                                            onChange={(e) => handleInput('profitMargin', e.target.value)}
-                                            style={{
-                                                background: 'rgba(6, 78, 59, 0.4)',
-                                                border: '1px solid rgba(52, 211, 153, 0.4)',
-                                                borderRadius: '0.5rem',
-                                                padding: '0.25rem 0.5rem',
-                                                color: '#34d399',
-                                                fontSize: '1.1rem',
-                                                width: '60px',
-                                                textAlign: 'center',
-                                                outline: 'none',
-                                                fontWeight: '600'
-                                            }}
-                                        />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rec. Selling Price</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type="number"
+                                                value={inputs.profitMargin}
+                                                onChange={(e) => handleInput('profitMargin', e.target.value)}
+                                                style={{
+                                                    ...inputStyle,
+                                                    width: '70px',
+                                                    background: 'rgba(16, 185, 129, 0.1)',
+                                                    borderColor: 'rgba(16, 185, 129, 0.3)',
+                                                    color: '#10b981',
+                                                    fontSize: '1.25rem',
+                                                    padding: '0.4rem',
+                                                    textAlign: 'center'
+                                                }}
+                                            />
+                                        </div>
+                                        <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: '600' }}>% Margin</span>
                                     </div>
-                                    <span style={{ fontSize: '0.9rem', color: '#d1fae5', fontWeight: '500' }}>% Margin</span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                                        <span style={{ fontSize: '1.25rem', color: '#059669', fontWeight: '600', marginTop: '0.5rem' }}>₹</span>
+                                        <span style={{ fontSize: '3.5rem', fontWeight: '900', color: '#10b981', lineHeight: 1 }}>{results.recPrice.toFixed(2)}</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>per kg base price</span>
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '3rem', fontWeight: '800', color: '#34d399', lineHeight: 1, textShadow: '0 0 20px rgba(52, 211, 153, 0.3)' }}>
-                                    <span style={{ fontSize: '1.5rem', verticalAlign: 'top', marginRight: '0.25rem', opacity: 0.8 }}>₹</span>
-                                    {results.recPrice.toFixed(2)}
-                                </div>
+                        </div>
+
+                        {/* Action Zone */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                            <button
+                                onClick={handleBatchSaveAll}
+                                disabled={isSaving || results.totalCost === 0}
+                                style={{
+                                    width: '100%',
+                                    padding: '1.25rem',
+                                    borderRadius: '1.25rem',
+                                    background: saveStatus === 'success' ? '#10b981' : saveStatus === 'error' ? '#ef4444' : 'linear-gradient(135deg, var(--accent-primary) 0%, #2563eb 100%)',
+                                    border: 'none',
+                                    color: '#fff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '1rem',
+                                    cursor: isSaving || results.totalCost === 0 ? 'not-allowed' : 'pointer',
+                                    fontWeight: '800',
+                                    fontSize: '1.05rem',
+                                    boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    opacity: results.totalCost === 0 ? 0.5 : 1
+                                }}
+                                onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'translateY(-2px)')}
+                                onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'translateY(0)')}
+                            >
+                                {isSaving ? <Loader2 className="animate-spin" size={24} /> :
+                                    saveStatus === 'success' ? <CheckCircle2 size={24} /> :
+                                        saveStatus === 'error' ? <X size={24} /> : <Zap size={24} />}
+                                {saveStatus === 'success' ? 'Calculated & Saved All' :
+                                    saveStatus === 'error' ? 'Error Saving' : 'Process & Save All Variants'}
+                            </button>
+
+                            <button
+                                onClick={handleSaveSimulation}
+                                disabled={isSaving || results.totalCost === 0}
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem',
+                                    borderRadius: '1.25rem',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    color: '#f1f5f9',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.75rem',
+                                    cursor: isSaving || results.totalCost === 0 ? 'not-allowed' : 'pointer',
+                                    fontWeight: '600',
+                                    fontSize: '0.9rem',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <Save size={18} />
+                                Save Current Selection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Saved Simulations Table */}
+                <div className="glass-panel" style={{ marginTop: '1rem', overflow: 'hidden' }}>
+                    <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                                <History size={20} color="#60a5fa" />
+                                Simulation History
+                            </h3>
+
+                            {/* Tab Switcher */}
+                            <div style={{ display: 'flex', background: 'var(--glass-highlight)', padding: '0.2rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
+                                {['retail', 'wholesale'].map(t => (
+                                    <button
+                                        key={t}
+                                        onClick={() => {
+                                            setHistoryTab(t);
+                                            setSelectedIds([]);
+                                        }}
+                                        style={{
+                                            padding: '0.3rem 0.8rem',
+                                            borderRadius: '0.3rem',
+                                            border: 'none',
+                                            background: historyTab === t ? 'var(--accent-primary)' : 'transparent',
+                                            color: historyTab === t ? '#fff' : 'var(--text-secondary)',
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            textTransform: 'capitalize'
+                                        }}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
                             </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            {selectedIds.length > 0 && (
+                                <button
+                                    onClick={handleBulkDelete}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        padding: '0.4rem 0.8rem',
+                                        borderRadius: '0.4rem',
+                                        background: 'rgba(239, 68, 68, 0.15)',
+                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                        color: '#ef4444',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <Trash2 size={14} />
+                                    Delete Selected ({selectedIds.length})
+                                </button>
+                            )}
+                            {loadingHistory && <Loader2 className="animate-spin" size={18} color="var(--text-secondary)" />}
                         </div>
                     </div>
 
+                    <div style={{ overflowX: 'auto', padding: '0 1.5rem 1.5rem 1.5rem' }}>
+                        {(historyTab === 'retail' ? historyRetail : historyWholesale).length > 0 ? (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', width: '40px' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.length > 0 && selectedIds.length === (historyTab === 'retail' ? historyRetail : historyWholesale).length}
+                                                onChange={toggleAll}
+                                                style={{ cursor: 'pointer' }}
+                                            />
+                                        </th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>DATE</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>ITEM</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>OUTPUT</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>UNIT COST</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>REC. PRICE</th>
+                                        <th style={{ padding: '0.75rem 0.5rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', textAlign: 'right' }}>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(historyTab === 'retail' ? historyRetail : historyWholesale).map(sim => (
+                                        <tr key={sim.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }} className="hover:bg-white/5">
+                                            <td style={{ padding: '0.75rem 0.5rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.includes(sim.id)}
+                                                    onChange={() => toggleRow(sim.id)}
+                                                    style={{ cursor: 'pointer' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#64748b' }}>
+                                                {new Date(sim.created_at).toLocaleDateString()}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                                                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    {sim.item_name}
+                                                    <span style={{
+                                                        fontSize: '0.6rem',
+                                                        padding: '0.05rem 0.35rem',
+                                                        borderRadius: '0.3rem',
+                                                        background: sim.calculation_method === 'manual' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                        color: sim.calculation_method === 'manual' ? '#f59e0b' : '#10b981',
+                                                        border: `1px solid ${sim.calculation_method === 'manual' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
+                                                        textTransform: 'uppercase',
+                                                        fontWeight: '700',
+                                                        letterSpacing: '0.02em'
+                                                    }}>
+                                                        {sim.calculation_method || 'auto'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{Number(sim.total_output).toFixed(1)} kg</td>
+                                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>₹{Number(sim.unit_cost).toFixed(2)}/kg</td>
+                                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>₹{Number(sim.suggested_price).toFixed(2)}/kg</td>
+                                            <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                                                <button
+                                                    onClick={() => handleDeleteSimulation(sim.id, historyTab)}
+                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', opacity: 0.6 }}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                <Database size={40} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
+                                No saved {historyTab} simulations yet.
+                            </div>
+                        )}
+                    </div>
+                    </div>
                 </div>
 
                 {/* [NEW] Settings Modal */}
@@ -848,7 +1231,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 };
 

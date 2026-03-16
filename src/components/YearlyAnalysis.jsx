@@ -63,7 +63,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                 showUnitEconomics: true,
                 showExpenseComp: true,
                 showProdYield: true,
-                
+
                 // Tables
                 showEfficiencyBench: true,
                 showItemAnalysis: true
@@ -176,12 +176,12 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     salesKg += qty;
 
                     const rawName = (t.originalDesc || 'Generic Item').trim().toUpperCase();
-                    
+
                     // Filter out accounting noise and summary rows
-                    const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) || 
-                                         rawName === 'ITEM' || rawName === 'PRODUCT' || 
-                                         rawName === 'AMOUNT' || rawName === 'SUBTOTAL';
-                    
+                    const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) ||
+                        rawName === 'ITEM' || rawName === 'PRODUCT' ||
+                        rawName === 'AMOUNT' || rawName === 'SUBTOTAL';
+
                     if (isBlacklisted) return;
 
                     const normName = normalizeName(rawName);
@@ -192,7 +192,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     itemSalesData[normName].revenue += amt;
                     itemSalesData[normName].weight += totalWeightKg;
                     itemSalesData[normName].originalNames.add(rawName);
-                    
+
                     if (totalWeightKg > 0) {
                         const pricePerKg = amt / totalWeightKg;
                         if (pricePerKg > 0) {
@@ -266,7 +266,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     if (item.date && item.date.startsWith(targetPrefix)) {
                         const weight = parseFloat(item.weight || 0);
                         productionKgValue += weight;
-                        
+
                         const name = (item.material || item.item || 'Generic Product').trim().toUpperCase();
                         if (!itemProduction[name]) itemProduction[name] = 0;
                         itemProduction[name] += weight;
@@ -305,7 +305,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         const normKey = normalizeName(originalName);
                         const share = effectiveOutput > 0 ? weight / effectiveOutput : 0;
                         const sales = itemSalesData[normKey] || { revenue: 0, weight: 0, minPrice: Infinity, maxPrice: -Infinity };
-                        
+
                         usedSalesKeys.add(normKey);
 
                         const itemAsp = sales.weight > 0 ? sales.revenue / sales.weight : 0;
@@ -339,7 +339,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         if (!usedSalesKeys.has(normKey) && data.revenue > 10) {
                             const name = Array.from(data.originalNames)[0];
                             const itemAsp = data.weight > 0 ? data.revenue / data.weight : 0;
-                            
+
                             breakdown.push({
                                 name: name,
                                 weight: 0,
@@ -781,7 +781,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
 
             {/* Flexbox container for ALL charts/tables so they auto-flow visually */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', marginBottom: '2rem' }}>
-                
+
                 {/* Financial Trend */}
                 {viewSettings.showFinancialTrends && (
                     <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)' }}>
@@ -946,9 +946,9 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                 <Factory size={18} color="#f59e0b" />
                                 Itemized Production {analysisViewMode === 'yearly' ? 'Yearly' : 'Monthly'} Cost Analysis ({selectedYear})
                             </h3>
-                            
+
                             <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                <button 
+                                <button
                                     onClick={() => setAnalysisViewMode('monthly')}
                                     style={{
                                         padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
@@ -957,7 +957,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                         transition: 'all 0.2s'
                                     }}
                                 >Monthly</button>
-                                <button 
+                                <button
                                     onClick={() => setAnalysisViewMode('yearly')}
                                     style={{
                                         padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
@@ -976,7 +976,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                         key={m.name}
                                         onClick={() => setSelectedAnalysisMonth(m.name)}
                                         style={{
-                                            padding: '0.3rem 0.6rem', fontSize: '0.7rem', borderRadius: '0.4rem', 
+                                            padding: '0.3rem 0.6rem', fontSize: '0.7rem', borderRadius: '0.4rem',
                                             border: `1px solid ${selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--glass-border)'}`,
                                             background: selectedAnalysisMonth === m.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
                                             color: selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--text-secondary)',
@@ -1005,8 +1005,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             <tbody>
                                 {(() => {
                                     const aggregatedItems = {};
-                                    const dataToProcess = analysisViewMode === 'yearly' 
-                                        ? yearlyData 
+                                    const dataToProcess = analysisViewMode === 'yearly'
+                                        ? yearlyData
                                         : yearlyData.filter(m => m.name === selectedAnalysisMonth);
 
                                     dataToProcess.forEach(m => {
@@ -1049,11 +1049,11 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue/data.weightSold - (data.weight > 0 ? data.allocatedCost/data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
-                                                    ₹{data.weightSold > 0 ? (data.revenue/data.weightSold - (data.weight > 0 ? data.allocatedCost/data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost/data.weight).toFixed(1)}` : '0')}/kg
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
+                                                    ₹{data.weightSold > 0 ? (data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost / data.weight).toFixed(1)}` : '0')}/kg
                                                 </td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost/data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
-                                                    {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost/data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
+                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
+                                                    {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
                                                 </td>
                                             </tr>
                                         ));

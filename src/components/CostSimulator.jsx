@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// Production Cost Simulator - Vercel Build Trigger
+import React, { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, Calculator, DollarSign, Info, Settings, Save, X, Database, History, Trash2, CheckCircle2, Loader2, Zap, Percent } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 

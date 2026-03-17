@@ -15,6 +15,7 @@ const normalizeName = (name) => {
     if (!name) return "";
     let n = name.toUpperCase()
         .replace(/^NFS\s+/, '') // Remove NFS prefix
+        .replace(/\b(G\s*(?:&|AND)\s*G)\b/g, 'GINGER GARLIC') // Handle G & G -> GINGER GARLIC
         .replace(/\s+/g, ' ')   // Normalize internal spacing
         .replace(/\(.*\)/g, '') // Remove everything in parentheses
         .replace(/\b\d+\s*(KG|G|GM|GMS|ML|L|PKT|PACKET|PACK|BOX|PCS|PC|G)\b/g, '') // Expanded units
@@ -1026,18 +1027,23 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ textAlign: 'left', padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>ITEM NAME</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PRODUCTION (KG)</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>ALLOCATED COST</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MATERIALS</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>LABOUR</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PRODUCTION COST</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>SIM. PROD COST</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>REC. RETAIL</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>REC. WHOLESALE</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>SELL PRICE</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PROFIT/KG</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MARGIN %</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'left' }}>ITEM NAME</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>PRODUCTION (KG)</th>
+                                    
+                                    {/* Actual Spend Section - Amber */}
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>ALLOCATED COST</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>MATERIALS</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>LABOUR</th>
+                                    
+                                    {/* Simulator Benchmarks - Blue */}
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>SIM. PROD COST</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>REC. RETAIL</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>REC. WHOLESALE</th>
+                                    
+                                    {/* Market Performance - Green */}
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>SELL PRICE</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>PROFIT/KG</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>MARGIN %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1077,25 +1083,27 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
 
                                             return (
                                                 <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                    <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.85rem' }}>{name}</td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(data.allocatedCost)}</td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.materials)}</td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.labour)}</td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#ef4444' }}>
-                                                        ₹{data.weight > 0 ? (data.allocatedCost / data.weight).toFixed(1) : '0'}/kg
-                                                    </td>
-                                                    {/* Simulator Columns */}
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                    <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.8rem', color: 'var(--text-primary)' }}>{name}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
+                                                    
+                                                    {/* Actual Spend Section - Amber */}
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.04)', borderLeft: '1px solid rgba(245, 158, 11, 0.2)' }}>{formatCurrency(data.allocatedCost)}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.9, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.materials)}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.9, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.labour)}</td>
+                                                    
+                                                    {/* Simulator Columns - Blue */}
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)', borderLeft: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                                         {simCost ? `₹${simCost.toFixed(1)}` : '-'}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
                                                         {simRetail ? `₹${simRetail.suggested_price.toFixed(1)}` : '-'}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#8b5cf6', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#8b5cf6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
                                                         {simWholesale ? `₹${simWholesale.suggested_price.toFixed(1)}` : '-'}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600 }}>
+
+                                                    {/* Market Performance - Green */}
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)', borderLeft: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                                         <div>₹{data.weightSold > 0 ? (data.revenue / data.weightSold).toFixed(1) : '0'}/kg</div>
                                                         {data.minPrice !== Infinity && data.minPrice > 0 && (
                                                             <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
@@ -1103,10 +1111,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)) > 0 ? '#10b981' : '#ef4444', background: 'rgba(16, 185, 129, 0.04)' }}>
                                                         ₹{data.weightSold > 0 ? (data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost / data.weight).toFixed(1)}` : '0')}/kg
                                                     </td>
-                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.04)' }}>
                                                         {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
                                                     </td>
                                                 </tr>

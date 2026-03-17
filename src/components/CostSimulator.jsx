@@ -20,7 +20,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
 
     // Constant for all product combinations
     const ALL_VARIANTS = [
-        { productType: 'paste', pasteVariant: 'mix', label: 'G & G Paste' },
+        { productType: 'paste', pasteVariant: 'mix', label: 'Ginger Garlic Paste' },
         { productType: 'paste', pasteVariant: 'ginger', label: 'Ginger Paste' },
         { productType: 'paste', pasteVariant: 'garlic', label: 'Garlic Paste' },
         { productType: 'ginger_peeled', label: 'Ginger Peeled' },
@@ -298,7 +298,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
         setSaveStatus(null);
 
         const variantLabel = inputs.productType === 'paste'
-            ? (inputs.pasteVariant === 'mix' ? 'G & G Paste' : inputs.pasteVariant === 'ginger' ? 'Ginger Paste' : 'Garlic Paste')
+            ? (inputs.pasteVariant === 'mix' ? 'Ginger Garlic Paste' : inputs.pasteVariant === 'ginger' ? 'Ginger Paste' : 'Garlic Paste')
             : inputs.productType === 'ginger_peeled' ? 'Ginger Peeled' 
             : inputs.productType === 'garlic_peeled' ? 'Garlic Peeled'
             : 'Small Onion Peeled';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Database, Users, PlusCircle, ArrowLeft, Layers, LayoutGrid, Trash2, Settings, User, LogOut } from 'lucide-react';
+import { Upload, Database, Users, PlusCircle, ArrowLeft, LayoutGrid, Trash2, Settings, User, LogOut, List } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import AdminDataIngestion from './AdminDataIngestion';
@@ -9,6 +9,7 @@ import AdminCleanup from './AdminCleanup';
 import ManualEntry from './ManualEntry';
 import AdminSystemSettings from './AdminSystemSettings';
 import HumanResources from './HumanResources';
+import ItemMaster from './ItemMaster';
 
 const AdminPanel = () => {
     const navigate = useNavigate();
@@ -18,6 +19,7 @@ const AdminPanel = () => {
     // Matching the Dashboard's "Pill" style navigation
     const tabs = [
         { id: 'upload', label: 'Data Ingestion', icon: Upload },
+        { id: 'master', label: 'Item Master', icon: List },
         { id: 'manager', label: 'Data Manager', icon: Database },
         { id: 'manual', label: 'Manual Entry', icon: PlusCircle },
         { id: 'hr', label: 'Human Resources', icon: Users },
@@ -154,6 +156,7 @@ const AdminPanel = () => {
                 <div style={{ animation: 'fadeIn 0.5s ease-out forwards' }}>
                     <div style={{ background: '#1a1f2e', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
                         {activeTab === 'upload' && <AdminDataIngestion />}
+                        {activeTab === 'master' && <ItemMaster />}
                         {activeTab === 'manager' && <DataManager />}
                         {activeTab === 'manual' && <ManualEntry />}
                         {activeTab === 'hr' && <HumanResources />}

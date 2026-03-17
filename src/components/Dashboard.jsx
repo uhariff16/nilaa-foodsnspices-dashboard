@@ -871,21 +871,43 @@ const Dashboard = (props) => {
                 targetPrefix = selYear + '-' + monthMap[selMonth];
             }
 
-            props.productionData.stockIn.forEach(item => {
-                if (item.date && item.date.startsWith(targetPrefix)) {
+            // [FIX] Opening Stock Aggregation Logic
+            // In 'Overall' view, summing all monthly opening stocks leads to inflated values.
+            // We should only take the opening stock from the EARLIEST month available in that year.
+            let earliestOSMonth = null;
+            if (selectedMonth === 'Overall') {
+                const osEntries = props.productionData.stockIn.filter(item => {
                     const itemName = (item.material || item.item || '').trim().toUpperCase();
-                    const weight = parseFloat(item.weight || 0);
+                    return item.date && item.date.startsWith(targetPrefix) && 
+                           (itemName.startsWith('OS') || itemName.includes('OPENING') || itemName.includes('B/F'));
+                });
+                if (osEntries.length > 0) {
+                    // Sort by date to find the earliest month
+                    const sortedOS = osEntries.sort((a, b) => a.date.localeCompare(b.date));
+                    earliestOSMonth = sortedOS[0].date.substring(0, 7); // YYYY-MM
+                }
+            }
 
+            props.productionData.stockIn.forEach(item => {
+                const itemName = (item.material || item.item || '').trim().toUpperCase();
+                const weight = parseFloat(item.weight || 0);
+                const itemMonth = item.date?.substring(0, 7);
+
+                if (item.date && item.date.startsWith(targetPrefix)) {
                     // Check if it is Opening Stock
                     if (itemName.startsWith('OS') || itemName.includes('OPENING') || itemName.includes('B/F')) {
-                        if (itemName.includes('PASTE') || itemName.includes('PEELED')) {
+                        // Skip if we are in 'Overall' view and this is not from the earliest month or if we have no earliest month logic
+                        if (selectedMonth === 'Overall' && itemMonth !== earliestOSMonth) return;
+
+                        const isProcessed = itemName.includes('PASTE') || itemName.includes('PEELED');
+                        if (isProcessed) {
                             processedOpenStockKG += weight;
                         } else {
                             rawOpenStockKG += weight;
                         }
                         // Clean up OS name for display
                         const cleanName = itemName.replace(/OS\s*[:|-]?\s*/i, '').trim();
-                        openStockDetails.push({ name: cleanName, weight, type: itemName.includes('PASTE') ? 'Processed' : 'Raw' });
+                        openStockDetails.push({ name: cleanName, weight, type: isProcessed ? 'Processed' : 'Raw' });
                     } else {
                         // Regular Procurement
                         procKG += weight;
@@ -955,24 +977,43 @@ const Dashboard = (props) => {
             }
             else if (type === 'Expense' || type === 'Purchase') {
                 const amount = parseFloat(item.parsedAmount || 0);
-                const nameUpper = (item.originalDesc || item.name || '').toUpperCase();
+                const nameUpper = (item.originalDesc || item.name || '').toUpperCase().trim();
 
-                // 1. Material Cost (Whitelist)
-                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
-                const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
-                const isMaterial = (type === 'Purchase') || hasPBill || materialKeywords.some(keyword => nameUpper.includes(keyword));
-                const isEssential = nameUpper.includes('ESSENTIAL');
+                // 1. Item Master Lookup (System Driven)
+                const itemMaster = props.data?.itemMaster || [];
+                const matchedMaster = itemMaster.find(im => {
+                    const masterName = String(im.name).toUpperCase().trim();
+                    return nameUpper === masterName || nameUpper.includes(masterName);
+                });
 
-                // 2. Direct Labour (Keywords)
+                // 2. Legacy Keywords & Rules (Fallback)
+                const materialKeywords = ['GINGER', 'GARLIC', 'ONION', 'SMALL ONION', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
-                const isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
+                
+                const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
+                const isEssential = nameUpper.includes('ESSENTIAL');
+                
+                let isMaterial = (type === 'Purchase') || hasPBill;
+                let isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
+                let isOverhead = false;
 
-                if (isMaterial && !isEssential) {
-                    granularMaterial += amount;
-                } else if (isLabour) {
-                    granularLabour += amount;
+                if (matchedMaster) {
+                    if (matchedMaster.category === 'Raw Material' || matchedMaster.category === 'Processed Item') {
+                        isMaterial = true;
+                    } else if (matchedMaster.category === 'Overhead') {
+                        isOverhead = true;
+                        isMaterial = false; // Override if explicitly marked as Overhead
+                    }
                 } else {
-                    // 3. Overhead (Everything else)
+                    // Fallback to keywords
+                    if (materialKeywords.some(keyword => nameUpper.includes(keyword))) isMaterial = true;
+                }
+
+                if (isLabour) {
+                    granularLabour += amount;
+                } else if (isMaterial && !isEssential && !isOverhead) {
+                    granularMaterial += amount;
+                } else {
                     granularOverhead += amount;
                 }
             }

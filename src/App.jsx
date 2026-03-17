@@ -238,13 +238,25 @@ const DashboardLayout = () => {
                 else if (log.type === 'production') newProdData.postProduction.push(entry);
             });
 
+            // 6. Fetch Item Master
+            let allItemMaster = [];
+            try {
+                const { data: imData, error: imError } = await supabase.from('item_master').select('*');
+                if (!imError && imData) {
+                    allItemMaster = imData;
+                }
+            } catch (e) {
+                console.warn("item_master table might not exist yet:", e);
+            }
+
             // Update State
             setData(prev => ({
                 ...prev,
                 transactions: mappedTransactions,
                 customers: mappedCustomers,
                 receivables: allReceivables,
-                attendance: allAttendance // [NEW] Pass attendance to Dashboard
+                attendance: allAttendance, // [NEW] Pass attendance to Dashboard
+                itemMaster: allItemMaster // [NEW] Pass Item Master to Dashboard
             }));
             setProductionData(newProdData);
             setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense' || t.parsedType === 'Purchase'));

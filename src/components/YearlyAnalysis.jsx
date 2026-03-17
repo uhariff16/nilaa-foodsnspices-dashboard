@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart } from 'recharts';
 import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory } from 'lucide-react';
 
@@ -85,6 +86,40 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     React.useEffect(() => {
         localStorage.setItem('ytd_view_settings_v2', JSON.stringify(viewSettings));
     }, [viewSettings]);
+
+    // Fetch Simulator History for matching
+    const [simHistory, setSimHistory] = React.useState({ retail: {}, wholesale: {} });
+
+    React.useEffect(() => {
+        const fetchSimulations = async () => {
+            try {
+                const [retailRes, wholesaleRes] = await Promise.all([
+                    supabase.from('simulated_costs_retail').select('*').order('created_at', { ascending: false }),
+                    supabase.from('simulated_costs_wholesale').select('*').order('created_at', { ascending: false })
+                ]);
+
+                if (!retailRes.error && !wholesaleRes.error) {
+                    // We only need the latest unique items
+                    const retailMap = {};
+                    (retailRes.data || []).forEach(item => {
+                        const norm = normalizeName(item.item_name);
+                        if (!retailMap[norm]) retailMap[norm] = item;
+                    });
+
+                    const wholesaleMap = {};
+                    (wholesaleRes.data || []).forEach(item => {
+                        const norm = normalizeName(item.item_name);
+                        if (!wholesaleMap[norm]) wholesaleMap[norm] = item;
+                    });
+
+                    setSimHistory({ retail: retailMap, wholesale: wholesaleMap });
+                }
+            } catch (err) {
+                console.error("Error fetching YTD simulations:", err);
+            }
+        };
+        fetchSimulations();
+    }, []);
 
     const yearlyData = useMemo(() => {
         if (!selectedYear) return [];
@@ -472,7 +507,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
         if (prevMonth && currentMonth.costPerKg > prevMonth.costPerKg * 1.1) {
             recs.push({
                 type: 'danger',
-                title: 'Rising Operational Cost',
+                title: 'Rising Production Cost',
                 desc: `Cost per kg increased by ${((currentMonth.costPerKg / prevMonth.costPerKg - 1) * 100).toFixed(1)}% compared to last month. Investigate spikes in raw material or labor expenses.`,
                 icon: <TrendingUp size={20} color="#ef4444" />
             });
@@ -844,7 +879,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend wrapperStyle={{ paddingTop: '1rem', fontSize: 12 }} />
                                     <Line type="monotone" dataKey="revenuePerKg" name="ASP (Price/kg)" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-                                    <Line type="monotone" dataKey="costPerKg" name="Unit Cost/kg" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="costPerKg" name="Production Cost/kg" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
@@ -927,7 +962,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#10b981' }}>₹{m.revenuePerKg.toFixed(1)}/kg</p>
                                         </div>
                                         <div>
-                                            <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Unit Cost</p>
+                                            <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Production Cost</p>
                                             <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#ef4444' }}>₹{m.costPerKg.toFixed(1)}/kg</p>
                                         </div>
                                     </div>
@@ -996,7 +1031,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>ALLOCATED COST</th>
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MATERIALS</th>
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>LABOUR</th>
-                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>UNIT COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PRODUCTION COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>SIM. PROD COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>REC. RETAIL</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.81rem', background: 'rgba(255,255,255,0.02)' }}>REC. WHOLESALE</th>
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>SELL PRICE</th>
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>PROFIT/KG</th>
                                     <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.85rem' }}>MARGIN %</th>
@@ -1031,32 +1069,49 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
 
                                     return Object.entries(aggregatedItems)
                                         .sort((a, b) => b[1].weight - a[1].weight)
-                                        .map(([name, data]) => (
-                                            <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.85rem' }}>{name}</td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>{data.weight.toLocaleString()} kg</td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(data.allocatedCost)}</td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.materials)}</td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.labour)}</td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#ef4444' }}>
-                                                    ₹{data.weight > 0 ? (data.allocatedCost / data.weight).toFixed(1) : '0'}/kg
-                                                </td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600 }}>
-                                                    <div>₹{data.weightSold > 0 ? (data.revenue / data.weightSold).toFixed(1) : '0'}/kg</div>
-                                                    {data.minPrice !== Infinity && data.minPrice > 0 && (
-                                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
-                                                            (₹{data.minPrice.toFixed(0)}-₹{data.maxPrice.toFixed(0)})
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
-                                                    ₹{data.weightSold > 0 ? (data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost / data.weight).toFixed(1)}` : '0')}/kg
-                                                </td>
-                                                <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
-                                                    {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
-                                                </td>
-                                            </tr>
-                                        ));
+                                        .map(([name, data]) => {
+                                            const normName = normalizeName(name);
+                                            const simRetail = simHistory.retail[normName];
+                                            const simWholesale = simHistory.wholesale[normName];
+                                            const simCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : null);
+
+                                            return (
+                                                <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                    <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.85rem' }}>{name}</td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(data.allocatedCost)}</td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.materials)}</td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{formatCurrency(data.labour)}</td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#ef4444' }}>
+                                                        ₹{data.weight > 0 ? (data.allocatedCost / data.weight).toFixed(1) : '0'}/kg
+                                                    </td>
+                                                    {/* Simulator Columns */}
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                        {simCost ? `₹${simCost.toFixed(1)}` : '-'}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                        {simRetail ? `₹${simRetail.suggested_price.toFixed(1)}` : '-'}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#8b5cf6', fontWeight: 600, background: 'rgba(255,255,255,0.01)' }}>
+                                                        {simWholesale ? `₹${simWholesale.suggested_price.toFixed(1)}` : '-'}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600 }}>
+                                                        <div>₹{data.weightSold > 0 ? (data.revenue / data.weightSold).toFixed(1) : '0'}/kg</div>
+                                                        {data.minPrice !== Infinity && data.minPrice > 0 && (
+                                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>
+                                                                (₹{data.minPrice.toFixed(0)}-₹{data.maxPrice.toFixed(0)})
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 700, color: (data.weightSold > 0 && data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)) > 0 ? '#10b981' : '#ef4444' }}>
+                                                        ₹{data.weightSold > 0 ? (data.revenue / data.weightSold - (data.weight > 0 ? data.allocatedCost / data.weight : 0)).toFixed(1) : (data.weight > 0 ? `-${(data.allocatedCost / data.weight).toFixed(1)}` : '0')}/kg
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: (data.revenue > 0 && (data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0)))) / data.revenue * 100 > 15 ? '#10b981' : '#f59e0b' }}>
+                                                        {data.revenue > 0 ? `${((data.revenue - (data.weightSold * (data.weight > 0 ? data.allocatedCost / data.weight : 0))) / data.revenue * 100).toFixed(1)}%` : '0%'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        });
                                 })()}
                             </tbody>
                         </table>
@@ -1136,7 +1191,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: '#3b82f6', fontSize: '0.85rem' }}>{m.yieldPercent > 0 ? `${m.yieldPercent.toFixed(1)}%` : '-'}</td>)}
                             </tr>
                             <tr>
-                                <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Operational Cost / kg</td>
+                                <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Production Cost / kg</td>
                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.costPerKg > 0 ? `₹${m.costPerKg.toFixed(1)}` : '-'}</td>)}
                             </tr>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>

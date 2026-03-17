@@ -89,31 +89,46 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     }, [viewSettings]);
 
     // Fetch Simulator History for matching
-    const [simHistory, setSimHistory] = React.useState({ retail: {}, wholesale: {} });
+    const [simHistory, setSimHistory] = React.useState({});
 
     React.useEffect(() => {
         const fetchSimulations = async () => {
             try {
                 const [retailRes, wholesaleRes] = await Promise.all([
-                    supabase.from('simulated_costs_retail').select('*').order('created_at', { ascending: false }),
-                    supabase.from('simulated_costs_wholesale').select('*').order('created_at', { ascending: false })
+                    supabase.from('simulated_costs_retail').select('*').order('created_at', { ascending: true }),
+                    supabase.from('simulated_costs_wholesale').select('*').order('created_at', { ascending: true })
                 ]);
 
                 if (!retailRes.error && !wholesaleRes.error) {
-                    // We only need the latest unique items
-                    const retailMap = {};
-                    (retailRes.data || []).forEach(item => {
-                        const norm = normalizeName(item.item_name);
-                        if (!retailMap[norm]) retailMap[norm] = item;
-                    });
+                    const history = {};
+                    
+                    // Group by Month-Year and Item
+                    const processSims = (data, channel) => {
+                        (data || []).forEach(item => {
+                            const date = new Date(item.created_at);
+                            const mStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                            const norm = normalizeName(item.item_name);
+                            if (!history[mStr]) history[mStr] = { retail: {}, wholesale: {} };
+                            history[mStr][channel][norm] = item;
+                        });
+                    };
 
-                    const wholesaleMap = {};
-                    (wholesaleRes.data || []).forEach(item => {
-                        const norm = normalizeName(item.item_name);
-                        if (!wholesaleMap[norm]) wholesaleMap[norm] = item;
-                    });
+                    processSims(retailRes.data, 'retail');
+                    processSims(wholesaleRes.data, 'wholesale');
 
-                    setSimHistory({ retail: retailMap, wholesale: wholesaleMap });
+                    // Propagate simulations forward if no new ones exist in later months
+                    // but ONLY within the same year of analysis to avoid showing futuristic knowledge
+                    // Wait, user says "Simulator data should be according to the date. The same cost should not be shown for previous months."
+                    // This means Feb shouldn't show March data. But March CAN show Feb data if no March simulation exists.
+                    
+                    const months = Object.keys(history).sort();
+                    if (months.length > 0) {
+                        const firstMonth = months[0];
+                        const lastMonth = months[months.length - 1];
+                        // We'll calculate the "best available" for each month later in the render loop or pre-calculate
+                    }
+
+                    setSimHistory(history);
                 }
             } catch (err) {
                 console.error("Error fetching YTD simulations:", err);
@@ -121,6 +136,20 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
         };
         fetchSimulations();
     }, []);
+
+    // Helper to get latest sim as of a specific month
+    const getSimForMonth = (normName, targetMonthStr, channel) => {
+        const availableMonths = Object.keys(simHistory)
+            .filter(m => m <= targetMonthStr)
+            .sort((a, b) => b.localeCompare(a)); // Newest first but <= target
+        
+        for (const m of availableMonths) {
+            if (simHistory[m][channel] && simHistory[m][channel][normName]) {
+                return simHistory[m][channel][normName];
+            }
+        }
+        return null;
+    };
 
     const yearlyData = useMemo(() => {
         if (!selectedYear) return [];
@@ -1023,27 +1052,27 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             </div>
                         )}
                     </div>
-                    <div style={{ overflowX: 'auto', padding: '0 1.5rem 1.5rem 1.5rem' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                    <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '1200px', tableLayout: 'fixed' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'left' }}>ITEM NAME</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right' }}>PRODUCTION (KG)</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'left', width: '170px' }}>ITEM NAME</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.8rem', textAlign: 'right', width: '100px' }}>PROD (KG)</th>
                                     
                                     {/* Actual Spend Section - Amber */}
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>ALLOCATED COST</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>MATERIALS</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.08)' }}>LABOUR</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', borderLeft: '2px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', width: '110px' }}>ALLOCATED</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', width: '110px' }}>MATERIALS</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', width: '90px' }}>LABOUR</th>
                                     
                                     {/* Simulator Benchmarks - Blue */}
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>SIM. PROD COST</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>REC. RETAIL</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.08)' }}>REC. WHOLESALE</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', borderLeft: '2px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', width: '100px' }}>SIM COST</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', width: '100px' }}>REC RETAIL</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', width: '100px' }}>REC W.SALE</th>
                                     
                                     {/* Market Performance - Green */}
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>SELL PRICE</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>PROFIT/KG</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.08)' }}>MARGIN %</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', width: '120px' }}>SELL PRICE</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', width: '100px' }}>PROFIT/KG</th>
+                                    <th style={{ padding: '1rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 600, fontSize: '0.8rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', width: '80px' }}>MARGIN %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1077,33 +1106,39 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                         .sort((a, b) => b[1].weight - a[1].weight)
                                         .map(([name, data]) => {
                                             const normName = normalizeName(name);
-                                            const simRetail = simHistory.retail[normName];
-                                            const simWholesale = simHistory.wholesale[normName];
+                                            
+                                            // Determine target month for simulation lookup
+                                            const targetMonthStr = analysisViewMode === 'monthly' && selectedAnalysisMonth
+                                                ? `${selectedYear}-${String(monthNames.indexOf(selectedAnalysisMonth) + 1).padStart(2, '0')}`
+                                                : `${selectedYear}-12`; // For yearly, use latest available in that year
+
+                                            const simRetail = getSimForMonth(normName, targetMonthStr, 'retail');
+                                            const simWholesale = getSimForMonth(normName, targetMonthStr, 'wholesale');
                                             const simCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : null);
 
                                             return (
                                                 <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                    <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.8rem', color: 'var(--text-primary)' }}>{name}</td>
+                                                    <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500, fontSize: '0.8rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{name}</td>
                                                     <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
                                                     
                                                     {/* Actual Spend Section - Amber */}
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.04)', borderLeft: '1px solid rgba(245, 158, 11, 0.2)' }}>{formatCurrency(data.allocatedCost)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.9, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.materials)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.9, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.labour)}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.04)', borderLeft: '2px solid rgba(245, 158, 11, 0.2)' }}>{formatCurrency(data.allocatedCost)}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.materials)}</td>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.labour)}</td>
                                                     
                                                     {/* Simulator Columns - Blue */}
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)', borderLeft: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)', borderLeft: '2px solid rgba(59, 130, 246, 0.2)' }}>
                                                         {simCost ? `₹${simCost.toFixed(1)}` : '-'}
                                                     </td>
                                                     <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
                                                         {simRetail ? `₹${simRetail.suggested_price.toFixed(1)}` : '-'}
                                                     </td>
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#8b5cf6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
                                                         {simWholesale ? `₹${simWholesale.suggested_price.toFixed(1)}` : '-'}
                                                     </td>
 
                                                     {/* Market Performance - Green */}
-                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)', borderLeft: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                                    <td style={{ textAlign: 'right', padding: '0.75rem 0.5rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)', borderLeft: '2px solid rgba(16, 185, 129, 0.2)' }}>
                                                         <div>₹{data.weightSold > 0 ? (data.revenue / data.weightSold).toFixed(1) : '0'}/kg</div>
                                                         {data.minPrice !== Infinity && data.minPrice > 0 && (
                                                             <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 400 }}>

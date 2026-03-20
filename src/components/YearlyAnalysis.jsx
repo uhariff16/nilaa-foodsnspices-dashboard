@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart } from 'recharts';
-import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory } from 'lucide-react';
+import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet } from 'lucide-react';
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -83,6 +83,28 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     const [showSettingsDropdown, setShowSettingsDropdown] = React.useState(false);
     const [analysisViewMode, setAnalysisViewMode] = React.useState('monthly'); // 'monthly' | 'yearly'
     const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
+    
+    // Profit Stakeholder Settings
+    const [profitStakeholders, setProfitStakeholders] = React.useState(() => {
+        try {
+            const saved = localStorage.getItem('ytd_profit_stakeholders');
+            return saved ? JSON.parse(saved) : [
+                { id: 1, name: 'Partner 1', percent: 45 },
+                { id: 2, name: 'Partner 2', percent: 45 },
+                { id: 3, name: 'Reserve', percent: 10 }
+            ];
+        } catch (e) {
+            return [
+                { id: 1, name: 'Partner 1', percent: 45 },
+                { id: 2, name: 'Partner 2', percent: 45 },
+                { id: 3, name: 'Reserve', percent: 10 }
+            ];
+        }
+    });
+
+    React.useEffect(() => {
+        localStorage.setItem('ytd_profit_stakeholders', JSON.stringify(profitStakeholders));
+    }, [profitStakeholders]);
 
     React.useEffect(() => {
         localStorage.setItem('ytd_view_settings_v2', JSON.stringify(viewSettings));
@@ -376,30 +398,50 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     const breakdown = [];
                     const usedSalesKeys = new Set();
 
-                    // 1. Process Produced Items
+                    // --- MODIFIED COST ALLOCATION (Pass 1: Theoretical Total) ---
+                    let totalTheoreticalCost = 0;
                     Object.entries(itemProduction).forEach(([originalName, weight]) => {
                         const normKey = normalizeName(originalName);
-                        const share = productionKgValue > 0 ? weight / productionKgValue : 0;
-                        const sales = itemSalesData[normKey] || { revenue: 0, weight: 0, minPrice: Infinity, maxPrice: -Infinity };
+                        const simRetail = getSimForMonth(normKey, targetPrefix, 'retail');
+                        const simWholesale = getSimForMonth(normKey, targetPrefix, 'wholesale');
+                        const benchmarkUnitCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : (totalExpenses / (productionKgValue || 1)));
+                        totalTheoreticalCost += weight * benchmarkUnitCost;
+                    });
 
+                    // --- Pass 2: Allocate Actual Costs Based on Theoretical Ratios ---
+                    Object.entries(itemProduction).forEach(([originalName, weight]) => {
+                        const normKey = normalizeName(originalName);
+                        
+                        // Get item-specific benchmark
+                        const simRetail = getSimForMonth(normKey, targetPrefix, 'retail');
+                        const simWholesale = getSimForMonth(normKey, targetPrefix, 'wholesale');
+                        const benchmarkUnitCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : (totalExpenses / (productionKgValue || 1)));
+
+                        // Share of the "Spend" is now weighted by complexity (Benchmark * Weight)
+                        const theoreticalItemTotal = weight * benchmarkUnitCost;
+                        const expenseShare = totalTheoreticalCost > 0 ? theoreticalItemTotal / totalTheoreticalCost : 0;
+                        
+                        const itemAllocatedTotal = expenseShare * totalExpenses;
+                        const itemUnitCost = weight > 0 ? itemAllocatedTotal / weight : 0;
+
+                        const sales = itemSalesData[normKey] || { revenue: 0, weight: 0, minPrice: Infinity, maxPrice: -Infinity };
                         usedSalesKeys.add(normKey);
 
                         const itemAsp = sales.weight > 0 ? sales.revenue / sales.weight : 0;
-                        const itemUnitCost = weight > 0 ? (share * totalExpenses) / weight : 0;
                         const itemProfitPerKg = itemAsp > 0 ? (itemAsp - itemUnitCost) : (0 - itemUnitCost);
                         const itemMargin = itemAsp > 0 ? (itemProfitPerKg / itemAsp) * 100 : 0;
 
                         breakdown.push({
                             name: originalName,
                             weight,
-                            share,
-                            allocatedCost: share * totalExpenses,
-                            materials: share * materialsCost,
-                            labour: share * labour,
-                            packaging: share * packaging,
-                            bills: share * bills,
-                            other: share * other,
-                            marketing: share * marketing,
+                            share: productionKgValue > 0 ? weight / productionKgValue : 0, // Keep production share for volume context
+                            allocatedCost: itemAllocatedTotal,
+                            materials: expenseShare * materialsCost,
+                            labour: expenseShare * labour,
+                            packaging: expenseShare * packaging,
+                            bills: expenseShare * bills,
+                            other: expenseShare * other,
+                            marketing: expenseShare * marketing,
                             asp: itemAsp,
                             minPrice: sales.minPrice === Infinity ? 0 : sales.minPrice,
                             maxPrice: sales.maxPrice === -Infinity ? 0 : sales.maxPrice,
@@ -1079,7 +1121,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                     <th colSpan={2} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700, textAlign: 'left', borderBottom: '1px solid var(--glass-border)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>ITEM INFO</th>
                                     <th colSpan={5} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>ACTUAL PRODUCTION COSTS</th>
                                     <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#3b82f6', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', background: 'rgba(59, 130, 246, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>SIMULATOR BENCHMARKS</th>
-                                    <th colSpan={3} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>MARKET PERFORMANCE</th>
+                                    <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>MARKET PERFORMANCE</th>
                                 </tr>
                                 <tr>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'left', letterSpacing: '0.02em' }}>ITEM NAME</th>
@@ -1094,6 +1136,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>REC W.SALE</th>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>SIM MARGIN %</th>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>AVG SELLING PRICE</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>UNIT COST</th>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>PROFIT/KG</th>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>ACTUAL MARGIN %</th>
                                 </tr>
@@ -1214,6 +1257,9 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                         <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>({formatCurrency(data.minPrice)}-{formatCurrency(data.maxPrice)})</div>
                                                     </td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)' }}>
+                                                        ₹{itemUnitCost.toFixed(1)}/kg
+                                                    </td>
+                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)' }}>
                                                         ₹{itemProfitPerKg.toFixed(1)}/kg
                                                     </td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: itemMargin > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.06)' }}>
@@ -1223,16 +1269,31 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             );
                                         });
 
-                                    // FIX: Use totalMonthlyRevenue from aggregated data to match Overview Exactly
-                                    const totalMonthlyRevenue = dataToProcess.reduce((sum, m) => sum + m.revenue, 0);
-                                    const totalSimMargin = totalSimRevForMargin > 0 ? (totalSimProfit / totalSimRevForMargin) * 100 : null;
-                                    const totalActualMargin = totalMonthlyRevenue > 0 ? ((totalMonthlyRevenue - totalActualCost) / totalMonthlyRevenue) * 100 : 0;
+                                    // Corrected Summary Logic for Market Performance (Weighted Average)
+                                    let totalRevForSum = 0;
+                                    let totalProfitValForSum = 0;
+                                    let totalWeightSoldForSumVal = 0;
 
-                                    const avgSimCostAll = totalWeightSold > 0 ? totalSimCostVal / totalWeightSold : 0;
-                                    const avgSimRetailAll = totalWeightSold > 0 ? totalSimRetailVal / totalWeightSold : 0;
-                                    const avgSimWholesaleAll = totalWeightSold > 0 ? totalSimWholesaleVal / totalWeightSold : 0;
-                                    const avgSellingPriceAll = totalWeightSold > 0 ? totalMonthlyRevenue / totalWeightSold : 0;
-                                    const avgProfitPerKgAll = totalWeightSold > 0 ? (totalMonthlyRevenue - totalActualCost) / totalWeightSold : 0;
+                                    Object.entries(aggregatedItems).forEach(([name, data]) => {
+                                        const itemAsp = data.weightSold > 0 ? data.revenue / data.weightSold : 0;
+                                        const itemUnitCost = data.weight > 0 ? data.allocatedCost / data.weight : 0;
+                                        const itemProfitPerKg = itemAsp - itemUnitCost;
+                                        
+                                        totalRevForSum += data.revenue;
+                                        totalWeightSoldForSumVal += data.weightSold;
+                                        totalProfitValForSum += (itemProfitPerKg * data.weightSold);
+                                    });
+
+                                    const avgSellingPriceAll = totalWeightSoldForSumVal > 0 ? totalRevForSum / totalWeightSoldForSumVal : 0;
+                                    const avgProfitPerKgAll = totalWeightSoldForSumVal > 0 ? totalProfitValForSum / totalWeightSoldForSumVal : 0;
+                                    const totalActualMargin = avgSellingPriceAll > 0 ? (avgProfitPerKgAll / avgSellingPriceAll) * 100 : 0;
+
+                                    const totalMonthlyRevenue = totalRevForSum;
+                                    const totalSimMargin = totalSimRevForMargin > 0 ? (totalSimProfit / totalSimRevForMargin) * 100 : null;
+
+                                    const avgSimCostAll = totalWeightSoldForSumVal > 0 ? totalSimCostVal / totalWeightSoldForSumVal : 0;
+                                    const avgSimRetailAll = totalWeightSoldForSumVal > 0 ? totalSimRetailVal / totalWeightSoldForSumVal : 0;
+                                    const avgSimWholesaleAll = totalWeightSoldForSumVal > 0 ? totalSimWholesaleVal / totalWeightSoldForSumVal : 0;
 
                                     return [
                                         ...rows,
@@ -1254,9 +1315,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)' }}>{totalSimMargin !== null ? `${totalSimMargin.toFixed(1)}%` : '-'}</td>
                                             
                                             {/* Market Summary - Green */}
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgSellingPriceAll.toFixed(1)}/kg</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgProfitPerKgAll.toFixed(1)}/kg</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: totalActualMargin > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.1)' }}>{totalActualMargin.toFixed(1)}%</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgSellingPriceAll.toFixed(1)}/kg</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{(avgSellingPriceAll - avgProfitPerKgAll).toFixed(1)}/kg</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgProfitPerKgAll.toFixed(1)}/kg</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: totalActualMargin > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.1)' }}>{totalActualMargin.toFixed(1)}%</td>
                                         </tr>
                                     ];
                                 })()}
@@ -1316,6 +1378,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                 <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Marketing / Ads</td>
                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.marketing > 0 ? formatCurrency(m.marketing) : '-'}</td>)}
                             </tr>
+                            <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Bills (Rent, EB, etc.)</td>
+                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.bills > 0 ? formatCurrency(m.bills) : '-'}</td>)}
+                            </tr>
+                            <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Other Expenses</td>
+                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.other > 0 ? formatCurrency(m.other) : '-'}</td>)}
+                            </tr>
                             <tr style={{ borderBottom: '2px solid var(--glass-border)' }}>
                                 <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 700, fontSize: '0.9rem' }}>Net Net Profit</td>
                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: m.netProfit >= 0 ? '#10b981' : '#ef4444', fontSize: '0.9rem' }}>{m.isActive ? formatCurrency(m.netProfit) : '-'}</td>)}
@@ -1347,6 +1417,151 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            {/* Profit Share Module */}
+            <div className="glass-panel" style={{ marginTop: '2.5rem', overflow: 'hidden', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ padding: '0.6rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '0.75rem', color: '#10b981' }}>
+                            <Users size={20} />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Profit Distribution Hub</h3>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{analysisViewMode === 'yearly' ? `Fiscal Year ${selectedYear}` : `Performance for ${selectedAnalysisMonth} ${selectedYear}`}</div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const newId = Math.max(0, ...profitStakeholders.map(s => s.id)) + 1;
+                            setProfitStakeholders([...profitStakeholders, { id: newId, name: `Stakeholder ${newId}`, percent: 0 }]);
+                        }}
+                        style={{
+                            padding: '0.5rem 1rem', fontSize: '0.8rem', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.3)',
+                            background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            transition: 'all 0.2s', fontWeight: 500
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'; }}
+                    >
+                        <Plus size={16} /> Add Stakeholder
+                    </button>
+                </div>
+                
+                <div style={{ padding: '2rem' }}>
+                    {(() => {
+                        const totalProfit = analysisViewMode === 'yearly' 
+                            ? yearlyData.reduce((acc, m) => acc + (m.isActive ? m.netProfit : 0), 0)
+                            : (yearlyData.find(m => m.name === selectedAnalysisMonth)?.netProfit || 0);
+                        
+                        const totalPct = profitStakeholders.reduce((acc, s) => acc + parseFloat(s.percent || 0), 0);
+
+                        return (
+                            <>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', marginBottom: '2.5rem' }}>
+                                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1.25rem', border: '1px solid var(--glass-border)', position: 'relative', overflow: 'hidden' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '1.5px', fontWeight: 600 }}>Available for Distribution</div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                                            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: totalProfit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(totalProfit)}</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Net Net</div>
+                                        </div>
+                                        <Wallet style={{ position: 'absolute', right: '-10px', top: '-10px', opacity: 0.05, transform: 'rotate(-15deg)' }} size={100} />
+                                    </div>
+
+                                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1.25rem', border: '1px solid var(--glass-border)', position: 'relative' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '1.5px', fontWeight: 600 }}>Allocation Tracking</div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b') }}>
+                                                {totalPct}% <span style={{ fontSize: '0.9rem', fontWeight: 400, opacity: 0.7 }}>Set</span>
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b'), fontWeight: 600 }}>
+                                                {Math.abs(totalPct - 100) < 0.1 ? 'FULLY ALLOCATED' : (totalPct > 100 ? 'EXCEEDS 100%' : `${(100 - totalPct).toFixed(0)}% REMAINING`)}
+                                            </div>
+                                        </div>
+                                        {/* Progress Bar */}
+                                        <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                                            <div style={{ 
+                                                height: '100%', width: `${Math.min(100, totalPct)}%`, 
+                                                background: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b'),
+                                                transition: 'width 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                            }} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.75rem' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Stakeholder</th>
+                                                <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Split (%)</th>
+                                                <th style={{ textAlign: 'right', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Computed Share</th>
+                                                <th style={{ width: '50px' }}></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {profitStakeholders.map((sh, idx) => (
+                                                <tr key={sh.id} style={{ background: 'rgba(255,255,255,0.01)', transition: 'transform 0.2s', hover: { transform: 'translateX(5px)' } }}>
+                                                    <td style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem 0 0 0.75rem', borderLeft: '3px solid #10b981' }}>
+                                                        <input 
+                                                            value={sh.name}
+                                                            onChange={(e) => {
+                                                                const newSh = [...profitStakeholders];
+                                                                newSh[idx].name = e.target.value;
+                                                                setProfitStakeholders(newSh);
+                                                            }}
+                                                            placeholder="Stakeholder name"
+                                                            style={{ 
+                                                                background: 'transparent', border: 'none', color: 'white',
+                                                                padding: '0.5rem', width: '100%', outline: 'none', fontSize: '0.95rem', fontWeight: 500
+                                                            }}
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                                            <input 
+                                                                type="number"
+                                                                value={sh.percent}
+                                                                onChange={(e) => {
+                                                                    const newSh = [...profitStakeholders];
+                                                                    newSh[idx].percent = parseFloat(e.target.value || 0);
+                                                                    setProfitStakeholders(newSh);
+                                                                }}
+                                                                style={{ 
+                                                                    background: 'transparent', border: 'none', color: 'white',
+                                                                    padding: '0.3rem', width: '50px', textAlign: 'center', outline: 'none', fontWeight: 600
+                                                                }}
+                                                            />
+                                                            <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>%</span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>
+                                                        {formatCurrency((sh.percent / 100) * totalProfit)}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', borderRadius: '0 0.75rem 0.75rem 0' }}>
+                                                        <button 
+                                                            onClick={() => setProfitStakeholders(profitStakeholders.filter(s => s.id !== sh.id))}
+                                                            style={{ 
+                                                                background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444', 
+                                                                cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                            }}
+                                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; }}
+                                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)'; }}
+                                                            title="Remove stakeholder"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        );
+                    })()}
                 </div>
             </div>
         </div>

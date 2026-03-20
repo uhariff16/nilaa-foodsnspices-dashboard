@@ -1068,17 +1068,13 @@ const Dashboard = (props) => {
 
     // [NEW] Calculate Today's Sales (Live)
     const todaySales = React.useMemo(() => {
-        if (!data.transactions) return 0;
         const now = new Date();
         const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
 
-        return data.transactions.reduce((sum, t) => {
-            if (t.parsedDate === todayStr && String(t.parsedType).toLowerCase().includes('sale')) {
-                return sum + (t.parsedAmount || 0);
-            }
-            return sum;
-        }, 0);
-    }, [data.transactions]);
+        return salesTransactions
+            .filter(t => t.parsedDate === todayStr)
+            .reduce((sum, t) => sum + Math.abs(t.parsedAmount || 0), 0);
+    }, [salesTransactions]);
 
     // [NEW] Previous Month Stats for Simulator Defaults
     // [NEW] Previous Month Stats for Simulator Defaults

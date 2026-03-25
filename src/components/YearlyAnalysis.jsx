@@ -83,7 +83,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     const [showSettingsDropdown, setShowSettingsDropdown] = React.useState(false);
     const [analysisViewMode, setAnalysisViewMode] = React.useState('monthly'); // 'monthly' | 'yearly'
     const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
-    
+
     // Profit Stakeholder Settings
     const [profitStakeholders, setProfitStakeholders] = React.useState(() => {
         try {
@@ -123,7 +123,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
 
                 if (!retailRes.error && !wholesaleRes.error) {
                     const history = {};
-                    
+
                     // Group by Month-Year and Item
                     const processSims = (data, channel) => {
                         (data || []).forEach(item => {
@@ -142,7 +142,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     // but ONLY within the same year of analysis to avoid showing futuristic knowledge
                     // Wait, user says "Simulator data should be according to the date. The same cost should not be shown for previous months."
                     // This means Feb shouldn't show March data. But March CAN show Feb data if no March simulation exists.
-                    
+
                     const months = Object.keys(history).sort();
                     if (months.length > 0) {
                         const firstMonth = months[0];
@@ -164,7 +164,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
         const availableMonths = Object.keys(simHistory)
             .filter(m => m <= targetMonthStr)
             .sort((a, b) => b.localeCompare(a)); // Newest first but <= target
-        
+
         for (const m of availableMonths) {
             if (simHistory[m][channel] && simHistory[m][channel][normName]) {
                 return simHistory[m][channel][normName];
@@ -411,7 +411,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     // --- Pass 2: Allocate Actual Costs Based on Theoretical Ratios ---
                     Object.entries(itemProduction).forEach(([originalName, weight]) => {
                         const normKey = normalizeName(originalName);
-                        
+
                         // Get item-specific benchmark
                         const simRetail = getSimForMonth(normKey, targetPrefix, 'retail');
                         const simWholesale = getSimForMonth(normKey, targetPrefix, 'wholesale');
@@ -420,7 +420,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         // Share of the "Spend" is now weighted by complexity (Benchmark * Weight)
                         const theoreticalItemTotal = weight * benchmarkUnitCost;
                         const expenseShare = totalTheoreticalCost > 0 ? theoreticalItemTotal / totalTheoreticalCost : 0;
-                        
+
                         const itemAllocatedTotal = expenseShare * totalExpenses;
                         const itemUnitCost = weight > 0 ? itemAllocatedTotal / weight : 0;
 
@@ -459,33 +459,33 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             const name = Array.from(data.originalNames)[0];
                             const itemAsp = data.weight > 0 ? data.revenue / data.weight : 0;
 
-                                const simRetail = getSimForMonth(normKey, targetPrefix, 'retail');
-                                const simWholesale = getSimForMonth(normKey, targetPrefix, 'wholesale');
-                                const benchmarkCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : 0);
-                                
-                                const itemProfitPerKg = itemAsp > 0 ? (itemAsp - benchmarkCost) : 0;
-                                const itemMargin = itemAsp > 0 ? (itemProfitPerKg / itemAsp) * 100 : 0;
+                            const simRetail = getSimForMonth(normKey, targetPrefix, 'retail');
+                            const simWholesale = getSimForMonth(normKey, targetPrefix, 'wholesale');
+                            const benchmarkCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : 0);
 
-                                breakdown.push({
-                                    name: name,
-                                    weight: 0,
-                                    share: 0,
-                                    allocatedCost: 0,
-                                    materials: 0,
-                                    labour: 0,
-                                    packaging: 0,
-                                    bills: 0,
-                                    other: 0,
-                                    marketing: 0,
-                                    asp: itemAsp,
-                                    minPrice: data.minPrice === Infinity ? 0 : data.minPrice,
-                                    maxPrice: data.maxPrice === -Infinity ? 0 : data.maxPrice,
-                                    profitPerKg: itemProfitPerKg,
-                                    margin: itemMargin,
-                                    revenue: data.revenue,
-                                    qty: data.weight,
-                                    isProduct: false
-                                });
+                            const itemProfitPerKg = itemAsp > 0 ? (itemAsp - benchmarkCost) : 0;
+                            const itemMargin = itemAsp > 0 ? (itemProfitPerKg / itemAsp) * 100 : 0;
+
+                            breakdown.push({
+                                name: name,
+                                weight: 0,
+                                share: 0,
+                                allocatedCost: 0,
+                                materials: 0,
+                                labour: 0,
+                                packaging: 0,
+                                bills: 0,
+                                other: 0,
+                                marketing: 0,
+                                asp: itemAsp,
+                                minPrice: data.minPrice === Infinity ? 0 : data.minPrice,
+                                maxPrice: data.maxPrice === -Infinity ? 0 : data.maxPrice,
+                                profitPerKg: itemProfitPerKg,
+                                margin: itemMargin,
+                                revenue: data.revenue,
+                                qty: data.weight,
+                                isProduct: false
+                            });
                         }
                     });
 
@@ -1195,7 +1195,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             const itemUnitCost = data.weight > 0 ? data.allocatedCost / data.weight : 0;
                                             const itemProfitPerKg = itemAsp - itemUnitCost;
                                             const itemMargin = itemAsp > 0 ? (itemProfitPerKg / itemAsp) * 100 : 0;
-                                            
+
                                             // Determine target month for simulation lookup
                                             const targetMonthStr = analysisViewMode === 'monthly' && selectedAnalysisMonth
                                                 ? `${selectedYear}-${String(monthNames.indexOf(selectedAnalysisMonth) + 1).padStart(2, '0')}`
@@ -1204,39 +1204,39 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             const simRetail = getSimForMonth(normName, targetMonthStr, 'retail');
                                             const simWholesale = getSimForMonth(normName, targetMonthStr, 'wholesale');
                                             const simCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : null);
-                                        const currentSimRetail = simRetail?.suggested_price || 0;
-                                        const currentSimWholesale = simWholesale?.suggested_price || 0;
+                                            const currentSimRetail = simRetail?.suggested_price || 0;
+                                            const currentSimWholesale = simWholesale?.suggested_price || 0;
 
-                                        totalRev += data.revenue;
-                                        totalWeightSold += data.weightSold;
-                                        totalWeightProduced += data.weight;
-                                        totalActualCost += data.allocatedCost;
-                                        totalAllocated += data.allocatedCost;
-                                        totalMaterials += (data.materials || 0);
-                                        totalLabour += (data.labour || 0);
-                                        totalPackaging += (data.packaging || 0);
-                                        totalOverheads += (data.bills || 0) + (data.other || 0) + (data.marketing || 0);
-                                        
-                                        if (simCost) {
-                                            totalSimProfit += data.revenue - (data.weightSold * simCost);
-                                            totalSimRevForMargin += data.revenue;
-                                            totalSimCostVal += data.weightSold * simCost;
-                                            totalSimRetailVal += data.weightSold * currentSimRetail;
-                                            totalSimWholesaleVal += data.weightSold * currentSimWholesale;
-                                        }
+                                            totalRev += data.revenue;
+                                            totalWeightSold += data.weightSold;
+                                            totalWeightProduced += data.weight;
+                                            totalActualCost += data.allocatedCost;
+                                            totalAllocated += data.allocatedCost;
+                                            totalMaterials += (data.materials || 0);
+                                            totalLabour += (data.labour || 0);
+                                            totalPackaging += (data.packaging || 0);
+                                            totalOverheads += (data.bills || 0) + (data.other || 0) + (data.marketing || 0);
+
+                                            if (simCost) {
+                                                totalSimProfit += data.revenue - (data.weightSold * simCost);
+                                                totalSimRevForMargin += data.revenue;
+                                                totalSimCostVal += data.weightSold * simCost;
+                                                totalSimRetailVal += data.weightSold * currentSimRetail;
+                                                totalSimWholesaleVal += data.weightSold * currentSimWholesale;
+                                            }
 
                                             return (
                                                 <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                                     <td style={{ textAlign: 'left', padding: '1rem 0.5rem', fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{name}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
-                                                    
+
                                                     {/* Actual Spend Section - Amber */}
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.04)', borderLeft: '2px solid rgba(245, 158, 11, 0.2)' }}>{formatCurrency(data.allocatedCost)}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.materials)}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.labour)}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.packaging)}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency((data.bills || 0) + (data.other || 0) + (data.marketing || 0))}</td>
-                                                    
+
                                                     {/* Simulator Columns - Blue */}
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)', borderLeft: '2px solid rgba(59, 130, 246, 0.15)' }}>
                                                         {simCost ? `₹${simCost.toFixed(1)}` : '-'}
@@ -1278,7 +1278,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                         const itemAsp = data.weightSold > 0 ? data.revenue / data.weightSold : 0;
                                         const itemUnitCost = data.weight > 0 ? data.allocatedCost / data.weight : 0;
                                         const itemProfitPerKg = itemAsp - itemUnitCost;
-                                        
+
                                         totalRevForSum += data.revenue;
                                         totalWeightSoldForSumVal += data.weightSold;
                                         totalProfitValForSum += (itemProfitPerKg * data.weightSold);
@@ -1307,13 +1307,13 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalLabour)}</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalPackaging)}</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalOverheads)}</td>
-                                            
+
                                             {/* Simulator Summary - Blue */}
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimCostAll > 0 ? `₹${avgSimCostAll.toFixed(1)}` : '-'}</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimRetailAll > 0 ? `₹${avgSimRetailAll.toFixed(1)}` : '-'}</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimWholesaleAll > 0 ? `₹${avgSimWholesaleAll.toFixed(1)}` : '-'}</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)' }}>{totalSimMargin !== null ? `${totalSimMargin.toFixed(1)}%` : '-'}</td>
-                                            
+
                                             {/* Market Summary - Green */}
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgSellingPriceAll.toFixed(1)}/kg</td>
                                             <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{(avgSellingPriceAll - avgProfitPerKgAll).toFixed(1)}/kg</td>
@@ -1448,13 +1448,13 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                         <Plus size={16} /> Add Stakeholder
                     </button>
                 </div>
-                
+
                 <div style={{ padding: '2rem' }}>
                     {(() => {
-                        const totalProfit = analysisViewMode === 'yearly' 
+                        const totalProfit = analysisViewMode === 'yearly'
                             ? yearlyData.reduce((acc, m) => acc + (m.isActive ? m.netProfit : 0), 0)
                             : (yearlyData.find(m => m.name === selectedAnalysisMonth)?.netProfit || 0);
-                        
+
                         const totalPct = profitStakeholders.reduce((acc, s) => acc + parseFloat(s.percent || 0), 0);
 
                         return (
@@ -1481,8 +1481,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                         </div>
                                         {/* Progress Bar */}
                                         <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                                            <div style={{ 
-                                                height: '100%', width: `${Math.min(100, totalPct)}%`, 
+                                            <div style={{
+                                                height: '100%', width: `${Math.min(100, totalPct)}%`,
                                                 background: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b'),
                                                 transition: 'width 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
                                             }} />
@@ -1504,7 +1504,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             {profitStakeholders.map((sh, idx) => (
                                                 <tr key={sh.id} style={{ background: 'rgba(255,255,255,0.01)', transition: 'transform 0.2s', hover: { transform: 'translateX(5px)' } }}>
                                                     <td style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem 0 0 0.75rem', borderLeft: '3px solid #10b981' }}>
-                                                        <input 
+                                                        <input
                                                             value={sh.name}
                                                             onChange={(e) => {
                                                                 const newSh = [...profitStakeholders];
@@ -1512,7 +1512,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                                 setProfitStakeholders(newSh);
                                                             }}
                                                             placeholder="Stakeholder name"
-                                                            style={{ 
+                                                            style={{
                                                                 background: 'transparent', border: 'none', color: 'white',
                                                                 padding: '0.5rem', width: '100%', outline: 'none', fontSize: '0.95rem', fontWeight: 500
                                                             }}
@@ -1520,7 +1520,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                     </td>
                                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                                                         <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                                            <input 
+                                                            <input
                                                                 type="number"
                                                                 value={sh.percent}
                                                                 onChange={(e) => {
@@ -1528,7 +1528,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                                     newSh[idx].percent = parseFloat(e.target.value || 0);
                                                                     setProfitStakeholders(newSh);
                                                                 }}
-                                                                style={{ 
+                                                                style={{
                                                                     background: 'transparent', border: 'none', color: 'white',
                                                                     padding: '0.3rem', width: '50px', textAlign: 'center', outline: 'none', fontWeight: 600
                                                                 }}
@@ -1540,10 +1540,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                         {formatCurrency((sh.percent / 100) * totalProfit)}
                                                     </td>
                                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center', borderRadius: '0 0.75rem 0.75rem 0' }}>
-                                                        <button 
+                                                        <button
                                                             onClick={() => setProfitStakeholders(profitStakeholders.filter(s => s.id !== sh.id))}
-                                                            style={{ 
-                                                                background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444', 
+                                                            style={{
+                                                                background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444',
                                                                 cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem',
                                                                 display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                             }}

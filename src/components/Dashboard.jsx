@@ -5,7 +5,6 @@ import * as XLSX from 'xlsx';
 import SummaryCards, { Card } from './SummaryCards';
 import Charts from './Charts';
 import ItemAnalysis from './ItemAnalysis';
-import CustomerAnalysis from './CustomerAnalysis';
 import ProductionDashboard from './ProductionDashboard';
 import TimeAttendance from './TimeAttendance';
 import ProcurementDashboard from './ProcurementDashboard';
@@ -23,6 +22,7 @@ import logo from '../assets/logo.png'; // Import logo
 import MobileDashboard from './mobile/MobileDashboard';
 import { supabase } from '../lib/supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import CustomerInsights from './CustomerInsights';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -569,82 +569,7 @@ const Dashboard = (props) => {
                 });
             };
 
-            const getCustomersForMonth = (month) => {
-                if (month === 'Overall') return data.customers || [];
-                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                return (data.customers || []).filter(cust => {
-                    if (!cust.parsedDate) return true;
-                    let cMonthYear = '';
-                    if (cust.parsedDate.includes('-')) {
-                        const parts = cust.parsedDate.split('-');
-                        if (parts.length >= 3) {
-                            const year = parts[0];
-                            const monthIndex = parseInt(parts[1], 10) - 1;
-                            if (monthNames[monthIndex]) {
-                                cMonthYear = monthNames[monthIndex] + ' ' + year;
-                            }
-                        }
-                    } else if (cust.parsedDate.includes(' ')) {
-                        const parts = cust.parsedDate.split(' ');
-                        if (parts.length >= 3) {
-                            cMonthYear = parts[1] + ' ' + parts[2];
-                        }
-                    }
-                    return cMonthYear === month;
-                });
-            };
 
-            // 2. Export Strategy:
-            // If "Overall" selected -> Export Overall Summary + Separate Sheets for Each Month
-            // If Specific Month selected -> Export Only That Month
-
-            const monthsToExport = selectedMonth === 'Overall' ? availableMonths : [selectedMonth];
-
-            monthsToExport.forEach(month => {
-                if (month === 'Overall') {
-                    // Export Aggregated Overall
-                    const aggregatedItems = aggregateByName(data.items || []);
-                    if (aggregatedItems.length > 0) {
-                        const ws = XLSX.utils.json_to_sheet(aggregatedItems.map(({ name, qty, revenue, profit }) => ({
-                            "Item Name": name, "Qty Sold": qty, "Revenue": revenue, "Profit": profit
-                        })));
-                        XLSX.utils.book_append_sheet(wb, ws, "Items (Overall)");
-                    }
-                    const aggregatedCust = aggregateByName(data.customers || []);
-                    if (aggregatedCust.length > 0) {
-                        const ws = XLSX.utils.json_to_sheet(aggregatedCust.map(({ name, revenue, profit }) => ({
-                            "Customer Name": name, "Revenue": revenue, "Profit": profit
-                        })));
-                        XLSX.utils.book_append_sheet(wb, ws, "Customers (Overall)");
-                    }
-                } else {
-                    // Export Specific Month
-                    const monthItems = aggregateByName(getItemsForMonth(month));
-                    if (monthItems.length > 0) {
-                        const ws = XLSX.utils.json_to_sheet(monthItems.map(({ name, qty, revenue, profit }) => ({
-                            "Item Name": name, "Qty Sold": qty, "Revenue": revenue, "Profit": profit
-                        })));
-                        // Sheet name max length 31 chars
-                        const sheetName = ("Items - " + month).substring(0, 31);
-                        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-                    }
-
-                    const monthCust = aggregateByName(getCustomersForMonth(month));
-                    if (monthCust.length > 0) {
-                        const ws = XLSX.utils.json_to_sheet(monthCust.map(({ name, revenue, profit }) => ({
-                            "Customer Name": name, "Revenue": revenue, "Profit": profit
-                        })));
-                        const sheetName = ("Cust - " + month).substring(0, 31);
-                        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-                    }
-                }
-            });
-
-            // 3. Customers Sheet
-            if (data.customers && data.customers.length > 0) {
-                const wsCustomers = XLSX.utils.json_to_sheet(data.customers);
-                XLSX.utils.book_append_sheet(wb, wsCustomers, "Top Customers (All Time)");
-            }
 
             XLSX.writeFile(wb, "Report_" + selectedMonth.replace(' ', '_') + ".xlsx");
         } catch (err) {
@@ -653,48 +578,6 @@ const Dashboard = (props) => {
         }
     };
 
-    // 3. Process Customers (Dynamic Aggregation from Transactions)
-    const aggregatedCustomers = React.useMemo(() => {
-        const custMap = {};
-
-        // Aggregate from Filtered Transactions
-        filteredTransactions.forEach(t => {
-            if (t.parsedType === 'Sales' && t.customerName) {
-                // Determine Customer Name (clean it up)
-                const name = t.customerName.trim();
-                // Skip generic counters if needed, but for now capture all
-                if (!custMap[name]) {
-                    custMap[name] = { name: name, revenue: 0, profit: 0, count: 0 };
-                }
-                custMap[name].revenue += t.parsedAmount;
-                // [NEW] Accumulate Profit if available in DB
-                custMap[name].profit += (t.profit || 0);
-                custMap[name].count++;
-            }
-        });
-
-        // Convert Map to Array
-        let dynamicCustomers = Object.values(custMap);
-
-        // Fallback: If no dynamic names found (old data?), try to use the legacy customers array if populated
-        if (dynamicCustomers.length === 0 && data.customers && data.customers.length > 0) {
-            return data.customers.filter(c => {
-                if (!c.parsedDate) return false;
-                if (!c.parsedDate.startsWith(selectedYear)) return false;
-                // Simple matching for month
-                if (selectedMonth === 'Overall') return true;
-                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                const [y, m, d] = c.parsedDate.split('-');
-                // Parsing depends on format, but assuming DB standard YYYY-MM-DD
-                if (!m) return false;
-                const my = `${monthNames[parseInt(m) - 1]} ${y}`;
-                return my === selectedMonth;
-            });
-        }
-
-        return dynamicCustomers.sort((a, b) => b.revenue - a.revenue);
-
-    }, [filteredTransactions, data.customers, selectedMonth, selectedYear]);
 
     // 3. Filter Items and Customers
     const filteredItems = React.useMemo(() => {
@@ -752,93 +635,6 @@ const Dashboard = (props) => {
         return result;
     }, [data.items, selectedMonth, filteredTransactions, selectedYear]);
 
-    const filteredCustomers = React.useMemo(() => {
-        let custToFilter = data.customers || [];
-        console.log("DEBUG: All Customers Count:", custToFilter.length);
-        if (custToFilter.length > 0) console.log("DEBUG: Sample Customer:", custToFilter[0]);
-
-        let result = [];
-
-        if (selectedMonth === 'Overall') {
-            // Strict Year Filtering for Overall View
-            const yearFiltered = custToFilter.filter(cust => {
-                if (!cust.parsedDate) return false;
-                return cust.parsedDate.includes(selectedYear);
-            });
-            result = aggregateByName(yearFiltered);
-        } else {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-            const strictFiltered = custToFilter.filter(cust => {
-                if (!cust.parsedDate) return false;
-                let cMonthYear = '';
-                if (cust.parsedDate.includes('-')) {
-                    const parts = cust.parsedDate.split('-');
-                    if (parts.length >= 3) {
-                        const year = parts[0];
-                        const monthIndex = parseInt(parts[1], 10) - 1;
-                        if (monthNames[monthIndex]) {
-                            cMonthYear = monthNames[monthIndex] + ' ' + year;
-                        }
-                    }
-                } else if (cust.parsedDate.includes(' ')) {
-                    const parts = cust.parsedDate.split(' ');
-                    if (parts.length >= 3) {
-                        cMonthYear = parts[1] + ' ' + parts[2];
-                    }
-                }
-
-                return cMonthYear === selectedMonth;
-            });
-            result = aggregateByName(strictFiltered);
-        }
-
-        // Fallback: Use Transactions if Master List filtering failed
-        if (result.length === 0 && selectedMonth !== 'Overall' && filteredTransactions.length > 0) {
-            // We have the Master Customer List (without dates) in 'custToFilter' (or data.customers)
-            // We have dated Transactions in 'filteredTransactions'
-            // Let's try to match Transaction Descriptions to Customer Names
-            // Optimization: Convert valid names to array for iteration
-            const validCustomerList = (data.customers || []).map(c => ({
-                name: c.name,
-                lowerName: (c.name || '').trim().toLowerCase(),
-                profit: c.profit,
-                revenue: c.revenue
-            })).filter(c => c.name && c.name !== 'Unknown');
-
-
-
-            const fallbackMap = {}; // Restored missing variable
-
-            filteredTransactions.forEach(t => {
-                if (!String(t.parsedType).toLowerCase().includes('sale')) return;
-
-                const desc = (t.originalDesc || '').trim();
-                const descLower = desc.toLowerCase();
-
-                // Relaxed Matching: Check if transaction description CONTAINS the customer name
-                // Try exact match first implicitly by containing, but we need to find the record.
-                const matchedRecord = validCustomerList.find(c => descLower.includes(c.lowerName));
-
-                // If found, aggregate
-                if (matchedRecord) {
-                    const matchedName = matchedRecord.name;
-                    if (!fallbackMap[matchedName]) fallbackMap[matchedName] = { name: matchedName, revenue: 0, profit: 0 };
-                    fallbackMap[matchedName].revenue += (t.parsedAmount || 0);
-
-                    // Estimate Profit using overall margin from master record
-                    if (matchedRecord.revenue > 0) {
-                        const margin = matchedRecord.profit / matchedRecord.revenue;
-                        fallbackMap[matchedName].profit += (t.parsedAmount || 0) * margin;
-                    }
-                }
-            });
-
-            result = Object.values(fallbackMap);
-        }
-
-        return result;
-    }, [data.customers, selectedMonth, filteredTransactions, selectedYear]);
 
 
     // Calculate Last Updated Dates Separately
@@ -878,8 +674,8 @@ const Dashboard = (props) => {
             if (selectedMonth === 'Overall') {
                 const osEntries = props.productionData.stockIn.filter(item => {
                     const itemName = (item.material || item.item || '').trim().toUpperCase();
-                    return item.date && item.date.startsWith(targetPrefix) && 
-                           (itemName.startsWith('OS') || itemName.includes('OPENING') || itemName.includes('B/F'));
+                    return item.date && item.date.startsWith(targetPrefix) &&
+                        (itemName.startsWith('OS') || itemName.includes('OPENING') || itemName.includes('B/F'));
                 });
                 if (osEntries.length > 0) {
                     // Sort by date to find the earliest month
@@ -989,10 +785,10 @@ const Dashboard = (props) => {
                 // 2. Legacy Keywords & Rules (Fallback)
                 const materialKeywords = ['GINGER', 'GARLIC', 'ONION', 'SMALL ONION', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'POONDU', 'DESI 3A', 'DESI 4A'];
                 const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE'];
-                
+
                 const hasPBill = item.invoiceNo && String(item.invoiceNo).trim().toUpperCase().startsWith('P-');
                 const isEssential = nameUpper.includes('ESSENTIAL');
-                
+
                 let isMaterial = (type === 'Purchase') || hasPBill;
                 let isLabour = labourKeywords.some(keyword => nameUpper.includes(keyword));
                 let isOverhead = false;
@@ -1272,11 +1068,9 @@ const Dashboard = (props) => {
             <MobileDashboard
                 data={data}
                 filteredTransactions={filteredTransactions} // [NEW] Pass pre-filtered data
-                filteredCustomers={filteredCustomers} // [NEW] Sync Top Customer Logic
                 selectedMonth={selectedMonth} // [NEW] Pass context
                 selectedYear={selectedYear} // [NEW] Pass context
                 productionData={props.productionData}
-                receivables={data.receivables}
                 manualExpenses={manualExpenses}
                 previousMonthStats={previousMonthStats} // [NEW] For Cost Simulator
                 onSwitchToDesktop={() => setMobileLayoutEnabled(false)} // [NEW] Ext Desktop View
@@ -1678,20 +1472,17 @@ const Dashboard = (props) => {
                 </button>
 
                 <button
-                    onClick={() => setActiveTab('customers')}
+                    onClick={() => setActiveTab('insights')}
                     style={{
                         background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'customers' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'customers' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'customers' ? 600 : 400
+                        color: activeTab === 'insights' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'insights' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'insights' ? 600 : 400
                     }}
                 >
                     <Users size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Customers
+                    Customer
                 </button>
-
-
-
 
 
 
@@ -2536,7 +2327,7 @@ const Dashboard = (props) => {
                                             <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                                 Item Name {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
                                             </div>
-                                            <div onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'count', direction: p.key === 'count' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
                                                 Count {expenseSort.key === 'count' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
                                             </div>
                                             <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
@@ -2744,12 +2535,6 @@ const Dashboard = (props) => {
 
 
 
-            {activeTab === 'items' && <ItemAnalysis data={filteredItems} />}
-            {
-                activeTab === 'customers' && (
-                    <CustomerAnalysis data={filteredCustomers} receivables={props.data?.receivables || []} />
-                )
-            }
 
             {activeTab === 'stock' && <StockDashboard productionData={props.productionData} salesData={filteredItems} procurementData={props.summaryData} selectedMonth={selectedMonth} selectedYear={selectedYear} />}
             {activeTab === 'production' && <ProductionDashboard data={props.productionData} selectedMonth={selectedMonth} selectedYear={selectedYear} isAdmin={isAdmin} />}
@@ -2764,6 +2549,8 @@ const Dashboard = (props) => {
                     />
                 )
             }
+
+            {activeTab === 'insights' && <CustomerInsights selectedMonth={selectedMonth} />}
 
             {
                 activeTab === 'simulator' && (
@@ -2788,5 +2575,6 @@ const Dashboard = (props) => {
         </div >
     );
 };
+
 
 export default Dashboard;

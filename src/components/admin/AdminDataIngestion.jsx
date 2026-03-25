@@ -79,6 +79,9 @@ const AdminDataIngestion = () => {
         // Load Google Scripts
         loadGapi(() => setGapiLoaded(true));
         loadGis(() => setGisLoaded(true));
+        
+        // Check DB Status on Mount
+        checkDbStatus(true);
     }, []);
 
     useEffect(() => {
@@ -335,13 +338,19 @@ const AdminDataIngestion = () => {
         if (!silent) setStatus({ type: 'idle', message: '' });
         try {
             const { count: txCount, error: txError } = await supabase.from('transactions').select('*', { count: 'exact', head: true });
-            const { count: custCount, error: cError } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).not('customer_name', 'is', null);
+            const { count: custCount, error: cError } = await supabase.from('customer_stats').select('*', { count: 'exact', head: true });
             const { count: plCount, error: plError } = await supabase.from('production_logs').select('*', { count: 'exact', head: true });
+            const { count: recCount, error: recError } = await supabase.from('customer_receivables').select('*', { count: 'exact', head: true });
 
             if (txError) throw txError;
             if (plError) throw plError;
 
-            setDbReport({ transactions: txCount, production: plCount, customers: custCount || 0 });
+            setDbReport({ 
+                transactions: txCount, 
+                production: plCount, 
+                customers: custCount || 0,
+                receivables: recCount || 0
+            });
             if (!silent) setStatus({ type: 'success', message: "Database connection healthy." });
         } catch (error) {
             console.error(error);
@@ -444,10 +453,13 @@ const AdminDataIngestion = () => {
         const result = await parseExcelFile([file]);
         const data = result.transactions || [];
         const receivablesData = result.receivables || [];
+        const customerStatsData = result.customers || [];
+
         const hasTransactions = data && data.length > 0;
         const hasReceivables = receivablesData.length > 0;
+        const hasCustomerStats = customerStatsData.length > 0;
 
-        if (!hasTransactions && !hasReceivables) {
+        if (!hasTransactions && !hasReceivables && !hasCustomerStats) {
             return { success: false, message: 'No valid records found' };
         }
 
@@ -510,29 +522,37 @@ const AdminDataIngestion = () => {
         // 2. Receivables (Replace Strategy)
         if (hasReceivables) {
             const mappedReceivables = receivablesData.map(r => ({
-                status: r.status,
-                invoice_no: r.invoiceNo,
-                date: r.date,
-                customer_name: r.customerName,
+                customer_name: r.customer_name,
                 address: r.address,
                 city: r.city,
-                gstin: r.gstin,
-                amount: r.amount,
-                balance: r.balanceDue,
-                due_date: r.dueDate,
-                aging: r.aging,
-                updated_at: new Date()
+                phone: r.phone,
+                balance_due: r.balance_due,
+                created_at: new Date()
             }));
 
-
-            await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
+            // Clear old receivables before inserting new snapshot
+            await supabase.from('customer_receivables').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             const { error } = await supabase.from('customer_receivables').insert(mappedReceivables);
             if (!error) {
                 addedRec = mappedReceivables.length;
             } else {
-                console.error("Receivables Schema Insert Error:", error);
-                throw new Error(`Receivables DB Error: ${error.message}. Please ensure customer_receivables table has columns: status, invoice_no, date, amount, due_date, aging, gstin.`);
+                console.error("Receivables Insert Error:", error);
+                throw new Error(`Receivables DB Error: ${error.message}`);
             }
+        }
+
+        // 3. Customer Profit Stats
+        let addedCustStats = 0;
+        if (result.customers && result.customers.length > 0) {
+            const stats = result.customers.map(c => ({
+                date: c.parsedDate,
+                customer_name: c.name,
+                revenue: c.revenue,
+                profit: c.profit
+            }));
+            const { error } = await supabase.from('customer_stats').upsert(stats, { onConflict: 'date, customer_name' });
+            if (!error) addedCustStats = stats.length;
+            else console.error("Customer Stats Upsert Error:", error);
         }
 
         return {
@@ -540,7 +560,8 @@ const AdminDataIngestion = () => {
             newTxns: uniqueTransactions.length,
             updatedTxns: updates.length,
             receivables: addedRec,
-            message: `Processed: ${uniqueTransactions.length} new txns, ${updates.length} updated, ${addedRec} receivables.`
+            custStats: addedCustStats,
+            message: `Processed: ${uniqueTransactions.length} txns, ${addedRec} latest receivables (replaced existing), ${addedCustStats} profit records.`
         };
     };
 
@@ -665,15 +686,13 @@ const AdminDataIngestion = () => {
                     } else if (type === 'sales') {
                         const result = await parseExcelFile([file]);
                         const data = result.transactions || [];
-                        const receivablesData = result.receivables || [];
 
-                        if (data.length === 0 && receivablesData.length === 0) {
+                        if (data.length === 0) {
                             skipCount++;
                             continue;
                         }
 
                         let fileAddedCount = 0;
-                        let addedCust = 0;
 
                         // 1. Transactions
                         if (data.length > 0) {
@@ -728,76 +747,8 @@ const AdminDataIngestion = () => {
                             }
                         }
 
-                        // 2. Receivables (Direct Insert/Update)
-                        if (receivablesData.length > 0) {
-                            const mappedReceivables = receivablesData.map(r => ({
-                                status: r.status,
-                                invoice_no: r.invoiceNo,
-                                date: r.date,
-                                customer_name: r.customerName,
-                                address: r.address,
-                                city: r.city,
-                                gstin: r.gstin,
-                                amount: r.amount,
-                                balance: r.balanceDue,
-                                due_date: r.dueDate,
-                                aging: r.aging,
-                                updated_at: new Date()
-                            }));
-                            // 2. Receivables
-                            // [NEW] Logic: Replace existing data if new data found.
-                            // Only clear once per batch (on first file with receivables)
-                            if (!receivablesCleared) {
-                                await supabase.from('customer_receivables').delete().neq('customer_name', '_placeholder_');
-                                receivablesCleared = true;
-                            }
-
-                            const { error: recError } = await supabase.from('customer_receivables').insert(mappedReceivables);
-                            if (!recError) {
-                                fileAddedCount += mappedReceivables.length;
-                            } else {
-                                console.error("Receivables Schema Insert Error:", recError);
-                                throw new Error(`Receivables DB Error: ${recError.message}. Please ensure customer_receivables table schema is up to date.`);
-                            }
-                        }
-
-                        // 3. Customer Stats (Restored)
-                        const customerData = result.customers || [];
-                        if (customerData.length > 0) {
-                            const mappedCustomers = customerData.map(c => ({
-                                customer_name: String(c.name).trim().toUpperCase(),
-                                revenue: c.revenue,
-                                profit: c.profit,
-                                date: c.parsedDate
-                            })).filter(c => c.date); // Ensure date exists
-
-                            if (mappedCustomers.length > 0) {
-                                // Simple Batch Insert - rely on table constraints or ignore duplicates for speed
-                                // OR: Check existing if we want to be safe. 
-                                // Let's try direct insert but log errors instead of crashing, 
-                                // assuming 'customer_stats' allows multiple entries or we need to dedup.
-                                // Best practice: Check range.
-
-                                const cDates = mappedCustomers.map(c => c.date).sort();
-                                const cMin = cDates[0];
-                                const cMax = cDates[cDates.length - 1];
-
-                                const existingCusts = await fetchAllRecords('customer_stats', 'date, customer_name, revenue', cMin, cMax);
-                                const custSig = (c) => `${String(c.date).split('T')[0]}|${String(c.customer_name).trim().toUpperCase()}`;
-                                const existingCustSet = new Set(existingCusts.map(custSig));
-
-                                const newCustStats = mappedCustomers.filter(c => !existingCustSet.has(custSig(c)));
-
-                                if (newCustStats.length > 0) {
-                                    const { error: custError } = await supabase.from('customer_stats').insert(newCustStats);
-                                    if (!custError) addedCust += newCustStats.length;
-                                    else console.warn("Customer Stats Insert Error (Batch):", custError.message);
-                                }
-                            }
-                        }
-
-                        if (fileAddedCount > 0 || addedCust > 0) {
-                            newRecordsCount += (fileAddedCount + addedCust);
+                        if (fileAddedCount > 0) {
+                            newRecordsCount += fileAddedCount;
                             successCount++;
                         } else {
                             skipCount++;
@@ -928,6 +879,11 @@ const AdminDataIngestion = () => {
                     <div className="stat-card">
                         <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{dbReport.production.toLocaleString()}</p>
                         <p style={{ fontSize: '0.75rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Production Logs</p>
+                    </div>
+
+                    <div className="stat-card">
+                        <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{dbReport.receivables.toLocaleString()}</p>
+                        <p style={{ fontSize: '0.75rem', color: '#fca5a5', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Receivables</p>
                     </div>
                 </div>
             )}
@@ -1079,7 +1035,7 @@ const AdminDataIngestion = () => {
 
                     <div>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-primary)', margin: 0 }}>Sales & Expenses</h3>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Parses Invoicewise Excel Reports</p>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>Parses Sales, Expenses, and Customer Insights</p>
 
                     </div>
 

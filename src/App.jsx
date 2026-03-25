@@ -100,7 +100,7 @@ const ProtectedRoute = ({ children, adminOnly = false, attendanceOnly = false, d
 
 // Main App Logic (Dashboard + Data Loading)
 const DashboardLayout = () => {
-    const [data, setData] = useState({ transactions: [], items: [], customers: [], receivables: [], attendance: [] });
+    const [data, setData] = useState({ transactions: [], items: [], attendance: [] });
     const [productionData, setProductionData] = useState({ stockIn: [], preProduction: [], postProduction: [] });
     const [purchaseData, setPurchaseData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -180,27 +180,6 @@ const DashboardLayout = () => {
                 pFrom += batchSize;
             }
 
-            // 3. Fetch Customer Stats
-            let allCusts = [];
-            let cFrom = 0;
-            while (true) {
-                const { data, error } = await supabase.from('customer_stats')
-                    .select('*').order('date', { ascending: true }).range(cFrom, cFrom + batchSize - 1);
-                if (error) { console.error("Error fetching customers:", error); break; }
-                allCusts = [...allCusts, ...data];
-                if (data.length < batchSize) break;
-                cFrom += batchSize;
-            }
-
-            const mappedCustomers = allCusts.map(c => ({
-                id: c.id,
-                name: c.customer_name,
-                revenue: Number(c.revenue),
-                profit: Number(c.profit),
-                parsedDate: c.date,
-                date: c.date,
-                createdAt: c.created_at // Pass timestamp
-            }));
 
             // 4. Fetch Attendance Data
             let allAttendance = [];
@@ -218,16 +197,6 @@ const DashboardLayout = () => {
                 console.warn("employee_attendance table might be empty or missing:", e);
             }
 
-            // 5. Fetch Customer Receivables (Provision)
-            let allReceivables = [];
-            try {
-                const { data: recData, error: recError } = await supabase.from('customer_receivables').select('*');
-                if (!recError && recData) {
-                    allReceivables = recData;
-                }
-            } catch (e) {
-                console.warn("Receivables table might not exist yet:", e);
-            }
 
             // Split logs
             const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
@@ -251,10 +220,7 @@ const DashboardLayout = () => {
 
             // Update State
             setData(prev => ({
-                ...prev,
                 transactions: mappedTransactions,
-                customers: mappedCustomers,
-                receivables: allReceivables,
                 attendance: allAttendance, // [NEW] Pass attendance to Dashboard
                 itemMaster: allItemMaster // [NEW] Pass Item Master to Dashboard
             }));
@@ -279,8 +245,7 @@ const DashboardLayout = () => {
         // For visual append only
         setData(prev => ({
             ...prev,
-            transactions: [...prev.transactions, ...(newData.transactions || [])],
-            customers: [...prev.customers, ...(newData.customers || [])]
+            transactions: [...prev.transactions, ...(newData.transactions || [])]
         }));
     };
 

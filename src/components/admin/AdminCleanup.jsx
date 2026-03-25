@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Trash2, Calendar, AlertTriangle, RefreshCw, CheckCircle, X, Bomb } from 'lucide-react';
+import { Trash2, Calendar, AlertTriangle, RefreshCw, CheckCircle, X, Bomb, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const AdminCleanup = () => {
-    const [mode, setMode] = useState('period'); // 'period' | 'all_production'
+    const [mode, setMode] = useState('period'); // 'period' | 'all_production' | 'customer_insights'
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState("");
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -11,7 +11,7 @@ const AdminCleanup = () => {
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
 
-    const [targets, setTargets] = useState({ sales: true, production: true, receivables: true });
+    const [targets, setTargets] = useState({ sales: true, production: true });
 
     // Generate Year Options
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -42,7 +42,7 @@ const AdminCleanup = () => {
                     return;
                 }
 
-                if (!targets.sales && !targets.production && !targets.receivables) {
+                if (!targets.sales && !targets.production) {
                     setStatus({ type: 'error', message: 'Please select at least one data type to clean.' });
                     setPreviewLoading(false);
                     return;
@@ -54,15 +54,6 @@ const AdminCleanup = () => {
 
                 let txCount = 0;
                 let plCount = 0;
-                let rxCount = 0;
-
-                if (targets.receivables) {
-                    const { count, error } = await supabase
-                        .from('customer_receivables')
-                        .select('*', { count: 'exact', head: true });
-                    if (error) throw error;
-                    rxCount = count || 0;
-                }
 
                 if (targets.sales) {
                     const { count, error } = await supabase
@@ -84,13 +75,12 @@ const AdminCleanup = () => {
                     plCount = count || 0;
                 }
 
-                const totalCount = txCount + plCount + rxCount;
+                const totalCount = txCount + plCount;
 
                 setPreviewData({
                     mode: 'period',
                     txCount,
                     plCount,
-                    rxCount,
                     totalCount,
                     period: `${selectedMonth} ${selectedYear}`
                 });
@@ -112,6 +102,21 @@ const AdminCleanup = () => {
                 });
 
                 if (count === 0) setStatus({ type: 'info', message: `Production Database is already empty.` });
+            } else if (mode === 'customer_insights') {
+                const { count: statsCount, error: sErr } = await supabase.from('customer_stats').select('*', { count: 'exact', head: true });
+                const { count: recCount, error: rErr } = await supabase.from('customer_receivables').select('*', { count: 'exact', head: true });
+
+                if (sErr) throw sErr;
+                if (rErr) throw rErr;
+
+                setPreviewData({
+                    mode: 'customer_insights',
+                    statsCount: statsCount || 0,
+                    recCount: recCount || 0,
+                    totalCount: (statsCount || 0) + (recCount || 0)
+                });
+
+                if ((statsCount || 0) + (recCount || 0) === 0) setStatus({ type: 'info', message: `Customer Insights data is already empty.` });
             }
 
         } catch (error) {
@@ -143,8 +148,6 @@ const AdminCleanup = () => {
             }
 
             // Perform Delete
-            // Note: supabase .delete() usually deletes all matching rows, but sometimes has a timeout/limit.
-            // We loop just to be safe and verify count drops to 0.
             const { error: deleteError } = await supabase
                 .from(table)
                 .delete()
@@ -153,9 +156,8 @@ const AdminCleanup = () => {
 
             if (deleteError) throw deleteError;
 
-            deletedTotal += count; // Estimate based on check
+            deletedTotal += count; 
 
-            // Safety break loop if it seems infinite (though delete should work)
             if (count === 0) hasMore = false;
         }
         return deletedTotal;
@@ -164,13 +166,17 @@ const AdminCleanup = () => {
     const handleDelete = async () => {
         if (!previewData || previewData.totalCount === 0) return;
 
-        const confirmMessage = mode === 'period'
-            ? `Are you SURE you want to delete data from ${previewData.period}? \n` +
-            (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses` : '') +
-            (targets.production ? `\n- ${previewData.plCount} Production Logs` : '') +
-            (targets.receivables ? `\n- ${previewData.rxCount} Customer Receivables (ALL)` : '') +
-            `\n\nThis cannot be undone.`
-            : `⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to delete ALL Production Logs (${previewData.count} records)?\n\nThis will wipe the entire production history from the database.\nThis action is IRREVERSIBLE.`;
+        let confirmMessage = "";
+        if (mode === 'period') {
+            confirmMessage = `Are you SURE you want to delete data from ${previewData.period}? \n` +
+                (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses` : '') +
+                (targets.production ? `\n- ${previewData.plCount} Production Logs` : '') +
+                `\n\nThis cannot be undone.`;
+        } else if (mode === 'all_production') {
+            confirmMessage = `⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to delete ALL Production Logs (${previewData.count} records)?\n\nThis will wipe the entire production history from the database.\nThis action is IRREVERSIBLE.`;
+        } else if (mode === 'customer_insights') {
+            confirmMessage = `⚠️ CLEAR CUSTOMER DATA ⚠️\n\nAre you sure you want to delete ALL Customer Insights data?\n- ${previewData.statsCount} Profit Records\n- ${previewData.recCount} Receivables\n\nThis will reset the Insights dashboard to zero. This action is IRREVERSIBLE.`;
+        }
 
         if (!window.confirm(confirmMessage)) return;
 
@@ -183,19 +189,8 @@ const AdminCleanup = () => {
                 const startDate = getLocalDateString(selectedYear, monthIndex, 1);
                 const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
 
-                if (targets.receivables) {
-                    // Wipe all receivables (no date column, so deleteInBatches won't work)
-                    const { error } = await supabase
-                        .from('customer_receivables')
-                        .delete()
-                        .neq('id', '00000000-0000-0000-0000-000000000000');
-
-                    if (error) throw error;
-                }
-
                 if (targets.sales) {
                     await deleteInBatches('transactions', startDate, nextMonthDate);
-                    await deleteInBatches('customer_stats', startDate, nextMonthDate); // Clean up stats too
                 }
 
                 if (targets.production) {
@@ -205,14 +200,18 @@ const AdminCleanup = () => {
                 setStatus({ type: 'success', message: `Successfully deleted selected records.` });
 
             } else if (mode === 'all_production') {
-                // Delete ALL Production Logs (Limitless)
-                // Since we can't use date range easily here, we might need a different recursive strategy 
-                // or just trust the 'neq 0' trick.
-                // Let's stick to the neq trick but wrap in a loop if needed.
                 const { error } = await supabase.from('production_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
                 if (error) throw error;
 
                 setStatus({ type: 'success', message: `Successfully wiped all Production Logs.` });
+            } else if (mode === 'customer_insights') {
+                const { error: sErr } = await supabase.from('customer_stats').delete().neq('customer_name', 'RESET_TOKEN_VOID');
+                const { error: rErr } = await supabase.from('customer_receivables').delete().neq('customer_name', 'RESET_TOKEN_VOID');
+                
+                if (sErr) throw sErr;
+                if (rErr) throw rErr;
+
+                setStatus({ type: 'success', message: `Successfully cleared all Customer Insights data.` });
             }
 
             setPreviewData(null); // Reset preview
@@ -250,11 +249,18 @@ const AdminCleanup = () => {
                         </button>
                         <button
                             onClick={() => { setMode('all_production'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
-                            className="btn-toggle"
+                            className={`btn-toggle ${mode === 'all_production' ? 'active' : ''}`}
                             style={mode === 'all_production' ? { background: '#dc2626', color: 'var(--text-primary)', borderColor: '#dc2626' } : {}}
                         >
                             <Bomb size={16} />
                             Reset Production DB
+                        </button>
+                        <button
+                            onClick={() => { setMode('customer_insights'); setPreviewData(null); setStatus({ type: '', message: '' }); }}
+                            className={`btn-toggle ${mode === 'customer_insights' ? 'active blue' : ''}`}
+                        >
+                            <Users size={16} />
+                            Clear Customer Insights
                         </button>
                     </div>
                 </div>
@@ -266,7 +272,9 @@ const AdminCleanup = () => {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem', textAlign: 'center', lineHeight: '1.5' }}>
                         {mode === 'period'
                             ? "Select a period to permanently delete Sales, Expenses, and Production records."
-                            : "Permanently delete ALL Production Logs from the database."}
+                            : mode === 'all_production'
+                            ? "Permanently delete ALL Production Logs from the database."
+                            : "Permanently delete all Customer Profit Stats and Receivables records."}
                         <br /> <span style={{ color: '#fb923c', fontWeight: 'bold' }}>Warning: This action is irreversible.</span>
                     </p>
 
@@ -298,18 +306,6 @@ const AdminCleanup = () => {
                                             style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
                                         />
                                         Production Logs
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.receivables ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={targets.receivables}
-                                            onChange={(e) => {
-                                                setTargets(prev => ({ ...prev, receivables: e.target.checked }));
-                                                setPreviewData(null);
-                                            }}
-                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
-                                        />
-                                        Receivables
                                     </label>
                                 </div>
 
@@ -352,12 +348,12 @@ const AdminCleanup = () => {
                             disabled={(mode === 'period' && !selectedMonth) || previewLoading}
                             className="btn-action"
                             style={{
-                                background: mode === 'period' ? 'linear-gradient(to right, #2563eb, #3b82f6)' : '#dc2626',
+                                background: mode === 'period' ? 'linear-gradient(to right, #2563eb, #3b82f6)' : (mode === 'customer_insights' ? 'linear-gradient(to right, #3b82f6, #60a5fa)' : '#dc2626'),
                                 opacity: (mode === 'period' && !selectedMonth) || previewLoading ? 0.5 : 1,
                                 cursor: (mode === 'period' && !selectedMonth) || previewLoading ? 'not-allowed' : 'pointer'
                             }}
                         >
-                            {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : (mode === 'period' ? <Calendar size={18} /> : <Bomb size={18} />)}
+                            {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : (mode === 'period' ? <Calendar size={18} /> : (mode === 'customer_insights' ? <Users size={18} /> : <Bomb size={18} />))}
                             {mode === 'period' ? 'Analyze' : 'Scan DB'}
                         </button>
                     </div>
@@ -368,17 +364,22 @@ const AdminCleanup = () => {
                     <div style={{ marginTop: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.75rem', padding: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', animation: 'fadeIn 0.5s ease-out forwards' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
                             <div>
-                                <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '0.25rem' }}>{mode === 'period' ? 'Confirm Deletion' : '🔥 NUCLEAR DELETE'}</h3>
+                                <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#ef4444', marginBottom: '0.25rem' }}>{mode === 'period' ? 'Confirm Deletion' : (mode === 'all_production' ? '🔥 NUCLEAR DELETE' : 'Confirm Wipe')}</h3>
                                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.5' }}>
                                     {mode === 'period' ? (
                                         <>
                                             Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records
                                             for <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{previewData.period}</span>.
                                         </>
-                                    ) : (
+                                    ) : mode === 'all_production' ? (
                                         <>
                                             Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records in TOTAL.
                                             This includes all Stock In, Pre-Production, and Post-Production logs.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records in Customer Insights.
+                                            This includes all Profit Performance records and Receivables snapshots.
                                         </>
                                     )}
                                 </p>
@@ -407,7 +408,7 @@ const AdminCleanup = () => {
                                 onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
                             >
                                 {deleteLoading ? <RefreshCw className="animate-spin" size={20} /> : <Trash2 size={20} />}
-                                {mode === 'period' ? 'Delete Data' : 'WIPE ALL'}
+                                {mode === 'period' ? 'Delete Data' : (mode === 'all_production' ? 'WIPE ALL' : 'CLEAR ALL')}
                             </button>
                         </div>
                     </div>

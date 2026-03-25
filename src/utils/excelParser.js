@@ -184,43 +184,28 @@ export const parseExcelFile = (files) => {
                         }
                     }
                     // --- TYPE 2: CUSTOMERWISE PROFIT ---
-                    else if (contentString.includes('customer') && (contentString.includes('profit') || contentString.includes('margin'))) {
+                    else if (contentString.includes('customer name') && (contentString.includes('profit') || contentString.includes('margin'))) {
                         debugLog.push("Matched Type 2 (Customerwise Profit)");
                         const nameIdx = headerRow.findIndex(h => /customer name/i.test(h));
                         const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
-                        const profitIdx = headerRow.findIndex(h => /profit|margin/i.test(h));
+                        const profitIdx = headerRow.findIndex(h => /(profit|margin)/i.test(h));
                         const dateIdx = headerRow.findIndex(h => /date/i.test(h));
 
                         if (nameIdx !== -1) {
                             jsonData.slice(1).forEach((row, rIdx) => {
-                                if (!row) return;
+                                if (!row || row.length === 0) return;
                                 const name = row[nameIdx];
                                 if (name && String(name).toLowerCase() !== 'total') {
                                     const parsedDate = (dateIdx !== -1 ? normalizeDate(row[dateIdx]) : null) || effectiveDate;
                                     const amount = parseFloat(String(row[amountIdx] || 0).replace(/,/g, ''));
                                     const profit = parseFloat(String(row[profitIdx] || 0).replace(/,/g, ''));
 
-                                    // Push to TRANSACTIONS so it gets saved to DB
-                                    mergedData.transactions.push({
-                                        id: `cust-${name}-${parsedDate}-${rIdx}-${sheetName}`,
-                                        parsedDate: parsedDate,
-                                        parsedAmount: amount,
-                                        parsedProfit: profit,
-                                        parsedType: 'ProfitSummary', // [CHANGED] Specific type to avoid double counting
-                                        parsedQty: 1,
-                                        originalDesc: 'Customer Monthly Summary',
-                                        customerName: String(name).trim().toUpperCase(),
-                                        invoiceNo: `SUMMARY-${parsedDate}-${rIdx}`
-                                    });
-
-                                    // [NEW] Push to Customers Array for Dashboard Analysis
                                     mergedData.customers.push({
-                                        id: `cust-master-${name}-${parsedDate}-${rIdx}`,
+                                        id: `cust-${name}-${parsedDate}-${rIdx}`,
                                         name: String(name).trim().toUpperCase(),
                                         revenue: amount,
                                         profit: profit,
-                                        parsedDate: parsedDate,
-                                        source: 'ProfitFile'
+                                        parsedDate: parsedDate
                                     });
                                 }
                             });
@@ -533,85 +518,33 @@ export const parseExcelFile = (files) => {
                             });
                         }
                     }
-
-                    // --- TYPE 7: CUSTOMER RECEIVABLES / OVERDUE ---
-                    else if ((contentString.includes('balance due') || contentString.includes('overdue')) && contentString.includes('customer')) {
-                        debugLog.push("Matched Type 7 (Customer Receivables / Overdue)");
-
-                        // Header Mapping
-                        const statusIdx = headerRow.findIndex(h => /status/i.test(h));
-                        const invIdx = headerRow.findIndex(h => /invoice|inv/i.test(h));
-                        const dateIdx = headerRow.findIndex(h => /date/i.test(h) ? /date/i.test(h) && !/due/i.test(h) : /date/i.test(h));
-                        const custIdx = headerRow.findIndex(h => /customer/i.test(h));
-
-                        const contactIdx = headerRow.findIndex(h => /contact|phone/i.test(h));
+                    // --- TYPE 7: CUSTOMER RECEIVABLES ---
+                    else if (contentString.includes('balance due') && contentString.includes('customer')) {
+                        debugLog.push("Matched Type 7 (Customer Receivables)");
+                        const nameIdx = headerRow.findIndex(h => /customer/i.test(h));
                         const addressIdx = headerRow.findIndex(h => /address/i.test(h));
-                        const gstinIdx = headerRow.findIndex(h => /gstin/i.test(h));
-                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h) && !/balance/i.test(h));
-                        const dueIdx = headerRow.findIndex(h => /due date/i.test(h));
-                        const balanceIdx = headerRow.findIndex(h => /balance|due/i.test(h) && !/date/i.test(h));
                         const cityIdx = headerRow.findIndex(h => /city/i.test(h));
+                        const phoneIdx = headerRow.findIndex(h => /contact no/i.test(h));
+                        const balanceIdx = headerRow.findIndex(h => /balance due/i.test(h));
 
-                        if (custIdx !== -1 && (balanceIdx !== -1 || amountIdx !== -1)) {
-                            const activeIdx = balanceIdx !== -1 ? balanceIdx : amountIdx;
-
-                            jsonData.slice(1).forEach((row, index) => {
+                        if (nameIdx !== -1 && balanceIdx !== -1) {
+                            jsonData.slice(1).forEach((row, rIdx) => {
                                 if (!row || row.length === 0) return;
-
-                                const customer = String(row[custIdx] || '').trim();
-                                if (!customer) return; // Skip empty rows
-
-                                const balanceStr = String(row[activeIdx] || '0').replace(/,/g, '');
-                                const balance = parseFloat(balanceStr);
-
-                                if (!isNaN(balance)) {
-                                    // Helper for Date Parsing
-                                    const parseExcelDate = (val) => {
-                                        if (!val) return null;
-                                        if (typeof val === 'number') {
-                                            const date = new Date((val - 25569) * 86400 * 1000);
-                                            return date.toISOString().split('T')[0];
-                                        }
-                                        const str = String(val).trim();
-                                        if (!str) return null;
-                                        const d = new Date(str);
-                                        return !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : str;
-                                    };
-
-                                    const rowDate = parseExcelDate(row[dateIdx]);
-                                    const dueDate = parseExcelDate(row[dueIdx]);
-
-                                    // Calculate Aging if Due Date exists
-                                    let aging = 0;
-                                    if (dueDate) {
-                                        const due = new Date(dueDate);
-                                        const now = new Date();
-                                        const diffTime = now - due;
-                                        aging = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                                        if (aging < 0) aging = 0;
-                                    }
-
+                                const name = row[nameIdx];
+                                if (name) {
+                                    const balance = Math.abs(parseFloat(String(row[balanceIdx] || 0).replace(/,/g, '')));
                                     mergedData.receivables.push({
-                                        status: String(row[statusIdx] || '').trim(),
-                                        invoiceNo: String(row[invIdx] || '').trim(),
-                                        date: rowDate,
-                                        customerName: customer,
-                                        contact: String(row[contactIdx] || '').trim(),
+                                        customer_name: String(name).trim().toUpperCase(),
                                         address: String(row[addressIdx] || '').trim(),
                                         city: String(row[cityIdx] || '').trim(),
-                                        gstin: String(row[gstinIdx] || '').trim(),
-                                        amount: balance,
-                                        balanceDue: balance,
-                                        dueDate: dueDate,
-                                        aging: aging
+                                        phone: String(row[phoneIdx] || '').trim(),
+                                        balance_due: balance
                                     });
                                 }
                             });
-                            debugLog.push(`Type 7: Extracted ${mergedData.receivables.length} records.`);
-                        } else {
-                            debugLog.push("Type 7: Failed to map critical headers (Customer/Balance).");
                         }
                     }
+
 
                     else {
                         debugLog.push(`NO MATCH (Skipped). Content: ${contentString.substring(0, 50)}...`);

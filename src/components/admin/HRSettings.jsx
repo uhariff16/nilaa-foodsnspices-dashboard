@@ -188,7 +188,7 @@ const HRSettings = () => {
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <Calendar size={16} color="#a855f7" />
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>National Holidays</label>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Public Holidays</label>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>

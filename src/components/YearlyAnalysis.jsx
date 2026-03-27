@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
 import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet } from 'lucide-react';
 
 const formatCurrency = (val) => {

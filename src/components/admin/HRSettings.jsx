@@ -12,6 +12,7 @@ const HRSettings = () => {
         national_holidays: []
     });
     const [newHoliday, setNewHoliday] = useState('');
+    const [newHolidayReason, setNewHolidayReason] = useState('');
     const [loading, setLoading] = useState(false);
     const [newDept, setNewDept] = useState('');
     const [newRole, setNewRole] = useState('');
@@ -54,20 +55,31 @@ const HRSettings = () => {
 
         const { error } = await supabase
             .from('payroll_config')
-            .upsert({ id: 1, ...updated });
+            .upsert({ id: 1, ...updated }, { onConflict: 'id' });
 
-        if (error) console.error("Update Config Error:", error);
+        if (error) {
+            console.error("Update Config Error:", error);
+            alert("Failed to save configuration: " + error.message);
+        }
     };
 
     const addHoliday = () => {
-        if (!newHoliday || payrollConfig.national_holidays.includes(newHoliday)) return;
-        const updatedHolidays = [...payrollConfig.national_holidays, newHoliday].sort();
+        if (!newHoliday) return;
+        const exists = payrollConfig.national_holidays.some(h => (typeof h === 'string' ? h : h.date) === newHoliday);
+        if (exists) {
+            alert("Holiday already exists for this date.");
+            return;
+        }
+        const updatedHolidays = [...payrollConfig.national_holidays, { date: newHoliday, reason: newHolidayReason || 'Holiday' }]
+            .sort((a, b) => (a.date || a).localeCompare(b.date || b));
+        
         updatePayrollConfig('national_holidays', updatedHolidays);
         setNewHoliday('');
+        setNewHolidayReason('');
     };
 
     const removeHoliday = (date) => {
-        const updatedHolidays = payrollConfig.national_holidays.filter(h => h !== date);
+        const updatedHolidays = payrollConfig.national_holidays.filter(h => (typeof h === 'string' ? h : h.date) !== date);
         updatePayrollConfig('national_holidays', updatedHolidays);
     };
 
@@ -178,31 +190,48 @@ const HRSettings = () => {
                             <Calendar size={16} color="#a855f7" />
                             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>National Holidays</label>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    type="date"
+                                    value={newHoliday}
+                                    onChange={(e) => setNewHoliday(e.target.value)}
+                                    style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', padding: '0.4rem', borderRadius: '0.4rem', flex: 1, fontSize: '0.85rem' }}
+                                />
+                                <button 
+                                    onClick={addHoliday}
+                                    className="btn-icon" 
+                                    style={{ background: '#a855f7', color: 'white', padding: '0.4rem', width: '40px' }}
+                                    title="Add Holiday"
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            </div>
                             <input
-                                type="date"
-                                value={newHoliday}
-                                onChange={(e) => setNewHoliday(e.target.value)}
+                                type="text"
+                                value={newHolidayReason}
+                                onChange={(e) => setNewHolidayReason(e.target.value)}
+                                placeholder="Public Holiday Reason..."
                                 style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', padding: '0.4rem', borderRadius: '0.4rem', flex: 1, fontSize: '0.85rem' }}
                             />
-                            <button 
-                                onClick={addHoliday}
-                                className="btn-icon" 
-                                style={{ background: '#a855f7', color: 'white', padding: '0.4rem' }}
-                            >
-                                <Plus size={18} />
-                            </button>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', maxHeight: '100px', overflowY: 'auto', padding: '0.25rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', padding: '0.25rem' }}>
                             {payrollConfig.national_holidays.length > 0 ? (
-                                payrollConfig.national_holidays.map(h => (
-                                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', padding: '0.25rem 0.5rem', borderRadius: '2rem', fontSize: '0.7rem' }}>
-                                        <span style={{ color: '#d8b4fe', fontWeight: 600 }}>{new Date(h).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-                                        <button onClick={() => removeHoliday(h)} style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                            <Trash2 size={12} />
-                                        </button>
-                                    </div>
-                                ))
+                                payrollConfig.national_holidays.map(h => {
+                                    const date = typeof h === 'string' ? h : h.date;
+                                    const reason = typeof h === 'string' ? '' : h.reason;
+                                    return (
+                                        <div key={date} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(168, 85, 247, 0.05)', border: '1px solid rgba(168, 85, 247, 0.15)', padding: '0.4rem 0.6rem', borderRadius: '0.5rem', fontSize: '0.75rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ color: '#d8b4fe', fontWeight: 600 }}>{new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                {reason && <span style={{ color: 'var(--text-secondary)', fontSize: '0.65rem' }}>{reason}</span>}
+                                            </div>
+                                            <button onClick={() => removeHoliday(date)} style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', padding: '0.2rem' }}>
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    );
+                                })
                             ) : (
                                 <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', opacity: 0.6 }}>No holidays added.</span>
                             )}

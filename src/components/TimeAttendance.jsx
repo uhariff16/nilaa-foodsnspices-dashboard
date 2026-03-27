@@ -57,19 +57,19 @@ const formatDuration = (decHours) => {
 };
 
 const getSpecialDayType = (dateStr, holidays = []) => {
-    if (!dateStr) return 'none';
+    if (!dateStr) return { type: 'none', reason: '' };
     const date = new Date(dateStr);
     const day = date.getDay();
     // getDay() returns 0 for Sunday
     const isSunday = day === 0;
-    const isHoliday = Array.isArray(holidays) && holidays.includes(dateStr);
+    const holidayEntry = Array.isArray(holidays) ? holidays.find(h => (typeof h === 'string' ? h : (h?.date || '')) === dateStr) : null;
 
-    if (isHoliday) return 'holiday';
-    if (isSunday) return 'sunday';
-    return 'none';
+    if (holidayEntry) return { type: 'holiday', reason: (typeof holidayEntry === 'string' ? 'Holiday' : holidayEntry.reason) };
+    if (isSunday) return { type: 'sunday', reason: 'Sunday' };
+    return { type: 'none', reason: '' };
 };
 
-const isSpecialDay = (dateStr, holidays = []) => getSpecialDayType(dateStr, holidays) !== 'none';
+const isSpecialDay = (dateStr, holidays = []) => getSpecialDayType(dateStr, holidays).type !== 'none';
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
     const { user, role, logout: authLogout, canAccessPayouts } = useAuth();
@@ -1262,12 +1262,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                 {filteredAttendance.map((row, i) => {
                                                     const emp = employees.find(e => e.emp_id === row.empId);
                                                     const isTemp = emp?.staff_type === 'Temporary';
-                                                    const specialType = getSpecialDayType(row.date, payrollConfig.national_holidays);
+                                                    const selectSpecial = getSpecialDayType(row.date, payrollConfig.national_holidays);
                                                     const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
 
                                                     let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-                                                    if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
-                                                    else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+                                                    if (selectSpecial.type === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                                    else if (selectSpecial.type === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
                                                     else if (isTemp) rowBg = 'rgba(245, 158, 11, 0.05)';
 
                                                     return (
@@ -1279,8 +1279,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem', whiteSpace: 'nowrap', borderRight: '1px solid var(--glass-border)' }}>
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                                     <div style={{ fontWeight: 600 }}>{row.date}</div>
-                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
-                                                                        {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: selectSpecial.type === 'holiday' ? '#f43f5e' : (selectSpecial.type === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                                        {selectSpecial.type === 'holiday' ? selectSpecial.reason.toUpperCase() : dayOfWeek}
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -1374,8 +1374,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
 
                                                     let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-                                                    if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
-                                                    else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+                                                    if (specialType.type === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                                    else if (specialType.type === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
                                                     else if (isTemp) rowBg = 'rgba(245, 158, 11, 0.05)';
 
                                                     return (
@@ -1387,8 +1387,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem', color: 'var(--text-secondary)', borderRight: '1px solid var(--glass-border)' }}>
                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.date}</div>
-                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
-                                                                        {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType.type === 'holiday' ? '#f43f5e' : (specialType.type === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                                        {specialType.type === 'holiday' ? specialType.reason.toUpperCase() : dayOfWeek}
                                                                     </div>
                                                                 </div>
                                                             </td>
@@ -1660,20 +1660,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                 </thead>
                                 <tbody>
                                     {filteredPayments.map((row, i) => {
-                                        const specialType = getSpecialDayType(row.date, payrollConfig.national_holidays);
+                                        const selectSpecial = getSpecialDayType(row.date, payrollConfig.national_holidays);
                                         const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
                                         
                                         let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
-                                        if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
-                                        else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+                                        if (selectSpecial.type === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                        else if (selectSpecial.type === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
 
                                         return (
                                             <tr key={row.id} style={{ borderBottom: '1px solid var(--glass-border)', background: rowBg }}>
                                                 <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                         <div style={{ fontWeight: 600 }}>{row.date}</div>
-                                                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
-                                                            {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: selectSpecial.type === 'holiday' ? '#f43f5e' : (selectSpecial.type === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                            {selectSpecial.type === 'holiday' ? selectSpecial.reason.toUpperCase() : dayOfWeek}
                                                         </div>
                                                     </div>
                                                 </td>

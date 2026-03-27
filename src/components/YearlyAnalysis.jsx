@@ -1489,61 +1489,87 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 </>
             ) : (
                 <div className="profit-hub-container animate-fade-in" style={{ padding: '1rem 0' }}>
-                    {/* Summary Cards */}
-                    <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
-                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--green-bg)', border: '1px solid var(--green-border)' }}>
-                            <p style={{ color: 'var(--green-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                <Wallet size={16} /> TOTAL YTD PROFIT
-                            </p>
-                            <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--green-text)' }}>{formatCurrency(totalStats.profit)}</h3>
+                    {/* Summary & Visualization Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '2rem', marginBottom: '2rem' }}>
+                        <div className="responsive-grid-3" style={{ gap: '1rem' }}>
+                            <div className="glass-panel" style={{ padding: '1.25rem', background: 'var(--green-bg)', border: '1px solid var(--green-border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <p style={{ color: 'var(--green-text)', fontSize: '0.7rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    <Wallet size={14} /> Total YTD Profit
+                                </p>
+                                <h3 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--green-text)', fontWeight: 800 }}>{formatCurrency(totalStats.profit)}</h3>
+                            </div>
+
+                            {(() => {
+                                let totalDistributedShares = 0;
+                                let totalPaidAmount = 0;
+                                
+                                yearlyData.filter(m => m.isActive).forEach(month => {
+                                    const monthlyProfit = month.netProfit;
+                                    const monthPayouts = profitPayouts.filter(p => p.month_year === `${month.name} ${selectedYear}`);
+                                    
+                                    profitStakeholders.forEach(s => {
+                                        const p = monthPayouts.find(p => p.stakeholder_id === s.id);
+                                        const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                        totalDistributedShares += share;
+                                        
+                                        if (p && p.status === 'paid') {
+                                            totalPaidAmount += share;
+                                        }
+                                    });
+                                });
+                                
+                                const totalPendingAmount = totalDistributedShares - totalPaidAmount;
+                                const totalReservedFund = totalStats.profit - totalDistributedShares;
+                                const distributionRatio = totalStats.profit > 0 ? (totalDistributedShares / totalStats.profit) * 100 : 0;
+                                
+                                return (
+                                    <>
+                                        <div className="glass-panel" style={{ padding: '1.25rem', background: 'var(--blue-bg)', border: '1px solid var(--blue-border)', position: 'relative', overflow: 'hidden' }}>
+                                            <p style={{ color: 'var(--blue-text)', fontSize: '0.7rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                <Users size={14} /> Distributed
+                                            </p>
+                                            <h3 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--blue-text)', fontWeight: 800 }}>{formatCurrency(totalDistributedShares)}</h3>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--blue-text)', opacity: 0.7, marginTop: '0.25rem' }}>
+                                                {distributionRatio.toFixed(1)}% of total profit
+                                            </div>
+                                        </div>
+                                        <div className="glass-panel" style={{ padding: '1.25rem', background: 'var(--amber-bg)', border: '1px solid var(--amber-border)' }}>
+                                            <p style={{ color: 'var(--amber-text)', fontSize: '0.7rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                <Activity size={14} /> Reserved Fund
+                                            </p>
+                                            <h3 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--amber-text)', fontWeight: 800 }}>{formatCurrency(totalReservedFund)}</h3>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--amber-text)', opacity: 0.7, marginTop: '0.25rem' }}>
+                                                {(100 - distributionRatio).toFixed(1)}% retention rate
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
 
-                        {(() => {
-                            let totalDistributedShares = 0;
-                            let totalPaidAmount = 0;
-                            
-                            yearlyData.filter(m => m.isActive).forEach(month => {
-                                const monthlyProfit = month.netProfit;
-                                const monthPayouts = profitPayouts.filter(p => p.month_year === `${month.name} ${selectedYear}`);
-                                
-                                profitStakeholders.forEach(s => {
-                                    const p = monthPayouts.find(p => p.stakeholder_id === s.id);
-                                    const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
-                                    totalDistributedShares += share;
-                                    
-                                    if (p && p.status === 'paid') {
-                                        totalPaidAmount += share;
-                                    }
-                                });
-                            });
-                            
-                            const totalPendingAmount = totalDistributedShares - totalPaidAmount;
-                            const totalReservedFund = totalStats.profit - totalDistributedShares;
-                            
-                            return (
-                                <>
-                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--blue-bg)', border: '1px solid var(--blue-border)' }}>
-                                        <p style={{ color: 'var(--blue-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                            <Users size={16} /> DISTRIBUTED SHARES
-                                        </p>
-                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--blue-text)' }}>{formatCurrency(totalDistributedShares)}</h3>
-                                    </div>
-                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                                        <p style={{ color: '#f59e0b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                            <Calendar size={16} /> PENDING PAYOUTS
-                                        </p>
-                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#f59e0b' }}>{formatCurrency(totalPendingAmount)}</h3>
-                                    </div>
-                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--amber-bg)', border: '1px solid var(--amber-border)' }}>
-                                        <p style={{ color: 'var(--amber-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                            <Activity size={16} /> RESERVED FUND
-                                        </p>
-                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--amber-text)' }}>{formatCurrency(totalReservedFund)}</h3>
-                                    </div>
-                                </>
-                            );
-                        })()}
+                        {/* Distribution Chart Card */}
+                        <div className="glass-panel" style={{ padding: '1rem', background: 'var(--glass-highlight)', display: 'flex', flexDirection: 'column' }}>
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.5rem', textAlign: 'center' }}>Share Distribution</p>
+                            <div style={{ height: '100px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                ...profitStakeholders.map(s => ({ name: s.name, value: s.percentage, color: '#3b82f6' })),
+                                                { name: 'Reserve', value: Math.max(0, 100 - profitStakeholders.reduce((a, b) => a + (b.percentage || 0), 0)), color: '#f59e0b' }
+                                            ]}
+                                            cx="50%" cy="50%" innerRadius={30} outerRadius={45} paddingAngle={5} dataKey="value"
+                                        >
+                                            {profitStakeholders.map((s, i) => <Cell key={i} fill={s.color || '#3b82f6'} />)}
+                                            <Cell fill="#f59e0b" />
+                                        </Pie>
+                                        <Tooltip />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
                     </div>
+
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
                         {/* Monthly Distribution Table */}
@@ -1589,7 +1615,32 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             
                                             return (
                                                 <tr key={month.name} className="analysis-row" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                                                    <td style={{ textAlign: 'left', padding: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>{month.name}</td>
+                                                    <td style={{ textAlign: 'left', padding: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            {month.name}
+                                                            <button 
+                                                                title="Mark all as Paid"
+                                                                onClick={async () => {
+                                                                    if (window.confirm(`Mark all distributions for ${month.name} ${selectedYear} as PAID? This will snapshot the current values.`)) {
+                                                                        const promises = profitStakeholders.map(s => {
+                                                                            const p = monthPayouts.find(p => p.stakeholder_id === s.id);
+                                                                            const amt = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
+                                                                            if (p) {
+                                                                                return supabase.from('profit_payouts').update({ status: 'paid', amount: amt, paid_at: new Date().toISOString() }).eq('id', p.id);
+                                                                            } else {
+                                                                                return supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: amt, status: 'paid', paid_at: new Date().toISOString() });
+                                                                            }
+                                                                        });
+                                                                        await Promise.all(promises);
+                                                                        fetchProfitHubData();
+                                                                    }
+                                                                }}
+                                                                style={{ background: 'var(--blue-bg)', border: 'none', color: 'var(--blue-text)', padding: '0.2rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                                            >
+                                                                <CheckCircle size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
                                                     <td style={{ padding: '1rem', fontSize: '0.85rem', fontWeight: 700, color: monthlyProfit >= 0 ? 'var(--green-text)' : 'var(--amber-text)' }}>{formatCurrency(monthlyProfit)}</td>
                                                     {profitStakeholders.map(s => {
                                                         const p = monthPayouts.find(p => p.stakeholder_id === s.id);
@@ -1602,8 +1653,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                             
                                                         return (
                                                             <td key={s.id} style={{ padding: '1rem', fontSize: '0.85rem' }}>
-                                                                <div style={{ fontWeight: 600, color: 'var(--blue-text)' }}>{formatCurrency(displayShare)}</div>
-                                                                <div style={{ marginTop: '0.35rem' }}>
+                                                                <div style={{ fontWeight: 600, color: currentStatus === 'paid' ? 'var(--green-text)' : 'var(--blue-text)' }}>{formatCurrency(displayShare)}</div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', marginTop: '0.35rem' }}>
                                                                     <select 
                                                                         value={currentStatus}
                                                                         onChange={async (e) => {
@@ -1628,15 +1679,20 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                             fetchProfitHubData();
                                                                         }}
                                                                         style={{
-                                                                            fontSize: '0.7rem', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)',
+                                                                            fontSize: '0.65rem', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)',
                                                                             background: currentStatus === 'paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
                                                                             color: currentStatus === 'paid' ? '#10b981' : '#f59e0b',
                                                                             fontWeight: 600, outline: 'none', cursor: 'pointer', textAlign: 'center'
                                                                         }}
                                                                     >
-                                                                        <option value="pending" style={{ color: '#000' }}>Pending</option>
-                                                                        <option value="paid" style={{ color: '#000' }}>Paid</option>
+                                                                        <option value="pending">Pending</option>
+                                                                        <option value="paid">Paid</option>
                                                                     </select>
+                                                                    {currentStatus === 'paid' && p?.paid_at && (
+                                                                        <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                                                            Settled: {new Date(p.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         );
@@ -1654,13 +1710,28 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
                         {/* Stakeholder Management Card */}
                         <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                            <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Users size={18} color="#3b82f6" />
-                                Manage Stakeholders
-                            </h3>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Users size={18} color="#3b82f6" />
+                                    Manage Stakeholders
+                                </h3>
+                                {(() => {
+                                    const total = profitStakeholders.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
+                                    return (
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: total > 100 ? '#ef4444' : (total === 100 ? '#10b981' : '#f59e0b') }}>
+                                            {total}% Total
+                                        </div>
+                                    );
+                                })()}
+                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {profitStakeholders.length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                        No stakeholders added yet.
+                                    </div>
+                                )}
                                 {profitStakeholders.map(s => (
-                                    <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: `1px solid ${s.percentage > 0 ? 'var(--blue-border)' : 'var(--glass-border)'}` }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                                             <input 
                                                 value={s.name} 

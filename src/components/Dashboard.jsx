@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock, Target } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -1519,6 +1519,21 @@ const Dashboard = (props) => {
                         YTD Analysis
                     </button>
                 )}
+                {/* Profit Hub Tab - ADMIN ONLY */}
+                {props.isAdmin && (
+                    <button
+                        onClick={() => setActiveTab('profitHub')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'profitHub' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'profitHub' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'profitHub' ? 600 : 400
+                        }}
+                    >
+                        <Target size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Profit Hub
+                    </button>
+                )}
             </div >
 
             {/* Content */}
@@ -2568,6 +2583,19 @@ const Dashboard = (props) => {
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
+                        forceTab="performance"
+                    />
+                )
+            }
+
+            {/* [NEW] Profit Hub */}
+            {
+                activeTab === 'profitHub' && props.isAdmin && (
+                    <YearlyAnalysis
+                        selectedYear={selectedYear}
+                        transactions={data?.transactions || []}
+                        productionData={props.productionData}
+                        forceTab="profitHub"
                     />
                 )
             }

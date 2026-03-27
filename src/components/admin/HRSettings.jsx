@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Settings, Plus, Trash2, Layout, Briefcase, RefreshCw, Clock, DollarSign, TrendingUp } from 'lucide-react';
+import { Settings, Plus, Trash2, Layout, Briefcase, RefreshCw, Clock, DollarSign, TrendingUp, Calendar } from 'lucide-react';
 
 const HRSettings = () => {
     const [departments, setDepartments] = useState([]);
@@ -8,8 +8,10 @@ const HRSettings = () => {
     const [payrollConfig, setPayrollConfig] = useState({
         standard_daily_hours: 8,
         ot_multiplier: 1.5,
-        default_hourly_rate: 100
+        default_hourly_rate: 100,
+        national_holidays: []
     });
+    const [newHoliday, setNewHoliday] = useState('');
     const [loading, setLoading] = useState(false);
     const [newDept, setNewDept] = useState('');
     const [newRole, setNewRole] = useState('');
@@ -34,16 +36,20 @@ const HRSettings = () => {
             setPayrollConfig({
                 standard_daily_hours: data.standard_daily_hours,
                 ot_multiplier: data.ot_multiplier,
-                default_hourly_rate: data.default_hourly_rate
+                default_hourly_rate: data.default_hourly_rate,
+                national_holidays: data.national_holidays || []
             });
         }
     };
 
     const updatePayrollConfig = async (field, value) => {
-        const numVal = parseFloat(value);
-        if (isNaN(numVal)) return;
+        let finalVal = value;
+        if (field !== 'national_holidays') {
+            finalVal = parseFloat(value);
+            if (isNaN(finalVal)) return;
+        }
 
-        const updated = { ...payrollConfig, [field]: numVal };
+        const updated = { ...payrollConfig, [field]: finalVal };
         setPayrollConfig(updated);
 
         const { error } = await supabase
@@ -51,6 +57,18 @@ const HRSettings = () => {
             .upsert({ id: 1, ...updated });
 
         if (error) console.error("Update Config Error:", error);
+    };
+
+    const addHoliday = () => {
+        if (!newHoliday || payrollConfig.national_holidays.includes(newHoliday)) return;
+        const updatedHolidays = [...payrollConfig.national_holidays, newHoliday].sort();
+        updatePayrollConfig('national_holidays', updatedHolidays);
+        setNewHoliday('');
+    };
+
+    const removeHoliday = (date) => {
+        const updatedHolidays = payrollConfig.national_holidays.filter(h => h !== date);
+        updatePayrollConfig('national_holidays', updatedHolidays);
     };
 
     const addDepartment = async (e) => {
@@ -154,6 +172,41 @@ const HRSettings = () => {
                             />
                         </div>
                         <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Base rate if not set for staff.</p>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                            <Calendar size={16} color="#a855f7" />
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>National Holidays</label>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                            <input
+                                type="date"
+                                value={newHoliday}
+                                onChange={(e) => setNewHoliday(e.target.value)}
+                                style={{ background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', padding: '0.4rem', borderRadius: '0.4rem', flex: 1, fontSize: '0.85rem' }}
+                            />
+                            <button 
+                                onClick={addHoliday}
+                                className="btn-icon" 
+                                style={{ background: '#a855f7', color: 'white', padding: '0.4rem' }}
+                            >
+                                <Plus size={18} />
+                            </button>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', maxHeight: '100px', overflowY: 'auto', padding: '0.25rem' }}>
+                            {payrollConfig.national_holidays.length > 0 ? (
+                                payrollConfig.national_holidays.map(h => (
+                                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', padding: '0.25rem 0.5rem', borderRadius: '2rem', fontSize: '0.7rem' }}>
+                                        <span style={{ color: '#d8b4fe', fontWeight: 600 }}>{new Date(h).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                                        <button onClick={() => removeHoliday(h)} style={{ background: 'transparent', border: 'none', color: '#fca5a5', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', opacity: 0.6 }}>No holidays added.</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

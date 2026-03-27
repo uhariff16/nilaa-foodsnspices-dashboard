@@ -41,7 +41,7 @@ const getPackWeight = (desc) => {
 
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
-const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }) => {
+const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, forceTab = null }) => {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     // Dashboard View Settings
@@ -84,27 +84,34 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     const [analysisViewMode, setAnalysisViewMode] = React.useState('monthly'); // 'monthly' | 'yearly'
     const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
 
-    // Profit Stakeholder Settings
-    const [profitStakeholders, setProfitStakeholders] = React.useState(() => {
-        try {
-            const saved = localStorage.getItem('ytd_profit_stakeholders');
-            return saved ? JSON.parse(saved) : [
-                { id: 1, name: 'Partner 1', percent: 45 },
-                { id: 2, name: 'Partner 2', percent: 45 },
-                { id: 3, name: 'Reserve', percent: 10 }
-            ];
-        } catch (e) {
-            return [
-                { id: 1, name: 'Partner 1', percent: 45 },
-                { id: 2, name: 'Partner 2', percent: 45 },
-                { id: 3, name: 'Reserve', percent: 10 }
-            ];
-        }
-    });
+    const [profitStakeholders, setProfitStakeholders] = React.useState([]);
+    const [profitPayouts, setProfitPayouts] = React.useState([]);
+    const [isProfitLoading, setIsProfitLoading] = React.useState(false);
+    const [activeAnalysisSubTab, setActiveAnalysisSubTab] = React.useState(forceTab || 'performance'); // 'performance' | 'profitHub'
 
     React.useEffect(() => {
-        localStorage.setItem('ytd_profit_stakeholders', JSON.stringify(profitStakeholders));
-    }, [profitStakeholders]);
+        if (forceTab) setActiveAnalysisSubTab(forceTab);
+    }, [forceTab]);
+
+    const fetchProfitHubData = async () => {
+        setIsProfitLoading(true);
+        try {
+            const [stkRes, payRes] = await Promise.all([
+                supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
+                supabase.from('profit_payouts').select('*').order('created_at', { ascending: true })
+            ]);
+            if (!stkRes.error) setProfitStakeholders(stkRes.data || []);
+            if (!payRes.error) setProfitPayouts(payRes.data || []);
+        } catch (e) {
+            console.error("Error fetching profit hub data:", e);
+        } finally {
+            setIsProfitLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchProfitHubData();
+    }, []);
 
     React.useEffect(() => {
         localStorage.setItem('ytd_view_settings_v2', JSON.stringify(viewSettings));
@@ -160,10 +167,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     }, []);
 
     // Helper to get latest sim as of a specific month
-    const getSimForMonth = (normName, targetMonthStr, channel) => {
+    const getSimForMonth = (normName, targetMonthStr, channel, useAbsoluteLatest = false) => {
         const availableMonths = Object.keys(simHistory)
-            .filter(m => m <= targetMonthStr)
-            .sort((a, b) => b.localeCompare(a)); // Newest first but <= target
+            .filter(m => useAbsoluteLatest ? true : m <= targetMonthStr)
+            .sort((a, b) => b.localeCompare(a)); // Newest first
 
         for (const m of availableMonths) {
             if (simHistory[m][channel] && simHistory[m][channel][normName]) {
@@ -664,124 +671,169 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
     };
 
     return (
-        <div className="animate-fade-in" style={{ paddingBottom: '2rem' }}>
-            {/* Dashboard Header with Settings */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <TrendingUp size={24} color="#3b82f6" />
-                    Executive YTD Analysis - {selectedYear}
-                </h2>
+        <div className="animate-fade-in" style={{ color: 'var(--text-primary)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    {!forceTab && (
+                        <div className="glass-panel" style={{ display: 'inline-flex', padding: '0.25rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)' }}>
+                            <button
+                                onClick={() => setActiveAnalysisSubTab('performance')}
+                                style={{
+                                    padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                    background: activeAnalysisSubTab === 'performance' ? 'var(--accent-primary)' : 'transparent',
+                                    color: activeAnalysisSubTab === 'performance' ? 'white' : 'var(--text-secondary)',
+                                    fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                }}
+                            >
+                                <TrendingUp size={16} /> Performance
+                            </button>
+                            <button
+                                onClick={() => setActiveAnalysisSubTab('profitHub')}
+                                style={{
+                                    padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                    background: activeAnalysisSubTab === 'profitHub' ? 'var(--accent-primary)' : 'transparent',
+                                    color: activeAnalysisSubTab === 'profitHub' ? 'white' : 'var(--text-secondary)',
+                                    fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                }}
+                            >
+                                <Target size={16} /> Profit Hub
+                            </button>
+                        </div>
+                    )}
 
-                <div style={{ position: 'relative' }}>
-                    <button
-                        onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
-                        style={{
-                            background: 'var(--glass-highlight)',
-                            border: '1px solid var(--glass-border)',
-                            padding: '0.5rem 1rem',
-                            borderRadius: '0.5rem',
-                            color: 'var(--text-primary)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            cursor: 'pointer',
-                            fontSize: '0.875rem'
-                        }}
-                    >
-                        <Settings size={16} />
-                        View Settings
-                        {showSettingsDropdown ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
+                    <div style={{ display: 'flex', gap: '1rem', marginLeft: '1rem' }}>
+                        <div className="glass-panel" style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>YTD Profit</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 700, color: totalStats.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(totalStats.profit)}</span>
+                        </div>
+                        <div className="glass-panel" style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Avg Margin</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>
+                                {totalStats.revenue > 0 ? (totalStats.profit / totalStats.revenue * 100).toFixed(1) + '%' : '0%'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
 
-                    {showSettingsDropdown && (
-                        <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            right: 0,
-                            marginTop: '0.5rem',
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--glass-border)',
-                            borderRadius: '0.75rem',
-                            padding: '1rem',
-                            zIndex: 1000,
-                            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
-                            minWidth: '220px'
-                        }}>
-                            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Toggle Sections</p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                                {/* KPIs */}
-                                <div>
-                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>KPI CARDS</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showTotalRev} onChange={() => setViewSettings({ ...viewSettings, showTotalRev: !viewSettings.showTotalRev })} /> Total YTD Revenue
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showTotalExp} onChange={() => setViewSettings({ ...viewSettings, showTotalExp: !viewSettings.showTotalExp })} /> Total YTD Expenses
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showNetProfit} onChange={() => setViewSettings({ ...viewSettings, showNetProfit: !viewSettings.showNetProfit })} /> Net YTD Profit
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showYtdProd} onChange={() => setViewSettings({ ...viewSettings, showYtdProd: !viewSettings.showYtdProd })} /> YTD Production
-                                        </label>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <TrendingUp size={24} color="#3b82f6" />
+                        Executive YTD Analysis - {selectedYear}
+                    </h2>
+
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+                            style={{
+                                background: 'var(--glass-highlight)',
+                                border: '1px solid var(--glass-border)',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '0.5rem',
+                                color: 'var(--text-primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem'
+                            }}
+                        >
+                            <Settings size={16} />
+                            View Settings
+                            {showSettingsDropdown ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+
+                        {showSettingsDropdown && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '0.5rem',
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: '0.75rem',
+                                padding: '1rem',
+                                zIndex: 1000,
+                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+                                minWidth: '220px'
+                            }}>
+                                <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Toggle Sections</p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '60vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                    {/* KPIs */}
+                                    <div>
+                                        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>KPI CARDS</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showTotalRev} onChange={() => setViewSettings({ ...viewSettings, showTotalRev: !viewSettings.showTotalRev })} /> Total YTD Revenue
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showTotalExp} onChange={() => setViewSettings({ ...viewSettings, showTotalExp: !viewSettings.showTotalExp })} /> Total YTD Expenses
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showNetProfit} onChange={() => setViewSettings({ ...viewSettings, showNetProfit: !viewSettings.showNetProfit })} /> Net YTD Profit
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showYtdProd} onChange={() => setViewSettings({ ...viewSettings, showYtdProd: !viewSettings.showYtdProd })} /> YTD Production
+                                            </label>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Performance Options */}
-                                <div>
-                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>PERFORMANCE</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showQuarterly} onChange={() => setViewSettings({ ...viewSettings, showQuarterly: !viewSettings.showQuarterly })} /> Quarterly Summary
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showRecommendations} onChange={() => setViewSettings({ ...viewSettings, showRecommendations: !viewSettings.showRecommendations })} /> Strategic Recommendations
-                                        </label>
+                                    {/* Performance Options */}
+                                    <div>
+                                        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>PERFORMANCE</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showQuarterly} onChange={() => setViewSettings({ ...viewSettings, showQuarterly: !viewSettings.showQuarterly })} /> Quarterly Summary
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showRecommendations} onChange={() => setViewSettings({ ...viewSettings, showRecommendations: !viewSettings.showRecommendations })} /> Strategic Recommendations
+                                            </label>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Charts */}
-                                <div>
-                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>CHARTS & TRENDS</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showFinancialTrends} onChange={() => setViewSettings({ ...viewSettings, showFinancialTrends: !viewSettings.showFinancialTrends })} /> Financial Trends
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showGrowthTrends} onChange={() => setViewSettings({ ...viewSettings, showGrowthTrends: !viewSettings.showGrowthTrends })} /> Growth Trends
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showUnitEconomics} onChange={() => setViewSettings({ ...viewSettings, showUnitEconomics: !viewSettings.showUnitEconomics })} /> Unit Economics
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showExpenseComp} onChange={() => setViewSettings({ ...viewSettings, showExpenseComp: !viewSettings.showExpenseComp })} /> Expense Composition
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showProdYield} onChange={() => setViewSettings({ ...viewSettings, showProdYield: !viewSettings.showProdYield })} /> Production & Yield
-                                        </label>
+                                    {/* Charts */}
+                                    <div>
+                                        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>CHARTS & TRENDS</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showFinancialTrends} onChange={() => setViewSettings({ ...viewSettings, showFinancialTrends: !viewSettings.showFinancialTrends })} /> Financial Trends
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showGrowthTrends} onChange={() => setViewSettings({ ...viewSettings, showGrowthTrends: !viewSettings.showGrowthTrends })} /> Growth Trends
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showUnitEconomics} onChange={() => setViewSettings({ ...viewSettings, showUnitEconomics: !viewSettings.showUnitEconomics })} /> Unit Economics
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showExpenseComp} onChange={() => setViewSettings({ ...viewSettings, showExpenseComp: !viewSettings.showExpenseComp })} /> Expense Composition
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showProdYield} onChange={() => setViewSettings({ ...viewSettings, showProdYield: !viewSettings.showProdYield })} /> Production & Yield
+                                            </label>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Tables */}
-                                <div>
-                                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>TABLES</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showEfficiencyBench} onChange={() => setViewSettings({ ...viewSettings, showEfficiencyBench: !viewSettings.showEfficiencyBench })} /> Efficiency Benchmarks
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                            <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} /> Itemized Cost Analysis
-                                        </label>
+                                    {/* Tables */}
+                                    <div>
+                                        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>TABLES</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showEfficiencyBench} onChange={() => setViewSettings({ ...viewSettings, showEfficiencyBench: !viewSettings.showEfficiencyBench })} /> Efficiency Benchmarks
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} /> Itemized Cost Analysis
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Quarterly Summary Section */}
+            {activeAnalysisSubTab === 'performance' ? (
+                <>
+                    {/* Quarterly Summary Section */}
             {viewSettings.showQuarterly && (
                 <div style={{ marginBottom: '2rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -1038,24 +1090,24 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             {yearlyData.filter(d => d.isActive).slice(-3).reverse().map((m, idx) => (
                                 <div key={idx} style={{
                                     padding: '1rem',
-                                    background: 'rgba(255,255,255,0.02)',
+                                    background: 'var(--glass-highlight)',
                                     borderRadius: '0.75rem',
                                     border: '1px solid var(--glass-border)'
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                                         <span style={{ fontWeight: 600 }}>{m.name} {selectedYear}</span>
-                                        <span style={{ color: m.yieldPercent >= 70 ? '#10b981' : '#f59e0b', fontSize: '0.8rem', fontWeight: 600 }}>
+                                        <span style={{ color: m.yieldPercent >= 70 ? 'var(--green-text)' : 'var(--amber-text)', fontSize: '0.8rem', fontWeight: 600 }}>
                                             {m.yieldPercent.toFixed(1)}% Yield
                                         </span>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                         <div>
                                             <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>ASP</p>
-                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#10b981' }}>₹{m.revenuePerKg.toFixed(1)}/kg</p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--green-text)' }}>₹{m.revenuePerKg.toFixed(1)}/kg</p>
                                         </div>
                                         <div>
                                             <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Production Cost</p>
-                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#ef4444' }}>₹{m.costPerKg.toFixed(1)}/kg</p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--danger)' }}>₹{m.costPerKg.toFixed(1)}/kg</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1066,7 +1118,13 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
             </div>
             {/* Itemized Production Cost Analysis Table */}
             {viewSettings.showItemAnalysis && (
-                <div className="glass-panel" style={{ marginBottom: '2rem', overflow: 'hidden' }}>
+                <div className="glass-panel" style={{ 
+                    marginBottom: '2rem', 
+                    overflow: 'hidden',
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--glass-border)',
+                    boxShadow: '0 10px 30px -10px rgba(0,0,0,0.2)'
+                }}>
                     <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1114,31 +1172,31 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                             </div>
                         )}
                     </div>
-                    <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
+                    <div style={{ overflowX: 'auto', background: 'var(--glass-highlight)', borderRadius: '12px', border: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '1400px', tableLayout: 'auto' }}>
                             <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                                <tr style={{ background: 'var(--glass-highlight)' }}>
                                     <th colSpan={2} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700, textAlign: 'left', borderBottom: '1px solid var(--glass-border)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>ITEM INFO</th>
-                                    <th colSpan={5} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>ACTUAL PRODUCTION COSTS</th>
-                                    <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#3b82f6', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(59, 130, 246, 0.3)', background: 'rgba(59, 130, 246, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>SIMULATOR BENCHMARKS</th>
-                                    <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(16, 185, 129, 0.05)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>MARKET PERFORMANCE</th>
+                                    <th colSpan={5} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'var(--amber-text)', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid var(--amber-border)', background: 'var(--amber-bg)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>ACTUAL PRODUCTION COSTS</th>
+                                    <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'var(--blue-text)', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid var(--blue-border)', background: 'var(--blue-bg)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>SIMULATOR BENCHMARKS (LATEST)</th>
+                                    <th colSpan={4} style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'var(--green-text)', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid var(--green-border)', background: 'var(--green-bg)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>MARKET PERFORMANCE</th>
                                 </tr>
                                 <tr>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'left', letterSpacing: '0.02em' }}>ITEM NAME</th>
                                     <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', letterSpacing: '0.02em' }}>PROD (KG)</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', borderLeft: '2px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', letterSpacing: '0.02em' }}>TOTAL ACTUAL</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', letterSpacing: '0.02em' }}>MATERIALS</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', letterSpacing: '0.02em' }}>LABOUR</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', letterSpacing: '0.02em' }}>PACKING</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(245, 158, 11, 0.1)', letterSpacing: '0.02em' }}>OVERHEADS</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', borderLeft: '2px solid rgba(59, 130, 246, 0.3)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>PROD COST (SIM)</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>REC RETAIL</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>REC W.SALE</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(59, 130, 246, 0.4)', color: '#3b82f6', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(59, 130, 246, 0.1)', letterSpacing: '0.02em' }}>SIM MARGIN %</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>AVG SELLING PRICE</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>UNIT COST</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>PROFIT/KG</th>
-                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid rgba(16, 185, 129, 0.4)', color: '#10b981', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'rgba(16, 185, 129, 0.1)', letterSpacing: '0.02em' }}>ACTUAL MARGIN %</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--amber-border-bold)', borderLeft: '2px solid var(--amber-border)', color: 'var(--amber-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--amber-bg)', letterSpacing: '0.02em' }}>TOTAL ACTUAL</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--amber-border-bold)', color: 'var(--amber-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--amber-bg)', letterSpacing: '0.02em' }}>MATERIALS</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--amber-border-bold)', color: 'var(--amber-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--amber-bg)', letterSpacing: '0.02em' }}>LABOUR</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--amber-border-bold)', color: 'var(--amber-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--amber-bg)', letterSpacing: '0.02em' }}>PACKING</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--amber-border-bold)', color: 'var(--amber-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--amber-bg)', letterSpacing: '0.02em' }}>OVERHEADS</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--blue-border-bold)', borderLeft: '2px solid var(--blue-border)', color: 'var(--blue-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--blue-bg)', letterSpacing: '0.02em' }}>PROD COST (SIM)</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--blue-border-bold)', color: 'var(--blue-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--blue-bg)', letterSpacing: '0.02em' }}>REC RETAIL</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--blue-border-bold)', color: 'var(--blue-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--blue-bg)', letterSpacing: '0.02em' }}>REC W.SALE</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--blue-border-bold)', color: 'var(--blue-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--blue-bg)', letterSpacing: '0.02em' }}>SIM MARGIN %</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--green-border-bold)', borderLeft: '2px solid var(--green-border)', color: 'var(--green-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--green-bg)', letterSpacing: '0.02em' }}>AVG SELLING PRICE</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--green-border-bold)', color: 'var(--green-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--green-bg)', letterSpacing: '0.02em' }}>UNIT COST</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--green-border-bold)', color: 'var(--green-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--green-bg)', letterSpacing: '0.02em' }}>PROFIT/KG</th>
+                                    <th style={{ padding: '1.25rem 0.5rem', borderBottom: '2px solid var(--green-border-bold)', color: 'var(--green-text)', fontWeight: 700, fontSize: '0.9rem', textAlign: 'right', background: 'var(--green-bg)', letterSpacing: '0.02em' }}>ACTUAL MARGIN %</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1201,11 +1259,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                                 ? `${selectedYear}-${String(monthNames.indexOf(selectedAnalysisMonth) + 1).padStart(2, '0')}`
                                                 : `${selectedYear}-12`; // For yearly, use latest available in that year
 
-                                            const simRetail = getSimForMonth(normName, targetMonthStr, 'retail');
-                                            const simWholesale = getSimForMonth(normName, targetMonthStr, 'wholesale');
+                                            const simRetail = getSimForMonth(normName, targetMonthStr, 'retail', true);
+                                            const simWholesale = getSimForMonth(normName, targetMonthStr, 'wholesale', true);
                                             const simCost = simRetail ? simRetail.unit_cost : (simWholesale ? simWholesale.unit_cost : null);
                                             const currentSimRetail = simRetail?.suggested_price || 0;
                                             const currentSimWholesale = simWholesale?.suggested_price || 0;
+
+                                            // Determine generation date for display
+                                            const benchmarkDateObj = simRetail || simWholesale;
+                                            const benchmarkDate = benchmarkDateObj?.created_at 
+                                                ? new Date(benchmarkDateObj.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                : null;
 
                                             totalRev += data.revenue;
                                             totalWeightSold += data.weightSold;
@@ -1226,100 +1290,103 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                                             }
 
                                             return (
-                                                <tr key={name} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <tr key={name} className="analysis-row" style={{ borderBottom: '1px solid var(--glass-border)', background: 'transparent' }}>
                                                     <td style={{ textAlign: 'left', padding: '1rem 0.5rem', fontWeight: 500, fontSize: '0.85rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{name}</td>
                                                     <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{data.weight >= 1000 ? (data.weight / 1000).toFixed(2) + 't' : data.weight.toLocaleString() + 'kg'}</td>
 
-                                                    {/* Actual Spend Section - Amber */}
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.04)', borderLeft: '2px solid rgba(245, 158, 11, 0.2)' }}>{formatCurrency(data.allocatedCost)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.materials)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.labour)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency(data.packaging)}</td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#f59e0b', opacity: 0.8, background: 'rgba(245, 158, 11, 0.04)' }}>{formatCurrency((data.bills || 0) + (data.other || 0) + (data.marketing || 0))}</td>
+                                            {/* Actual Spend Section - Amber */}
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--amber-text)', fontWeight: 600, background: 'var(--amber-bg)', borderLeft: '2px solid var(--amber-border)' }}>{formatCurrency(data.allocatedCost)}</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.85rem', color: 'var(--amber-text)', opacity: 0.8, background: 'var(--amber-bg)' }}>{formatCurrency(data.materials)}</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.85rem', color: 'var(--amber-text)', opacity: 0.8, background: 'var(--amber-bg)' }}>{formatCurrency(data.labour)}</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.85rem', color: 'var(--amber-text)', opacity: 0.8, background: 'var(--amber-bg)' }}>{formatCurrency(data.packaging)}</td>
+                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.85rem', color: 'var(--amber-text)', opacity: 0.8, background: 'var(--amber-bg)' }}>{formatCurrency((data.bills || 0) + (data.other || 0) + (data.marketing || 0))}</td>
 
-                                                    {/* Simulator Columns - Blue */}
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)', borderLeft: '2px solid rgba(59, 130, 246, 0.15)' }}>
-                                                        {simCost ? `₹${simCost.toFixed(1)}` : '-'}
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
-                                                        {simRetail ? `₹${simRetail.suggested_price.toFixed(1)}` : '-'}
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.04)' }}>
-                                                        {simWholesale ? `₹${simWholesale.suggested_price.toFixed(1)}` : '-'}
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.06)', borderRight: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                                                        {simCost && data.revenue > 0 ? `${((data.revenue - (data.weightSold * simCost)) / data.revenue * 100).toFixed(1)}%` : '-'}
-                                                    </td>
-
-                                                    {/* Market Performance - Green */}
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.04)', borderLeft: '2px solid rgba(16, 185, 129, 0.2)' }}>
-                                                        <div style={{ fontWeight: 600 }}>₹{itemAsp.toFixed(1)}/kg</div>
-                                                        <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>({formatCurrency(data.minPrice)}-{formatCurrency(data.maxPrice)})</div>
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)' }}>
-                                                        ₹{itemUnitCost.toFixed(1)}/kg
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#10b981', fontWeight: 600, background: 'rgba(16, 185, 129, 0.04)' }}>
-                                                        ₹{itemProfitPerKg.toFixed(1)}/kg
-                                                    </td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: itemMargin > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.06)' }}>
-                                                        {itemAsp > 0 ? `${itemMargin.toFixed(1)}%` : '-'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        });
-
-                                    // Corrected Summary Logic for Market Performance (Weighted Average)
-                                    let totalRevForSum = 0;
-                                    let totalProfitValForSum = 0;
-                                    let totalWeightSoldForSumVal = 0;
-
-                                    Object.entries(aggregatedItems).forEach(([name, data]) => {
-                                        const itemAsp = data.weightSold > 0 ? data.revenue / data.weightSold : 0;
-                                        const itemUnitCost = data.weight > 0 ? data.allocatedCost / data.weight : 0;
-                                        const itemProfitPerKg = itemAsp - itemUnitCost;
-
-                                        totalRevForSum += data.revenue;
-                                        totalWeightSoldForSumVal += data.weightSold;
-                                        totalProfitValForSum += (itemProfitPerKg * data.weightSold);
-                                    });
-
-                                    const avgSellingPriceAll = totalWeightSoldForSumVal > 0 ? totalRevForSum / totalWeightSoldForSumVal : 0;
-                                    const avgProfitPerKgAll = totalWeightSoldForSumVal > 0 ? totalProfitValForSum / totalWeightSoldForSumVal : 0;
-                                    const totalActualMargin = avgSellingPriceAll > 0 ? (avgProfitPerKgAll / avgSellingPriceAll) * 100 : 0;
-
-                                    const totalMonthlyRevenue = totalRevForSum;
-                                    const totalSimMargin = totalSimRevForMargin > 0 ? (totalSimProfit / totalSimRevForMargin) * 100 : null;
-
-                                    const avgSimCostAll = totalWeightSoldForSumVal > 0 ? totalSimCostVal / totalWeightSoldForSumVal : 0;
-                                    const avgSimRetailAll = totalWeightSoldForSumVal > 0 ? totalSimRetailVal / totalWeightSoldForSumVal : 0;
-                                    const avgSimWholesaleAll = totalWeightSoldForSumVal > 0 ? totalSimWholesaleVal / totalWeightSoldForSumVal : 0;
-
-                                    return [
-                                        ...rows,
-                                        <tr key="summary-row" style={{ background: 'rgba(59, 130, 246, 0.15)', borderTop: '2px solid rgba(59, 130, 246, 0.4)', fontWeight: 700 }}>
-                                            <td style={{ textAlign: 'left', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', letterSpacing: '0.05em' }}>AVERAGE SUMMARY</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                                                {totalWeightProduced >= 1000 ? (totalWeightProduced / 1000).toFixed(2) + 't' : totalWeightProduced.toLocaleString() + 'kg'}
+                                            {/* Simulator Columns - Blue */}
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--blue-text)', fontWeight: 600, background: 'var(--blue-bg)', borderLeft: '2px solid var(--blue-border)' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                    <span>{simCost ? `₹${simCost.toFixed(1)}` : '-'}</span>
+                                                    {benchmarkDate && <span style={{ fontSize: '0.65rem', opacity: 0.6, fontWeight: 400 }}>As of {benchmarkDate}</span>}
+                                                </div>
                                             </td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalAllocated)}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalMaterials)}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalLabour)}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalPackaging)}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#f59e0b' }}>{formatCurrency(totalOverheads)}</td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--blue-text)', fontWeight: 600, background: 'var(--blue-bg)' }}>
+                                                {simRetail ? `₹${simRetail.suggested_price.toFixed(1)}` : '-'}
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--blue-text)', fontWeight: 600, background: 'var(--blue-bg)' }}>
+                                                {simWholesale ? `₹${simWholesale.suggested_price.toFixed(1)}` : '-'}
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--blue-text)', background: 'var(--blue-bg)', borderRight: '1px solid var(--blue-border)' }}>
+                                                {simCost && data.revenue > 0 ? `${((data.revenue - (data.weightSold * simCost)) / data.revenue * 100).toFixed(1)}%` : '-'}
+                                            </td>
 
-                                            {/* Simulator Summary - Blue */}
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimCostAll > 0 ? `₹${avgSimCostAll.toFixed(1)}` : '-'}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimRetailAll > 0 ? `₹${avgSimRetailAll.toFixed(1)}` : '-'}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)' }}>{avgSimWholesaleAll > 0 ? `₹${avgSimWholesaleAll.toFixed(1)}` : '-'}</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)' }}>{totalSimMargin !== null ? `${totalSimMargin.toFixed(1)}%` : '-'}</td>
-
-                                            {/* Market Summary - Green */}
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgSellingPriceAll.toFixed(1)}/kg</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{(avgSellingPriceAll - avgProfitPerKgAll).toFixed(1)}/kg</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)' }}>₹{avgProfitPerKgAll.toFixed(1)}/kg</td>
-                                            <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: totalActualMargin > 15 ? '#10b981' : '#f59e0b', background: 'rgba(16, 185, 129, 0.1)' }}>{totalActualMargin.toFixed(1)}%</td>
+                                            {/* Market Performance - Green */}
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--green-text)', background: 'var(--green-bg)', borderLeft: '2px solid var(--green-border)' }}>
+                                                <div style={{ fontWeight: 600 }}>₹{itemAsp.toFixed(1)}/kg</div>
+                                                <div style={{ fontSize: '0.7rem', opacity: 0.6 }}>({formatCurrency(data.minPrice)}-{formatCurrency(data.maxPrice)})</div>
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--green-text)', fontWeight: 600, background: 'var(--green-bg)' }}>
+                                                ₹{itemUnitCost.toFixed(1)}/kg
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', color: 'var(--green-text)', fontWeight: 600, background: 'var(--green-bg)' }}>
+                                                ₹{itemProfitPerKg.toFixed(1)}/kg
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0.5rem', fontSize: '0.85rem', fontWeight: 600, color: itemMargin > 15 ? 'var(--green-text)' : 'var(--amber-text)', background: 'var(--green-bg)' }}>
+                                                {itemAsp > 0 ? `${itemMargin.toFixed(1)}%` : '-'}
+                                            </td>
                                         </tr>
+                                    );
+                                });
+
+                            // Corrected Summary Logic for Market Performance (Weighted Average)
+                            let totalRevForSum = 0;
+                            let totalProfitValForSum = 0;
+                            let totalWeightSoldForSumVal = 0;
+
+                            Object.entries(aggregatedItems).forEach(([name, data]) => {
+                                const itemAsp = data.weightSold > 0 ? data.revenue / data.weightSold : 0;
+                                const itemUnitCost = data.weight > 0 ? data.allocatedCost / data.weight : 0;
+                                const itemProfitPerKg = itemAsp - itemUnitCost;
+
+                                totalRevForSum += data.revenue;
+                                totalWeightSoldForSumVal += data.weightSold;
+                                totalProfitValForSum += (itemProfitPerKg * data.weightSold);
+                            });
+
+                            const avgSellingPriceAll = totalWeightSoldForSumVal > 0 ? totalRevForSum / totalWeightSoldForSumVal : 0;
+                            const avgProfitPerKgAll = totalWeightSoldForSumVal > 0 ? totalProfitValForSum / totalWeightSoldForSumVal : 0;
+                            const totalActualMargin = avgSellingPriceAll > 0 ? (avgProfitPerKgAll / avgSellingPriceAll) * 100 : 0;
+
+                            const totalMonthlyRevenue = totalRevForSum;
+                            const totalSimMargin = totalSimRevForMargin > 0 ? (totalSimProfit / totalSimRevForMargin) * 100 : null;
+
+                            const avgSimCostAll = totalWeightSoldForSumVal > 0 ? totalSimCostVal / totalWeightSoldForSumVal : 0;
+                            const avgSimRetailAll = totalWeightSoldForSumVal > 0 ? totalSimRetailVal / totalWeightSoldForSumVal : 0;
+                            const avgSimWholesaleAll = totalWeightSoldForSumVal > 0 ? totalSimWholesaleVal / totalWeightSoldForSumVal : 0;
+
+                            return [
+                                ...rows,
+                                <tr key="summary-row" style={{ background: 'var(--blue-bg)', borderTop: '2px solid var(--blue-border-bold)', fontWeight: 700 }}>
+                                    <td style={{ textAlign: 'left', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--blue-text)', letterSpacing: '0.05em' }}>AVERAGE SUMMARY</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                                        {totalWeightProduced >= 1000 ? (totalWeightProduced / 1000).toFixed(2) + 't' : totalWeightProduced.toLocaleString() + 'kg'}
+                                    </td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--amber-text)' }}>{formatCurrency(totalAllocated)}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--amber-text)' }}>{formatCurrency(totalMaterials)}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--amber-text)' }}>{formatCurrency(totalLabour)}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--amber-text)' }}>{formatCurrency(totalPackaging)}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--amber-text)' }}>{formatCurrency(totalOverheads)}</td>
+
+                                    {/* Simulator Summary - Blue */}
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{avgSimCostAll > 0 ? `₹${avgSimCostAll.toFixed(1)}` : '-'}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{avgSimRetailAll > 0 ? `₹${avgSimRetailAll.toFixed(1)}` : '-'}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '0.9rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{avgSimWholesaleAll > 0 ? `₹${avgSimWholesaleAll.toFixed(1)}` : '-'}</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: '1rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{totalSimMargin !== null ? `${totalSimMargin.toFixed(1)}%` : '-'}</td>
+
+                                    {/* Market Summary - Green */}
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: 'var(--green-text)', background: 'var(--green-bg)' }}>₹{avgSellingPriceAll.toFixed(1)}/kg</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: 'var(--green-text)', background: 'var(--green-bg)' }}>₹{(avgSellingPriceAll - avgProfitPerKgAll).toFixed(1)}/kg</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: 'var(--green-text)', background: 'var(--green-bg)' }}>₹{avgProfitPerKgAll.toFixed(1)}/kg</td>
+                                    <td style={{ textAlign: 'right', padding: '1.25rem 0.5rem', fontSize: 13, color: totalActualMargin > 15 ? 'var(--green-text)' : 'var(--amber-text)', background: 'var(--green-bg)' }}>{totalActualMargin.toFixed(1)}%</td>
+                                </tr>
                                     ];
                                 })()}
                             </tbody>
@@ -1419,151 +1486,243 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {} }
                     </table>
                 </div>
             </div>
+                </>
+            ) : (
+                <div className="profit-hub-container animate-fade-in" style={{ padding: '1rem 0' }}>
+                    {/* Summary Cards */}
+                    <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--green-bg)', border: '1px solid var(--green-border)' }}>
+                            <p style={{ color: 'var(--green-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                <Wallet size={16} /> TOTAL YTD PROFIT
+                            </p>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--green-text)' }}>{formatCurrency(totalStats.profit)}</h3>
+                        </div>
 
-            {/* Profit Share Module */}
-            <div className="glass-panel" style={{ marginTop: '2.5rem', overflow: 'hidden', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ padding: '0.6rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '0.75rem', color: '#10b981' }}>
-                            <Users size={20} />
-                        </div>
-                        <div>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Profit Distribution Hub</h3>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{analysisViewMode === 'yearly' ? `Fiscal Year ${selectedYear}` : `Performance for ${selectedAnalysisMonth} ${selectedYear}`}</div>
-                        </div>
+                        {(() => {
+                            let totalDistributedShares = 0;
+                            let totalPaidAmount = 0;
+                            
+                            yearlyData.filter(m => m.isActive).forEach(month => {
+                                const monthlyProfit = month.netProfit;
+                                const monthPayouts = profitPayouts.filter(p => p.month_year === `${month.name} ${selectedYear}`);
+                                
+                                profitStakeholders.forEach(s => {
+                                    const p = monthPayouts.find(p => p.stakeholder_id === s.id);
+                                    const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                    totalDistributedShares += share;
+                                    
+                                    if (p && p.status === 'paid') {
+                                        totalPaidAmount += share;
+                                    }
+                                });
+                            });
+                            
+                            const totalPendingAmount = totalDistributedShares - totalPaidAmount;
+                            const totalReservedFund = totalStats.profit - totalDistributedShares;
+                            
+                            return (
+                                <>
+                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--blue-bg)', border: '1px solid var(--blue-border)' }}>
+                                        <p style={{ color: 'var(--blue-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                            <Users size={16} /> DISTRIBUTED SHARES
+                                        </p>
+                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--blue-text)' }}>{formatCurrency(totalDistributedShares)}</h3>
+                                    </div>
+                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                        <p style={{ color: '#f59e0b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                            <Calendar size={16} /> PENDING PAYOUTS
+                                        </p>
+                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#f59e0b' }}>{formatCurrency(totalPendingAmount)}</h3>
+                                    </div>
+                                    <div className="glass-panel" style={{ padding: '1.5rem', background: 'var(--amber-bg)', border: '1px solid var(--amber-border)' }}>
+                                        <p style={{ color: 'var(--amber-text)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                            <Activity size={16} /> RESERVED FUND
+                                        </p>
+                                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--amber-text)' }}>{formatCurrency(totalReservedFund)}</h3>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
-                    <button
-                        onClick={() => {
-                            const newId = Math.max(0, ...profitStakeholders.map(s => s.id)) + 1;
-                            setProfitStakeholders([...profitStakeholders, { id: newId, name: `Stakeholder ${newId}`, percent: 0 }]);
-                        }}
-                        style={{
-                            padding: '0.5rem 1rem', fontSize: '0.8rem', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.3)',
-                            background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                            transition: 'all 0.2s', fontWeight: 500
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'; }}
-                    >
-                        <Plus size={16} /> Add Stakeholder
-                    </button>
-                </div>
 
-                <div style={{ padding: '2rem' }}>
-                    {(() => {
-                        const totalProfit = analysisViewMode === 'yearly'
-                            ? yearlyData.reduce((acc, m) => acc + (m.isActive ? m.netProfit : 0), 0)
-                            : (yearlyData.find(m => m.name === selectedAnalysisMonth)?.netProfit || 0);
-
-                        const totalPct = profitStakeholders.reduce((acc, s) => acc + parseFloat(s.percent || 0), 0);
-
-                        return (
-                            <>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', marginBottom: '2.5rem' }}>
-                                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1.25rem', border: '1px solid var(--glass-border)', position: 'relative', overflow: 'hidden' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '1.5px', fontWeight: 600 }}>Available for Distribution</div>
-                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                                            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: totalProfit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(totalProfit)}</div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Net Net</div>
-                                        </div>
-                                        <Wallet style={{ position: 'absolute', right: '-10px', top: '-10px', opacity: 0.05, transform: 'rotate(-15deg)' }} size={100} />
-                                    </div>
-
-                                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1.25rem', border: '1px solid var(--glass-border)', position: 'relative' }}>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '1.5px', fontWeight: 600 }}>Allocation Tracking</div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b') }}>
-                                                {totalPct}% <span style={{ fontSize: '0.9rem', fontWeight: 400, opacity: 0.7 }}>Set</span>
-                                            </div>
-                                            <div style={{ fontSize: '0.8rem', color: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b'), fontWeight: 600 }}>
-                                                {Math.abs(totalPct - 100) < 0.1 ? 'FULLY ALLOCATED' : (totalPct > 100 ? 'EXCEEDS 100%' : `${(100 - totalPct).toFixed(0)}% REMAINING`)}
-                                            </div>
-                                        </div>
-                                        {/* Progress Bar */}
-                                        <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                                            <div style={{
-                                                height: '100%', width: `${Math.min(100, totalPct)}%`,
-                                                background: Math.abs(totalPct - 100) < 0.1 ? '#10b981' : (totalPct > 100 ? '#ef4444' : '#f59e0b'),
-                                                transition: 'width 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                                            }} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.75rem' }}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Stakeholder</th>
-                                                <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Split (%)</th>
-                                                <th style={{ textAlign: 'right', padding: '0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Computed Share</th>
-                                                <th style={{ width: '50px' }}></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {profitStakeholders.map((sh, idx) => (
-                                                <tr key={sh.id} style={{ background: 'rgba(255,255,255,0.01)', transition: 'transform 0.2s', hover: { transform: 'translateX(5px)' } }}>
-                                                    <td style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem 0 0 0.75rem', borderLeft: '3px solid #10b981' }}>
-                                                        <input
-                                                            value={sh.name}
-                                                            onChange={(e) => {
-                                                                const newSh = [...profitStakeholders];
-                                                                newSh[idx].name = e.target.value;
-                                                                setProfitStakeholders(newSh);
-                                                            }}
-                                                            placeholder="Stakeholder name"
-                                                            style={{
-                                                                background: 'transparent', border: 'none', color: 'white',
-                                                                padding: '0.5rem', width: '100%', outline: 'none', fontSize: '0.95rem', fontWeight: 500
-                                                            }}
-                                                        />
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                                                        <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                                            <input
-                                                                type="number"
-                                                                value={sh.percent}
-                                                                onChange={(e) => {
-                                                                    const newSh = [...profitStakeholders];
-                                                                    newSh[idx].percent = parseFloat(e.target.value || 0);
-                                                                    setProfitStakeholders(newSh);
-                                                                }}
-                                                                style={{
-                                                                    background: 'transparent', border: 'none', color: 'white',
-                                                                    padding: '0.3rem', width: '50px', textAlign: 'center', outline: 'none', fontWeight: 600
-                                                                }}
-                                                            />
-                                                            <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>%</span>
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: '1.1rem' }}>
-                                                        {formatCurrency((sh.percent / 100) * totalProfit)}
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', borderRadius: '0 0.75rem 0.75rem 0' }}>
-                                                        <button
-                                                            onClick={() => setProfitStakeholders(profitStakeholders.filter(s => s.id !== sh.id))}
-                                                            style={{
-                                                                background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444',
-                                                                cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                                            }}
-                                                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; }}
-                                                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)'; }}
-                                                            title="Remove stakeholder"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
+                        {/* Monthly Distribution Table */}
+                        <div className="glass-panel" style={{ overflow: 'hidden' }}>
+                            <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <TrendingUp size={18} color="#3b82f6" />
+                                    Monthly Profit Distribution
+                                </h3>
+                                <button 
+                                    className="btn-danger" 
+                                    onClick={async () => {
+                                        if (window.confirm("Are you sure you want to reset all payout records? This will clear all 'Paid' statuses globally and recalculate based on current percentages.")) {
+                                            await supabase.from('profit_payouts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                                            fetchProfitHubData();
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer', fontWeight: 600
+                                    }}
+                                >
+                                    Force Reset All Payouts
+                                </button>
+                            </div>
+                            <div style={{ overflowX: 'auto', padding: '1.5rem' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+                                    <thead>
+                                        <tr style={{ background: 'var(--glass-highlight)' }}>
+                                            <th style={{ textAlign: 'left', padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>MONTH</th>
+                                            <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>TOTAL PROFIT</th>
+                                            {profitStakeholders.map(s => (
+                                                <th key={s.id} style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{s.name} ({s.percentage}%)</th>
+                                            ))}
+                                            <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--amber-text)', background: 'var(--amber-bg)' }}>RESERVE</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {yearlyData.filter(m => m.isActive).map(month => {
+                                            const totalAllocatedPct = profitStakeholders.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
+                                            const reservedPct = Math.max(0, 100 - totalAllocatedPct);
+                                            const monthlyProfit = month.netProfit;
+                                            const monthPayouts = profitPayouts.filter(p => p.month_year === `${month.name} ${selectedYear}`);
+                                            
+                                            return (
+                                                <tr key={month.name} className="analysis-row" style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                    <td style={{ textAlign: 'left', padding: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>{month.name}</td>
+                                                    <td style={{ padding: '1rem', fontSize: '0.85rem', fontWeight: 700, color: monthlyProfit >= 0 ? 'var(--green-text)' : 'var(--amber-text)' }}>{formatCurrency(monthlyProfit)}</td>
+                                                    {profitStakeholders.map(s => {
+                                                        const p = monthPayouts.find(p => p.stakeholder_id === s.id);
+                                                        const currentStatus = (p && p.status === 'paid') ? 'paid' : 'pending';
+                                                        
+                                                        // What to physically display on screen (respect saved amount if paid, else preview live calculation)
+                                                        const displayShare = (p && p.status === 'paid' && Number(p.amount) >= 0) 
+                                                            ? p.amount 
+                                                            : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                                            
+                                                        return (
+                                                            <td key={s.id} style={{ padding: '1rem', fontSize: '0.85rem' }}>
+                                                                <div style={{ fontWeight: 600, color: 'var(--blue-text)' }}>{formatCurrency(displayShare)}</div>
+                                                                <div style={{ marginTop: '0.35rem' }}>
+                                                                    <select 
+                                                                        value={currentStatus}
+                                                                        onChange={async (e) => {
+                                                                            const newStatus = e.target.value;
+                                                                            const freshCalculatedShare = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
+                                                                            
+                                                                            if (p) {
+                                                                                await supabase.from('profit_payouts').update({ 
+                                                                                    status: newStatus, 
+                                                                                    amount: freshCalculatedShare, 
+                                                                                    paid_at: newStatus === 'paid' ? new Date().toISOString() : null 
+                                                                                }).eq('id', p.id);
+                                                                            } else {
+                                                                                await supabase.from('profit_payouts').insert({
+                                                                                    stakeholder_id: s.id,
+                                                                                    month_year: `${month.name} ${selectedYear}`,
+                                                                                    amount: freshCalculatedShare,
+                                                                                    status: newStatus,
+                                                                                    paid_at: newStatus === 'paid' ? new Date().toISOString() : null
+                                                                                });
+                                                                            }
+                                                                            fetchProfitHubData();
+                                                                        }}
+                                                                        style={{
+                                                                            fontSize: '0.7rem', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)',
+                                                                            background: currentStatus === 'paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                                                            color: currentStatus === 'paid' ? '#10b981' : '#f59e0b',
+                                                                            fontWeight: 600, outline: 'none', cursor: 'pointer', textAlign: 'center'
+                                                                        }}
+                                                                    >
+                                                                        <option value="pending" style={{ color: '#000' }}>Pending</option>
+                                                                        <option value="paid" style={{ color: '#000' }}>Paid</option>
+                                                                    </select>
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                    <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--amber-text)', fontWeight: 600 }}>
+                                                        {formatCurrency((monthlyProfit * reservedPct) / 100)}
                                                     </td>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Stakeholder Management Card */}
+                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                            <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Users size={18} color="#3b82f6" />
+                                Manage Stakeholders
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {profitStakeholders.map(s => (
+                                    <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                            <input 
+                                                value={s.name} 
+                                                onChange={async (e) => {
+                                                    const val = e.target.value;
+                                                    setProfitStakeholders(prev => prev.map(old => old.id === s.id ? { ...old, name: val } : old));
+                                                }}
+                                                onBlur={async (e) => {
+                                                    await supabase.from('profit_stakeholders').update({ name: e.target.value }).eq('id', s.id);
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', fontWeight: 600, color: 'var(--text-primary)', outline: 'none', width: '70%' }}
+                                            />
+                                            <button 
+                                                onClick={async () => {
+                                                    await supabase.from('profit_stakeholders').delete().eq('id', s.id);
+                                                    fetchProfitHubData();
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <input 
+                                                type="number"
+                                                value={s.percentage === 0 ? '' : s.percentage}
+                                                placeholder="0"
+                                                onChange={(e) => {
+                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                    setProfitStakeholders(prev => prev.map(old => old.id === s.id ? { ...old, percentage: val } : old));
+                                                }}
+                                                onBlur={async (e) => {
+                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                    await supabase.from('profit_stakeholders').update({ percentage: val }).eq('id', s.id);
+                                                }}
+                                                style={{ width: '60px', padding: '0.4rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.1)', color: 'var(--text-primary)', textAlign: 'center' }}
+                                            />
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>% share of profit</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                
+                                <button 
+                                    className="btn-primary" 
+                                    style={{ marginTop: '0.5rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                    onClick={async () => {
+                                        await supabase.from('profit_stakeholders').insert({ name: 'New Stakeholder', percentage: 10 });
+                                        fetchProfitHubData();
+                                    }}
+                                >
+                                    <Plus size={16} /> Add Stakeholder
+                                </button>
+                                
+                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--amber-bg)', borderRadius: '0.5rem', border: '1px solid var(--amber-border)', fontSize: '0.75rem', color: 'var(--amber-text)' }}>
+                                    <Info size={14} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                                    Any unallocated percentage automatically flows to the **Reserved Fund**.
                                 </div>
-                            </>
-                        );
-                    })()}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

@@ -11,6 +11,23 @@
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-highlight: rgba(255, 255, 255, 0.05);
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --row-hover: rgba(255, 255, 255, 0.05);
+
+  /* Section Colors - Default (Dark) */
+  --amber-text: #f59e0b;
+  --amber-bg: rgba(245, 158, 11, 0.04);
+  --amber-border: rgba(245, 158, 11, 0.2);
+  --amber-border-bold: rgba(245, 158, 11, 0.4);
+
+  --blue-text: #3b82f6;
+  --blue-bg: rgba(59, 130, 246, 0.04);
+  --blue-border: rgba(59, 130, 246, 0.15);
+  --blue-border-bold: rgba(59, 130, 246, 0.4);
+
+  --green-text: #10b981;
+  --green-bg: rgba(16, 185, 129, 0.04);
+  --green-border: rgba(16, 185, 129, 0.2);
+  --green-border-bold: rgba(16, 185, 129, 0.4);
 }
 
 [data-theme='light'] {
@@ -30,6 +47,20 @@
   /* Dark slate borders */
   --glass-highlight: rgba(15, 23, 42, 0.04);
   /* Subtle dark highlight */
+  --row-hover: rgba(15, 23, 42, 0.02);
+
+  /* Section Colors - Light Mode Highlights - BRIGHTER */
+  --amber-text: #d97706; /* Vibrant Amber 600 */
+  --amber-bg: rgba(251, 191, 36, 0.12); /* Brighter tint */
+  --amber-border: rgba(217, 119, 6, 0.25);
+
+  --blue-text: #2563eb; /* Vibrant Blue 600 */
+  --blue-bg: rgba(59, 130, 246, 0.12);
+  --blue-border: rgba(37, 99, 235, 0.25);
+
+  --green-text: #059669; /* Vibrant Emerald 600 */
+  --green-bg: rgba(16, 185, 129, 0.12);
+  --green-border: rgba(5, 150, 105, 0.25);
 }
 
 body {
@@ -67,8 +98,16 @@ body::before {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
   border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  transition: background 0.3s ease, border-color 0.3s ease;
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.analysis-row {
+  transition: background 0.2s ease;
+}
+
+.analysis-row:hover {
+  background: var(--row-hover) !important;
 }
 
 .btn-primary {

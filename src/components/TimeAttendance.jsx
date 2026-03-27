@@ -56,6 +56,21 @@ const formatDuration = (decHours) => {
     return `${h}h ${String(m).padStart(2, '0')}m`;
 };
 
+const getSpecialDayType = (dateStr, holidays = []) => {
+    if (!dateStr) return 'none';
+    const date = new Date(dateStr);
+    const day = date.getDay();
+    // getDay() returns 0 for Sunday
+    const isSunday = day === 0;
+    const isHoliday = Array.isArray(holidays) && holidays.includes(dateStr);
+
+    if (isHoliday) return 'holiday';
+    if (isSunday) return 'sunday';
+    return 'none';
+};
+
+const isSpecialDay = (dateStr, holidays = []) => getSpecialDayType(dateStr, holidays) !== 'none';
+
 const TimeAttendance = ({ onBack, hideBack = false }) => {
     const { user, role, logout: authLogout, canAccessPayouts } = useAuth();
     const canViewPayouts = role === 'admin' || canAccessPayouts;
@@ -65,7 +80,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [payrollConfig, setPayrollConfig] = useState({
         standard_daily_hours: 8,
         ot_multiplier: 1.5,
-        default_hourly_rate: 100
+        default_hourly_rate: 100,
+        national_holidays: []
     });
     const [isSaving, setIsSaving] = useState(false);
     const [showManualEntry, setShowManualEntry] = useState(false);
@@ -143,11 +159,21 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             if (recalcH > 0) {
                                 hoursWorked = recalcH;
                                 // Recalculate derived metrics
-                                regularHours = Math.min(hoursWorked, payrollConfig.standard_daily_hours);
-                                otHours = Math.max(0, hoursWorked - payrollConfig.standard_daily_hours);
+                                const isSpecial = isSpecialDay(item.date, payrollConfig.national_holidays);
+                                regularHours = isSpecial ? 0 : Math.min(hoursWorked, payrollConfig.standard_daily_hours);
+                                otHours = isSpecial ? hoursWorked : Math.max(0, hoursWorked - payrollConfig.standard_daily_hours);
                                 const r = parseFloat(item.rate || payrollConfig.default_hourly_rate);
                                 dailyWage = (regularHours * r) + (otHours * r * payrollConfig.ot_multiplier);
                             }
+                        }
+                    } else if (hoursWorked > 0) {
+                        // Force-Fix for Special Days if they were saved with regular hours before
+                        const isSpecial = isSpecialDay(item.date, payrollConfig.national_holidays);
+                        if (isSpecial && regularHours > 0) {
+                            regularHours = 0;
+                            otHours = hoursWorked;
+                            const r = parseFloat(item.rate || payrollConfig.default_hourly_rate);
+                            dailyWage = (otHours * r * payrollConfig.ot_multiplier);
                         }
                     }
 
@@ -353,8 +379,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 if (parts[0].length === 2) dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
 
-            const regularHours = Math.min(totalWorkHours, payrollConfig.standard_daily_hours);
-            const otHours = Math.max(0, totalWorkHours - payrollConfig.standard_daily_hours);
+            const isSpecial = isSpecialDay(dateStr, payrollConfig.national_holidays);
+            const regularHours = isSpecial ? 0 : Math.min(totalWorkHours, payrollConfig.standard_daily_hours);
+            const otHours = isSpecial ? totalWorkHours : Math.max(0, totalWorkHours - payrollConfig.standard_daily_hours);
             const rate = masterInfo.rate || payrollConfig.default_hourly_rate;
             const dailyWage = (regularHours * rate) + (otHours * rate * payrollConfig.ot_multiplier);
             const deductions = parseFloat(row[deductionIdx] || 0) || 0;
@@ -481,10 +508,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
 
             if (matchesSearch && matchesDate) {
-                const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                const displayOT = isSpecial ? (parseFloat(row.hoursWorked) || 0) : (parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8)));
                 const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                 const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                const dailyWage = parseFloat(row.daily_wage || row.dailyWage) || 0;
+                const regularHoursForWage = isSpecial ? 0 : (parseFloat(row.hoursWorked) || 0) - displayOT;
+                const dailyWage = (regularHoursForWage * rate) + otPay;
                 const deductions = parseFloat(row.deductions) || 0;
 
                 const netDailyPay = dailyWage + (otPay > 0 ? otPay : 0) - deductions;
@@ -505,13 +534,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         attendanceData.forEach(row => {
             if (!balances[row.empId]) balances[row.empId] = { earned: 0, paid: 0 };
 
-            const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+            const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+            const displayOT = isSpecial ? (parseFloat(row.hoursWorked) || 0) : (parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8)));
             const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
             const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-            const dailyWage = parseFloat(row.daily_wage || row.dailyWage) || 0;
+            const regularHoursForWage = isSpecial ? 0 : (parseFloat(row.hoursWorked) || 0) - displayOT;
+            const dailyWage = (regularHoursForWage * rate) + otPay;
             const deductions = parseFloat(row.deductions) || 0;
 
-            balances[row.empId].earned += (dailyWage + (otPay > 0 ? otPay : 0) - deductions);
+            balances[row.empId].earned += (dailyWage - deductions);
         });
 
         // Accumulate payments
@@ -573,10 +604,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const isPerm = !emp || emp.staff_type === 'Permanent' || !emp.staff_type;
 
             const hours = parseFloat(r.hoursWorked) || 0;
-            const ot = parseFloat(r.otHours) || Math.max(0, hours - parseFloat(payrollConfig.standard_daily_hours || 8));
+            const isSpecial = isSpecialDay(r.date, payrollConfig.national_holidays);
+            const ot = isSpecial ? hours : (parseFloat(r.otHours) || Math.max(0, hours - parseFloat(payrollConfig.standard_daily_hours || 8)));
             const rate = parseFloat(r.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
             const otPay = ot * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-            const cost = parseFloat(r.daily_wage || r.dailyWage) || 0;
+            const regularHoursForWage = isSpecial ? 0 : hours - ot;
+            const cost = (regularHoursForWage * rate) + otPay;
             const deductions = parseFloat(r.deductions) || 0;
 
             // Add to totals
@@ -1210,18 +1243,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
                                             <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
                                                 <tr style={{ textAlign: 'left' }}>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Date</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Employee</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 4</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Shift 4</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Total Hours</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: '#f59e0b' }}>Total Hours</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Hours</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>OT Hours</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
                                                 </tr>
                                             </thead>
@@ -1229,15 +1262,30 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                 {filteredAttendance.map((row, i) => {
                                                     const emp = employees.find(e => e.emp_id === row.empId);
                                                     const isTemp = emp?.staff_type === 'Temporary';
+                                                    const specialType = getSpecialDayType(row.date, payrollConfig.national_holidays);
+                                                    const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
+
+                                                    let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+                                                    if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                                    else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+                                                    else if (isTemp) rowBg = 'rgba(245, 158, 11, 0.05)';
+
                                                     return (
                                                         <tr key={i} style={{
                                                             height: '85px',
                                                             borderBottom: '1px solid var(--glass-border)',
-                                                            background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                            background: rowBg
                                                         }}>
-                                                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>{row.date}</td>
+                                                            <td style={{ padding: '1rem', whiteSpace: 'nowrap', borderRight: '1px solid var(--glass-border)' }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <div style={{ fontWeight: 600 }}>{row.date}</div>
+                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                                        {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
                                                             <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{row.empId}</td>
-                                                            <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                            <td style={{ padding: '1rem', fontWeight: 500, borderRight: '1px solid var(--glass-border)' }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                     {row.name}
                                                                     {isTemp && <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '0.25rem', fontWeight: 700 }}>TEMP</span>}
@@ -1254,20 +1302,23 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div></td>
                                                             <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div></td>
                                                             <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
                                                             <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontWeight: 600 }}>{formatDuration(row.hoursWorked)}</div></td>
+                                                            <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.03)' }}>{formatDuration(row.hoursWorked)}</td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(() => {
                                                                     const total = parseFloat(row.hoursWorked) || 0;
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const nonOT = Math.max(0, total - displayOT);
                                                                     return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{formatDuration(nonOT)}</div>;
                                                                 })()}
                                                             </td>
-                                                            <td style={{ padding: '1rem' }}>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 {(() => {
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const total = (parseFloat(row.hoursWorked) || 0);
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     return displayOT > 0 ? (
                                                                         <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
                                                                             +{formatDuration(displayOT)}
@@ -1285,7 +1336,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     );
                                                 })}
                                                 {filteredAttendance.length === 0 && (
-                                                    <tr><td colSpan={12} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                                    <tr><td colSpan={13} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
                                                 )}
                                             </tbody>
                                         </table>
@@ -1300,14 +1351,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
                                             <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
                                                 <tr style={{ textAlign: 'left' }}>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Date</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Date</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Employee</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Employee</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Status</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: '#f59e0b' }}>Total Hours</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>OT Hrs</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Non OT Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Net Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right', color: '#60a5fa', borderRight: '1px solid var(--glass-border)' }}>Net Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
                                                 </tr>
                                             </thead>
@@ -1315,36 +1370,86 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                 {filteredAttendance.map((row, i) => {
                                                     const emp = employees.find(e => e.emp_id === row.empId);
                                                     const isTemp = emp?.staff_type === 'Temporary';
+                                                    const specialType = getSpecialDayType(row.date, payrollConfig.national_holidays);
+                                                    const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
+
+                                                    let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+                                                    if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                                    else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+                                                    else if (isTemp) rowBg = 'rgba(245, 158, 11, 0.05)';
+
                                                     return (
                                                         <tr key={i} style={{
                                                             height: '85px',
                                                             borderBottom: '1px solid var(--glass-border)',
-                                                            background: isTemp ? 'rgba(245, 158, 11, 0.05)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')
+                                                            background: rowBg
                                                         }}>
-                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
-                                                                {row.date}
+                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)', borderRight: '1px solid var(--glass-border)' }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.date}</div>
+                                                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                                        {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                                    </div>
+                                                                </div>
                                                             </td>
                                                             <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
                                                                 {row.empId}
                                                             </td>
-                                                            <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                            <td style={{ padding: '1rem', fontWeight: 500, borderRight: '1px solid var(--glass-border)' }}>
                                                                 {row.name}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                                <div style={{
+                                                                    padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
+                                                                    background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                }}>{row.attendance_status || 'Present'}</div>
+                                                            </td>
+                                                            <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.03)' }}>
+                                                                {formatDuration(parseFloat(row.hoursWorked) || 0)}
+                                                            </td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                {(() => {
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
+                                                                    const nonOT = Math.max(0, total - displayOT);
+                                                                    return <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{formatDuration(nonOT)}</div>;
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                                {(() => {
+                                                                    const total = (parseFloat(row.hoursWorked) || 0);
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
+                                                                    return displayOT > 0 ? (
+                                                                        <span style={{ color: '#f97316', background: 'rgba(249, 115, 22, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontWeight: 600 }}>
+                                                                            +{formatDuration(displayOT)}
+                                                                        </span>
+                                                                    ) : '-';
+                                                                })()}
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
                                                                 {(() => {
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
                                                                     const totalBackend = parseFloat(row.daily_wage || row.dailyWage) || 0;
 
                                                                     let nonOtBase = 0;
-                                                                    if (totalBackend > 0) {
+                                                                    if (totalBackend > 0 && !isSpecial) {
                                                                         // If backend already calculated total cost, extract base by subtracting OT
                                                                         nonOtBase = Math.max(0, totalBackend - otPay);
-                                                                    } else {
+                                                                    } else if (!isSpecial) {
                                                                         // If backend is missing data (e.g. live ongoing shift), calculate base normally
                                                                         const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                         nonOtBase = regH * rate;
+                                                                    } else {
+                                                                        // Special Day - Base is 0
+                                                                        nonOtBase = 0;
                                                                     }
 
                                                                     return formatCurrency(nonOtBase);
@@ -1352,7 +1457,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             </td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(() => {
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
                                                                     return otPay > 0 ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(otPay)}</span> : '-';
@@ -1360,29 +1467,33 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
                                                                 {(() => {
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
 
                                                                     let totalPay = parseFloat(row.daily_wage || row.dailyWage) || 0;
-                                                                    if (totalPay === 0) {
-                                                                        // Fallback if backend hasn't processed
-                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    if (totalPay === 0 || isSpecial) {
+                                                                        // Fallback if backend hasn't processed or if Special day rule applies
+                                                                        const regH = isSpecial ? 0 : Math.min(total, parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                         totalPay = (regH * rate) + otPay;
                                                                     }
                                                                     return formatCurrency(totalPay);
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
-                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)', fontSize: '0.95rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 {(() => {
-                                                                    const displayOT = parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    const total = parseFloat(row.hoursWorked) || 0;
+                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
+                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
                                                                     const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
 
                                                                     let totalPay = parseFloat(row.daily_wage || row.dailyWage) || 0;
-                                                                    if (totalPay === 0) {
-                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
+                                                                    if (totalPay === 0 || isSpecial) {
+                                                                        const regH = isSpecial ? 0 : Math.min(total, parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                         totalPay = (regH * rate) + otPay;
                                                                     }
                                                                     const deductions = parseFloat(row.deductions) || 0;
@@ -1399,7 +1510,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     );
                                                 })}
                                                 {filteredAttendance.length === 0 && (
-                                                    <tr><td colSpan={9} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
+                                                    <tr><td colSpan={13} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No data loaded.</td></tr>
                                                 )}
                                             </tbody>
                                         </table>
@@ -1538,46 +1649,62 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.875rem' }}>
                                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-primary)' }}>
                                     <tr style={{ textAlign: 'left' }}>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Date</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Emp ID</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Employee Name</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Type</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Amount</th>
-                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)' }}>Remarks</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', borderRight: '1px solid var(--glass-border)' }}>Date</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', borderRight: '1px solid var(--glass-border)' }}>Emp ID</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', borderRight: '1px solid var(--glass-border)' }}>Employee Name</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', borderRight: '1px solid var(--glass-border)' }}>Type</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right', color: '#60a5fa', borderRight: '1px solid var(--glass-border)' }}>Amount</th>
+                                        <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', borderRight: '1px solid var(--glass-border)' }}>Remarks</th>
                                         <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', background: 'var(--glass-highlight)', textAlign: 'right' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredPayments.map((row) => (
-                                        <tr key={row.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                                            <td style={{ padding: '1rem' }}>{row.date}</td>
-                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{row.emp_id}</td>
-                                            <td style={{ padding: '1rem', fontWeight: 500 }}>{row.emp_name}</td>
-                                            <td style={{ padding: '1rem' }}>
-                                                <span style={{
-                                                    padding: '0.2rem 0.6rem',
-                                                    borderRadius: '1rem',
-                                                    fontSize: '0.7rem',
-                                                    fontWeight: 700,
-                                                    background: row.type === 'Salary' ? 'rgba(59, 130, 246, 0.1)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
-                                                    color: row.type === 'Salary' ? '#3b82f6' : (row.type === 'Advance' ? '#f59e0b' : '#10b981'),
-                                                    border: `1px solid ${row.type === 'Salary' ? 'rgba(59, 130, 246, 0.2)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)')}`
-                                                }}>
-                                                    {row.type.toUpperCase()}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(row.amount)}</td>
-                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{row.remarks || '-'}</td>
-                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                                <button
-                                                    onClick={() => deletePayment(row.id)}
-                                                    style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {filteredPayments.map((row, i) => {
+                                        const specialType = getSpecialDayType(row.date, payrollConfig.national_holidays);
+                                        const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
+                                        
+                                        let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+                                        if (specialType === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
+                                        else if (specialType === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
+
+                                        return (
+                                            <tr key={row.id} style={{ borderBottom: '1px solid var(--glass-border)', background: rowBg }}>
+                                                <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        <div style={{ fontWeight: 600 }}>{row.date}</div>
+                                                        <div style={{ fontSize: '0.65rem', fontWeight: 800, color: specialType === 'holiday' ? '#f43f5e' : (specialType === 'sunday' ? '#6366f1' : 'var(--text-secondary)') }}>
+                                                            {specialType === 'holiday' ? 'HOLIDAY' : dayOfWeek}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', borderRight: '1px solid var(--glass-border)' }}>{row.emp_id}</td>
+                                                <td style={{ padding: '1rem', fontWeight: 500, borderRight: '1px solid var(--glass-border)' }}>{row.emp_name}</td>
+                                                <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                    <span style={{
+                                                        padding: '0.2rem 0.6rem',
+                                                        borderRadius: '1rem',
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: 700,
+                                                        background: row.type === 'Salary' ? 'rgba(59, 130, 246, 0.1)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
+                                                        color: row.type === 'Salary' ? '#3b82f6' : (row.type === 'Advance' ? '#f59e0b' : '#10b981'),
+                                                        border: `1px solid ${row.type === 'Salary' ? 'rgba(59, 130, 246, 0.2)' : (row.type === 'Advance' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)')}`
+                                                    }}>
+                                                        {row.type.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)', borderRight: '1px solid var(--glass-border)' }}>{formatCurrency(row.amount)}</td>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', borderRight: '1px solid var(--glass-border)' }}>{row.remarks || '-'}</td>
+                                                <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                    <button
+                                                        onClick={() => deletePayment(row.id)}
+                                                        style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                     {filteredPayments.length === 0 && (
                                         <tr>
                                             <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -1743,8 +1870,10 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 });
 
                 totalH = Math.max(0, totalH - (formData.breakMins / 60));
-                regH = Math.min(totalH, config.standard_daily_hours);
-                otH = Math.max(0, totalH - config.standard_daily_hours);
+                
+                const isSpecial = isSpecialDay(formData.date, config.national_holidays);
+                regH = isSpecial ? 0 : Math.min(totalH, config.standard_daily_hours);
+                otH = isSpecial ? totalH : Math.max(0, totalH - config.standard_daily_hours);
                 wage = (regH * rate) + (otH * rate * config.ot_multiplier);
             }
 

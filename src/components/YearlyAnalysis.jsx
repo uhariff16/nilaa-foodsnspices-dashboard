@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
-import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet } from 'lucide-react';
+import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -42,6 +43,7 @@ const getPackWeight = (desc) => {
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
 const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, forceTab = null }) => {
+    const { hasPermission } = useAuth();
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     // Dashboard View Settings
@@ -683,8 +685,22 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
     return (
         <div className="animate-fade-in" style={{ color: 'var(--text-primary)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {!hasPermission('payouts') ? (
+                <div className="glass-panel" style={{ padding: '6rem 2rem', textAlign: 'center', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '1rem', margin: '2rem 0' }}>
+                    <Shield size={64} color="#ef4444" style={{ marginBottom: '2rem', opacity: 0.8 }} />
+                    <h2 style={{ color: '#ef4444', marginBottom: '1.5rem', fontWeight: 800, fontSize: '2rem' }}>Global Access Required</h2>
+                    <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto', lineHeight: 1.6, fontSize: '1.1rem' }}>
+                        This module contains sensitive executive financial data, including YTD performance charts, margin analysis, and profit distribution records. 
+                        You require <strong>Global Access</strong> permissions to view this information.
+                    </p>
+                    <p style={{ marginTop: '2rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                        Please contact a Master Admin if you believe this is an error.
+                    </p>
+                </div>
+            ) : (
+                <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     {!forceTab && (
                         <div className="glass-panel" style={{ display: 'inline-flex', padding: '0.25rem', borderRadius: '0.5rem', background: 'var(--glass-highlight)' }}>
                             <button
@@ -838,7 +854,6 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 </div>
                             </div>
                         )}
-                    </div>
                 </div>
             </div>
 
@@ -1500,6 +1515,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 </>
             ) : (
                 <div className="profit-hub-container animate-fade-in" style={{ padding: '1rem 0' }}>
+                        <>
                     {isTableMissing && (
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#ef4444' }}>
@@ -1591,11 +1607,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
-                        </div>
                     </div>
+                </div>
 
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
                         {/* Monthly Distribution Table */}
                         <div className="glass-panel" style={{ overflow: 'hidden' }}>
                             <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1856,14 +1871,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 
                                 <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--amber-bg)', borderRadius: '0.5rem', border: '1px solid var(--amber-border)', fontSize: '0.75rem', color: 'var(--amber-text)' }}>
                                     <Info size={14} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
-                                    Any unallocated percentage automatically flows to the **Reserved Fund**.
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                </>
+            </div>
+        )}
         </div>
+    </>
+)}
+</div>
     );
 };
 

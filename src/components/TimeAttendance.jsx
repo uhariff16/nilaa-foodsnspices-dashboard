@@ -96,9 +96,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     // Initial Load from DB
     useEffect(() => {
         fetchAttendance();
+        fetchPayments();
+    }, [monthFilter, yearFilter]);
+
+    useEffect(() => {
         fetchEmployees();
         fetchPayrollConfig();
-        fetchPayments();
     }, []);
 
     const fetchPayrollConfig = async () => {
@@ -123,11 +126,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
     const fetchAttendance = async () => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('employee_attendance')
                 .select('*')
-                .order('date', { ascending: false })
-                .limit(100);
+                .order('date', { ascending: false });
+
+            if (monthFilter && yearFilter) {
+                const startDate = `${yearFilter}-${String(monthFilter).padStart(2, '0')}-01`;
+                const endDate = `${yearFilter}-${String(monthFilter).padStart(2, '0')}-${new Date(yearFilter, monthFilter, 0).getDate()}`;
+                query = query.gte('date', startDate).lte('date', endDate);
+            } else {
+                query = query.limit(1000); // Default larger limit
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             if (data) {
@@ -211,10 +223,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
     const fetchPayments = async () => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('employee_payments')
                 .select('*')
                 .order('date', { ascending: false });
+
+            if (monthFilter && yearFilter) {
+                const startDate = `${yearFilter}-${String(monthFilter).padStart(2, '0')}-01`;
+                const endDate = `${yearFilter}-${String(monthFilter).padStart(2, '0')}-${new Date(yearFilter, monthFilter, 0).getDate()}`;
+                query = query.gte('date', startDate).lte('date', endDate);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             if (data) setPaymentData(data);

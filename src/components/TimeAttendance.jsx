@@ -72,8 +72,8 @@ const getSpecialDayType = (dateStr, holidays = []) => {
 const isSpecialDay = (dateStr, holidays = []) => getSpecialDayType(dateStr, holidays).type !== 'none';
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
-    const { user, role, logout: authLogout, canAccessPayouts } = useAuth();
-    const canViewPayouts = role === 'admin' || canAccessPayouts;
+    const { user, role, logout: authLogout, canAccessPayouts, hasPermission } = useAuth();
+    const canViewPayouts = role === 'admin' || hasPermission('attendance.payouts') || hasPermission('attendance.salaries');
     const { theme, toggleTheme } = useTheme();
     const [attendanceData, setAttendanceData] = useState([]);
     const [employees, setEmployees] = useState([]);
@@ -973,22 +973,24 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
             {/* Tab Selection */}
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', flexWrap: 'wrap' }}>
-                <button
-                    onClick={() => setActiveTab('attendance')}
-                    style={{
-                        padding: '0.75rem 1.5rem',
-                        background: activeTab === 'attendance' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                        border: 'none',
-                        borderBottom: activeTab === 'attendance' ? '2px solid #3b82f6' : 'none',
-                        color: activeTab === 'attendance' ? '#3b82f6' : 'var(--text-secondary)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                    }}
-                >
-                    Attendance Tracking
-                </button>
-                {canViewPayouts && (
+                {hasPermission('attendance.tracking') && (
+                    <button
+                        onClick={() => setActiveTab('attendance')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: activeTab === 'attendance' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'attendance' ? '2px solid #3b82f6' : 'none',
+                            color: activeTab === 'attendance' ? '#3b82f6' : 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Attendance Tracking
+                    </button>
+                )}
+                {hasPermission('attendance.payouts') && (
                     <button
                         onClick={() => setActiveTab('payouts')}
                         style={{
@@ -1005,7 +1007,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         Payout & Financials
                     </button>
                 )}
-                {canViewPayouts && (
+                {hasPermission('attendance.salaries') && (
                     <button
                         onClick={() => setActiveTab('payments')}
                         style={{
@@ -1343,7 +1345,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                     </div>
                                 )}
 
-                                {activeTab === 'payouts' && canViewPayouts && (
+                                {activeTab === 'payouts' && (role === 'admin' || hasPermission('attendance.payouts')) && (
                                     <div style={{ flex: 1 }}>
                                         <div style={{ padding: '0.5rem 1rem', marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '2px solid #10b981', display: 'inline-block' }}>
                                             Payout Details
@@ -1522,7 +1524,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 </>
             )}
 
-            {activeTab === 'payments' && canViewPayouts && (
+            {activeTab === 'payments' && (role === 'admin' || hasPermission('attendance.salaries')) && (
                 <>
                     {/* Payment Stats */}
                     <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

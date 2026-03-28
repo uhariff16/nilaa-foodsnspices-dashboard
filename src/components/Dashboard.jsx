@@ -58,7 +58,7 @@ const getValueColor = (value, type) => {
 
 const Dashboard = (props) => {
     const { data, onReset, onRefresh } = props;
-    const { logout, user, role, isAdmin, canAccessAttendance } = useAuth();
+    const { logout, user, role, isAdmin, canAccessAttendance, hasPermission } = useAuth();
     const navigate = useNavigate();
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
@@ -1392,120 +1392,125 @@ const Dashboard = (props) => {
 
             {/* Navigation Tabs */}
             <div className="custom-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-                <button
-                    onClick={() => setActiveTab('overview')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'overview' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'overview' ? 600 : 400
-                    }}
-                >
-                    <LayoutDashboard size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Overview
-                </button>
-                <button
-                    onClick={() => setActiveTab('sales')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'sales' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'sales' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'sales' ? 600 : 400
-                    }}
-                >
-                    <DollarSign size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Sales
-                </button>
-
-                <button
-                    onClick={() => setActiveTab('expenses')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'expenses' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'expenses' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'expenses' ? 600 : 400
-                    }}
-                >
-                    <CreditCard size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Expenses
-                </button>
-
-                <button
-                    onClick={() => setActiveTab('procurement')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'procurement' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'procurement' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'procurement' ? 600 : 400
-                    }}
-                >
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <ShoppingCart size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        Procurement
-                    </div>
-                </button>
-
-                <button
-                    onClick={() => setActiveTab('stock')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'stock' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'stock' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'stock' ? 600 : 400
-                    }}
-                >
-                    <Layers size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Stock
-                </button>
-
-                <button
-                    onClick={() => setActiveTab('production')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'production' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'production' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'production' ? 600 : 400
-                    }}
-                >
-                    <Factory size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Production
-                </button>
-
-                <button
-                    onClick={() => setActiveTab('insights')}
-                    style={{
-                        background: 'none', border: 'none', padding: '0.5rem 0',
-                        color: activeTab === 'insights' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        borderBottom: activeTab === 'insights' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                        cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'insights' ? 600 : 400
-                    }}
-                >
-                    <Users size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                    Customer
-                </button>
-
-
-
-                {/* [NEW] Simulator Tab - Highlighted */}
-                <button
-                    onClick={() => setActiveTab('simulator')}
-                    style={{
-                        background: activeTab === 'simulator' ? 'var(--accent-primary)' : 'var(--glass-highlight)',
-                        border: '1px solid var(--glass-border)',
-                        padding: '0.5rem 1rem',
-                        color: activeTab === 'simulator' ? 'white' : 'var(--text-primary)',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
-                        transition: 'all 0.2s',
-                        display: 'flex', alignItems: 'center', gap: '0.5rem'
-                    }}
-                >
-                    <Calculator size={18} />
-                    Simulator
-                </button>
-
-                {/* YTD Analysis Tab - ADMIN ONLY */}
-                {props.isAdmin && (
+                {hasPermission('dashboard.overview') && (
+                    <button
+                        onClick={() => setActiveTab('overview')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'overview' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'overview' ? 600 : 400
+                        }}
+                    >
+                        <LayoutDashboard size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Overview
+                    </button>
+                )}
+                {hasPermission('dashboard.sales') && (
+                    <button
+                        onClick={() => setActiveTab('sales')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'sales' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'sales' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'sales' ? 600 : 400
+                        }}
+                    >
+                        <DollarSign size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Sales
+                    </button>
+                )}
+                {hasPermission('dashboard.expenses') && (
+                    <button
+                        onClick={() => setActiveTab('expenses')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'expenses' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'expenses' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'expenses' ? 600 : 400
+                        }}
+                    >
+                        <CreditCard size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Expenses
+                    </button>
+                )}
+                {hasPermission('dashboard.procurement') && (
+                    <button
+                        onClick={() => setActiveTab('procurement')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'procurement' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'procurement' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'procurement' ? 600 : 400
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <ShoppingCart size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                            Procurement
+                        </div>
+                    </button>
+                )}
+                {hasPermission('dashboard.stock') && (
+                    <button
+                        onClick={() => setActiveTab('stock')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'stock' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'stock' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'stock' ? 600 : 400
+                        }}
+                    >
+                        <Layers size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Stock
+                    </button>
+                )}
+                {hasPermission('dashboard.production') && (
+                    <button
+                        onClick={() => setActiveTab('production')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'production' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'production' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'production' ? 600 : 400
+                        }}
+                    >
+                        <Factory size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Production
+                    </button>
+                )}
+                {hasPermission('dashboard.insights') && (
+                    <button
+                        onClick={() => setActiveTab('insights')}
+                        style={{
+                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            color: activeTab === 'insights' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'insights' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'insights' ? 600 : 400
+                        }}
+                    >
+                        <Users size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Customer
+                    </button>
+                )}
+                {hasPermission('dashboard.simulator') && (
+                    <button
+                        onClick={() => setActiveTab('simulator')}
+                        style={{
+                            background: activeTab === 'simulator' ? 'var(--accent-primary)' : 'var(--glass-highlight)',
+                            border: '1px solid var(--glass-border)',
+                            padding: '0.5rem 1rem',
+                            color: activeTab === 'simulator' ? 'white' : 'var(--text-primary)',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600,
+                            transition: 'all 0.2s',
+                            display: 'flex', alignItems: 'center', gap: '0.5rem'
+                        }}
+                    >
+                        <Calculator size={18} />
+                        Simulator
+                    </button>
+                )}
+                {hasPermission('dashboard.ytd') && (
                     <button
                         onClick={() => setActiveTab('ytd')}
                         style={{
@@ -1519,8 +1524,7 @@ const Dashboard = (props) => {
                         YTD Analysis
                     </button>
                 )}
-                {/* Profit Hub Tab - ADMIN ONLY */}
-                {props.isAdmin && (
+                {hasPermission('dashboard.profitHub') && (
                     <button
                         onClick={() => setActiveTab('profitHub')}
                         style={{
@@ -2578,7 +2582,7 @@ const Dashboard = (props) => {
 
             {/* [NEW] YTD Analysis */}
             {
-                activeTab === 'ytd' && props.isAdmin && (
+                activeTab === 'ytd' && (isAdmin || hasPermission('dashboard.ytd')) && (
                     <YearlyAnalysis
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
@@ -2590,7 +2594,7 @@ const Dashboard = (props) => {
 
             {/* [NEW] Profit Hub */}
             {
-                activeTab === 'profitHub' && props.isAdmin && (
+                activeTab === 'profitHub' && (isAdmin || hasPermission('dashboard.profitHub')) && (
                     <YearlyAnalysis
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}

@@ -3,6 +3,48 @@ import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext();
 
+const defaultPermissions = {
+    dashboard: {
+        overview: true,
+        sales: false,
+        expenses: false,
+        procurement: false,
+        stock: false,
+        production: false,
+        insights: false,
+        simulator: false,
+        ytd: false,
+        profitHub: false
+    },
+    attendance: {
+        tracking: false,
+        payouts: false,
+        salaries: false
+    },
+    payouts: false
+};
+
+const mergePermissions = (fetched) => {
+    if (!fetched || typeof fetched !== 'object') return JSON.parse(JSON.stringify(defaultPermissions));
+    return {
+        ...defaultPermissions,
+        ...fetched,
+        dashboard: { ...defaultPermissions.dashboard, ...(fetched.dashboard || {}) },
+        attendance: { ...defaultPermissions.attendance, ...(fetched.attendance || {}) }
+    };
+};
+
+export const hasPermission = (permissions, path) => {
+    if (!permissions) return false;
+    const parts = path.split('.');
+    let current = permissions;
+    for (const part of parts) {
+        if (!current || typeof current !== 'object') return false;
+        current = current[part];
+    }
+    return !!current;
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [role, setRole] = useState(null);
@@ -10,6 +52,7 @@ export const AuthProvider = ({ children }) => {
     const [canAccessPayouts, setCanAccessPayouts] = useState(false);
     const [canViewDashboard, setCanViewDashboard] = useState(false);
     const [canManageUsers, setCanManageUsers] = useState(false);
+    const [permissions, setPermissions] = useState(defaultPermissions);
     const [loading, setLoading] = useState(true);
     const currentUserRef = useRef(null);
 
@@ -30,7 +73,7 @@ export const AuthProvider = ({ children }) => {
 
             const fetchPromise = supabase
                 .from('user_roles')
-                .select('role, can_access_attendance, can_access_payouts, can_view_dashboard, can_manage_users')
+                .select('role, can_access_attendance, can_access_payouts, can_view_dashboard, can_manage_users, permissions')
                 .ilike('email', email)
                 .single();
 
@@ -39,19 +82,46 @@ export const AuthProvider = ({ children }) => {
 
             if (error || !data) {
                 console.warn("Role fetch warning/error:", error);
-                return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false };
+                return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false, permissions: JSON.parse(JSON.stringify(defaultPermissions)) };
             }
             console.log("Role fetched successfully:", data.role);
+            
+            // Map legacy roles & handle permissions JSON
+            const roleStr = data.role === 'power_user' ? 'viewer' : data.role;
+            
+            // Build default Permissions if JSON is missing or incomplete
+            let finalPermissions = mergePermissions(data.permissions);
+
+            if (!data.permissions) {
+                // Specific legacy mapping for users without any permissions JSON yet
+                finalPermissions.dashboard.overview = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.sales = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.expenses = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.procurement = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.stock = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.production = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.insights = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.simulator = data.can_view_dashboard ?? false;
+                finalPermissions.dashboard.ytd = roleStr === 'admin';
+                finalPermissions.dashboard.profitHub = roleStr === 'admin';
+                
+                finalPermissions.attendance.tracking = data.can_access_attendance ?? false;
+                finalPermissions.attendance.payouts = data.can_access_attendance ?? false;
+                finalPermissions.attendance.salaries = data.can_access_attendance ?? false;
+                finalPermissions.payouts = data.can_access_payouts ?? false;
+            }
+
             return {
-                role: data.role === 'power_user' ? 'viewer' : data.role,
+                role: roleStr,
                 can_access_attendance: data.can_access_attendance || false,
                 can_access_payouts: data.can_access_payouts || false,
                 can_view_dashboard: data.can_view_dashboard ?? false,
-                can_manage_users: data.can_manage_users ?? false
+                can_manage_users: data.can_manage_users ?? false,
+                permissions: finalPermissions
             };
         } catch (err) {
             console.error("Role fetch error/timeout:", err);
-            return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false }; // Safe fallback
+            return { role: 'viewer', can_access_attendance: false, can_access_payouts: false, can_view_dashboard: false, can_manage_users: false, permissions: JSON.parse(JSON.stringify(defaultPermissions)) }; // Safe fallback
         }
     };
 
@@ -92,6 +162,7 @@ export const AuthProvider = ({ children }) => {
                     setCanAccessPayouts(authData.can_access_payouts);
                     setCanViewDashboard(authData.can_view_dashboard);
                     setCanManageUsers(authData.can_manage_users);
+                    setPermissions(authData.permissions);
 
                     // Set user LAST so router sees populated permissions
                     setUser(session.user);
@@ -106,6 +177,7 @@ export const AuthProvider = ({ children }) => {
                 setCanAccessPayouts(false);
                 setCanViewDashboard(false);
                 setCanManageUsers(false);
+                setPermissions(null);
             }
             clearTimeout(safetyTimeout);
             setLoading(false);
@@ -167,6 +239,7 @@ export const AuthProvider = ({ children }) => {
                 setCanAccessPayouts(authData.can_access_payouts);
                 setCanViewDashboard(authData.can_view_dashboard);
                 setCanManageUsers(authData.can_manage_users);
+                setPermissions(authData.permissions);
                 setUser(data.user);
             }
 
@@ -198,7 +271,19 @@ export const AuthProvider = ({ children }) => {
             login,
             logout,
             loading,
+            permissions,
             isAdmin: role === 'admin',
+            hasPermission: (path) => {
+                if (role === 'admin') return true;
+                if (!permissions) return false;
+                const parts = path.split('.');
+                let current = permissions;
+                for (const part of parts) {
+                    if (current[part] === undefined) return false;
+                    current = current[part];
+                }
+                return !!current;
+            },
             canAccessAttendance: role === 'admin' || canAccessAttendance,
             canAccessPayouts: role === 'admin' || canAccessPayouts,
             canViewDashboard: role === 'admin' || canViewDashboard,

@@ -54,37 +54,85 @@ const AdminPanel = () => {
                         </div>
                     </div>
 
-                    {/* Dashboard-style Pill Tabs */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {tabs.map(tab => {
-                            const Icon = tab.icon;
-                            const isActive = activeTab === tab.id;
-                            return (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                        padding: '0.5rem 1rem',
-                                        borderRadius: '0.5rem',
-                                        fontSize: '0.875rem',
-                                        fontWeight: 500,
-                                        transition: 'all 0.2s',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        background: isActive ? '#2563eb' : 'transparent',
-                                        color: isActive ? 'white' : '#94a3b8'
-                                    }}
-                                    onMouseEnter={e => !isActive && (e.currentTarget.style.color = 'white')}
-                                    onMouseLeave={e => !isActive && (e.currentTarget.style.color = '#94a3b8')}
-                                >
-                                    <Icon size={16} />
-                                    <span>{tab.label}</span>
-                                </button>
-                            );
-                        })}
+                    {/* Grouped Pill Tabs */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.4rem 0.75rem', borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        {/* Group 1: Data & Logistics */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.35rem' }}>Data</span>
+                            {[
+                                { id: 'upload', label: 'Ingestion', icon: Upload },
+                                { id: 'master', label: 'Item Master', icon: List },
+                                { id: 'manager', label: 'Manager', icon: Database },
+                                { id: 'manual', label: 'Manual', icon: PlusCircle },
+                                { id: 'cleanup', label: 'Clean-up', icon: Trash2 }
+                            ].map(tab => {
+                                const Icon = tab.icon;
+                                const isActive = activeTab === tab.id;
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '0.50rem',
+                                            fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                            background: isActive ? '#2563eb' : 'transparent', color: isActive ? 'white' : '#94a3b8'
+                                        }}
+                                        onMouseEnter={e => !isActive && (e.currentTarget.style.color = 'white')}
+                                        onMouseLeave={e => !isActive && (e.currentTarget.style.color = '#94a3b8')}
+                                    >
+                                        <Icon size={14} />
+                                        <span>{tab.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div style={{ width: '1px', height: '1.5rem', background: 'rgba(255,255,255,0.1)' }} />
+
+                        {/* Group 2: People mgmt */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.35rem' }}>People</span>
+                            <button
+                                onClick={() => setActiveTab('hr')}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '0.50rem',
+                                    fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                    background: activeTab === 'hr' ? '#2563eb' : 'transparent', color: activeTab === 'hr' ? 'white' : '#94a3b8'
+                                }}
+                            >
+                                <Users size={14} />
+                                <span>Human Resources</span>
+                            </button>
+                        </div>
+
+                        <div style={{ width: '1px', height: '1.5rem', background: 'rgba(255,255,255,0.1)' }} />
+
+                        {/* Group 3: Settings */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.35rem' }}>Settings</span>
+                            <button
+                                onClick={() => setActiveTab('users')}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '0.50rem',
+                                    fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                    background: activeTab === 'users' ? '#2563eb' : 'transparent', color: activeTab === 'users' ? 'white' : '#94a3b8'
+                                }}
+                            >
+                                <User size={14} />
+                                <span>User Access</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('settings')}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.75rem', borderRadius: '0.50rem',
+                                    fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                    background: activeTab === 'settings' ? '#2563eb' : 'transparent', color: activeTab === 'settings' ? 'white' : '#94a3b8'
+                                }}
+                            >
+                                <Settings size={14} />
+                                <span>System</span>
+                            </button>
+                        </div>
                     </div>
 
                     {/* User Profile & Logout - Matching Dashboard Style */}

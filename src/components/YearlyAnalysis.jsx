@@ -88,6 +88,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     const [profitPayouts, setProfitPayouts] = React.useState([]);
     const [isProfitLoading, setIsProfitLoading] = React.useState(false);
     const [activeAnalysisSubTab, setActiveAnalysisSubTab] = React.useState(forceTab || 'performance'); // 'performance' | 'profitHub'
+    const [isTableMissing, setIsTableMissing] = React.useState(false);
 
     React.useEffect(() => {
         if (forceTab) setActiveAnalysisSubTab(forceTab);
@@ -95,11 +96,21 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
     const fetchProfitHubData = async () => {
         setIsProfitLoading(true);
+        setIsTableMissing(false);
         try {
             const [stkRes, payRes] = await Promise.all([
                 supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
                 supabase.from('profit_payouts').select('*').order('created_at', { ascending: true })
             ]);
+            
+            if (stkRes.error || payRes.error) {
+                const err = stkRes.error || payRes.error;
+                if (err.message.includes('schema cache') || err.message.includes('not found')) {
+                    console.warn("Profit Hub tables missing, setup required.");
+                    setIsTableMissing(true);
+                }
+            }
+
             if (!stkRes.error) setProfitStakeholders(stkRes.data || []);
             if (!payRes.error) setProfitPayouts(payRes.data || []);
         } catch (e) {
@@ -1489,6 +1500,19 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 </>
             ) : (
                 <div className="profit-hub-container animate-fade-in" style={{ padding: '1rem 0' }}>
+                    {isTableMissing && (
+                        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#ef4444' }}>
+                                <AlertTriangle size={24} />
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1rem' }}>Profit Hub Database Setup Required</h3>
+                                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', opacity: 0.9 }}>
+                                        The necessary tables to track payouts persistently were not found. Please follow the instructions in the implementation plan to run the SQL migration.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {/* Summary & Visualization Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '2rem', marginBottom: '2rem' }}>
                         <div className="responsive-grid-3" style={{ gap: '1rem' }}>
@@ -1601,17 +1625,24 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             <th style={{ textAlign: 'left', padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>MONTH</th>
                                             <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>TOTAL PROFIT</th>
                                             {profitStakeholders.map(s => (
-                                                <th key={s.id} style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{s.name} ({s.percentage}%)</th>
+                                                <th key={s.id} style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{s.name} ({Number(s.percentage) || 0}%)</th>
                                             ))}
                                             <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--amber-text)', background: 'var(--amber-bg)' }}>RESERVE</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {yearlyData.filter(m => m.isActive).map(month => {
-                                            const totalAllocatedPct = profitStakeholders.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
-                                            const reservedPct = Math.max(0, 100 - totalAllocatedPct);
                                             const monthlyProfit = month.netProfit;
                                             const monthPayouts = profitPayouts.filter(p => p.month_year === `${month.name} ${selectedYear}`);
+                                            
+                                            // Calculate actual remaining reserve for THIS month based on distributions
+                                            let monthDistributedTotal = 0;
+                                            profitStakeholders.forEach(s => {
+                                                const p = monthPayouts.find(pay => pay.stakeholder_id === s.id);
+                                                const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                                monthDistributedTotal += share;
+                                            });
+                                            const actualReservedAmount = Math.max(0, monthlyProfit - monthDistributedTotal);
                                             
                                             return (
                                                 <tr key={month.name} className="analysis-row" style={{ borderBottom: '1px solid var(--glass-border)' }}>
@@ -1619,20 +1650,42 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                             {month.name}
                                                             <button 
-                                                                title="Mark all as Paid"
-                                                                onClick={async () => {
-                                                                    if (window.confirm(`Mark all distributions for ${month.name} ${selectedYear} as PAID? This will snapshot the current values.`)) {
-                                                                        const promises = profitStakeholders.map(s => {
-                                                                            const p = monthPayouts.find(p => p.stakeholder_id === s.id);
-                                                                            const amt = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
-                                                                            if (p) {
-                                                                                return supabase.from('profit_payouts').update({ status: 'paid', amount: amt, paid_at: new Date().toISOString() }).eq('id', p.id);
+                                                                title={isTableMissing ? "Database setup required" : "Mark all as Paid"}
+                                                                disabled={isTableMissing}
+                                                                onClick={async (e) => {
+                                                                    const btn = e.currentTarget;
+                                                                    btn.disabled = true;
+                                                                    const originalText = btn.innerHTML;
+                                                                    btn.innerHTML = '...';
+                                                                    
+                                                                    try {
+                                                                        if (window.confirm(`Mark all distributions for ${month.name} ${selectedYear} as PAID? This will snapshot the current values.`)) {
+                                                                            const promises = profitStakeholders.map(s => {
+                                                                                const p = monthPayouts.find(p => p.stakeholder_id === s.id);
+                                                                                const amt = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
+                                                                                if (p) {
+                                                                                    return supabase.from('profit_payouts').update({ status: 'paid', amount: amt, paid_at: new Date().toISOString() }).eq('id', p.id);
+                                                                                } else {
+                                                                                    return supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: amt, status: 'paid', paid_at: new Date().toISOString() });
+                                                                                }
+                                                                            });
+                                                                            const results = await Promise.all(promises);
+                                                                            const errors = results.filter(r => r.error).map(r => r.error.message);
+                                                                            
+                                                                            if (errors.length > 0) {
+                                                                                console.error("Errors marking all as paid:", errors);
+                                                                                alert("Failed to update some records: " + errors[0]);
                                                                             } else {
-                                                                                return supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: amt, status: 'paid', paid_at: new Date().toISOString() });
+                                                                                console.log(`Successfully settled all for ${month.name}`);
                                                                             }
-                                                                        });
-                                                                        await Promise.all(promises);
-                                                                        fetchProfitHubData();
+                                                                            await fetchProfitHubData();
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error("Exception in bulk pay:", err);
+                                                                        alert("An unexpected error occurred: " + err.message);
+                                                                    } finally {
+                                                                        btn.disabled = false;
+                                                                        btn.innerHTML = originalText;
                                                                     }
                                                                 }}
                                                                 style={{ background: 'var(--blue-bg)', border: 'none', color: 'var(--blue-text)', padding: '0.2rem', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -1661,22 +1714,34 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                             const newStatus = e.target.value;
                                                                             const freshCalculatedShare = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
                                                                             
-                                                                            if (p) {
-                                                                                await supabase.from('profit_payouts').update({ 
-                                                                                    status: newStatus, 
-                                                                                    amount: freshCalculatedShare, 
-                                                                                    paid_at: newStatus === 'paid' ? new Date().toISOString() : null 
-                                                                                }).eq('id', p.id);
-                                                                            } else {
-                                                                                await supabase.from('profit_payouts').insert({
-                                                                                    stakeholder_id: s.id,
-                                                                                    month_year: `${month.name} ${selectedYear}`,
-                                                                                    amount: freshCalculatedShare,
-                                                                                    status: newStatus,
-                                                                                    paid_at: newStatus === 'paid' ? new Date().toISOString() : null
-                                                                                });
+                                                                            try {
+                                                                                let res;
+                                                                                if (p) {
+                                                                                    res = await supabase.from('profit_payouts').update({ 
+                                                                                        status: newStatus, 
+                                                                                        amount: freshCalculatedShare, 
+                                                                                        paid_at: newStatus === 'paid' ? new Date().toISOString() : null 
+                                                                                    }).eq('id', p.id);
+                                                                                } else {
+                                                                                    res = await supabase.from('profit_payouts').insert({
+                                                                                        stakeholder_id: s.id,
+                                                                                        month_year: `${month.name} ${selectedYear}`,
+                                                                                        amount: freshCalculatedShare,
+                                                                                        status: newStatus,
+                                                                                        paid_at: newStatus === 'paid' ? new Date().toISOString() : null
+                                                                                    });
+                                                                                }
+                                                                                
+                                                                                if (res.error) {
+                                                                                    console.error("Payout update error:", res.error);
+                                                                                    alert("Failed to update status: " + res.error.message);
+                                                                                } else {
+                                                                                    await fetchProfitHubData();
+                                                                                }
+                                                                            } catch (err) {
+                                                                                console.error("Exception in status update:", err);
+                                                                                alert("An unexpected error occurred: " + err.message);
                                                                             }
-                                                                            fetchProfitHubData();
                                                                         }}
                                                                         style={{
                                                                             fontSize: '0.65rem', padding: '0.2rem 0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)',
@@ -1698,7 +1763,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                         );
                                                     })}
                                                     <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--amber-text)', fontWeight: 600 }}>
-                                                        {formatCurrency((monthlyProfit * reservedPct) / 100)}
+                                                        {formatCurrency(actualReservedAmount)}
                                                     </td>
                                                 </tr>
                                             );
@@ -1716,10 +1781,13 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     Manage Stakeholders
                                 </h3>
                                 {(() => {
-                                    const total = profitStakeholders.reduce((sum, s) => sum + (Number(s.percentage) || 0), 0);
+                                    const total = profitStakeholders.reduce((sum, s) => {
+                                        const val = parseFloat(s.percentage) || 0;
+                                        return sum + val;
+                                    }, 0);
                                     return (
                                         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: total > 100 ? '#ef4444' : (total === 100 ? '#10b981' : '#f59e0b') }}>
-                                            {total}% Total
+                                            {total.toFixed(1).replace(/\.0$/, '')}% Total
                                         </div>
                                     );
                                 })()}
@@ -1776,7 +1844,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 
                                 <button 
                                     className="btn-primary" 
-                                    style={{ marginTop: '0.5rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                    disabled={isTableMissing}
+                                    style={{ marginTop: '0.5rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: isTableMissing ? 0.5 : 1 }}
                                     onClick={async () => {
                                         await supabase.from('profit_stakeholders').insert({ name: 'New Stakeholder', percentage: 10 });
                                         fetchProfitHubData();

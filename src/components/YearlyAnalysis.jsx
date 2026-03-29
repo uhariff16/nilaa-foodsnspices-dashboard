@@ -854,10 +854,11 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 </div>
                             </div>
                         )}
-                </div>
             </div>
+        </div>
+    </div>
 
-            {activeAnalysisSubTab === 'performance' ? (
+    {activeAnalysisSubTab === 'performance' ? (
                 <>
                     {/* Quarterly Summary Section */}
             {viewSettings.showQuarterly && (
@@ -1878,7 +1879,6 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 </>
             </div>
         )}
-        </div>
     </>
 )}
 </div>

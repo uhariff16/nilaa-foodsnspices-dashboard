@@ -45,6 +45,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
         let totalDailyWageEarned = 0; // The already calced daily_wage (which includes OT)
         let totalBaseWage = 0; // Without OT
         let totalOTPay = 0;
+        let totalBonusPoints = 0;
         let daysPresent = 0;
 
         monthAttendance.forEach(att => {
@@ -60,6 +61,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
 
                 totalWorkedHours += worked;
                 totalOTHours += ot;
+                totalBonusPoints += parseFloat(att.bonus || 0);
                 totalDeductions += parseFloat(att.deductions || 0);
 
                 const rate = parseFloat(att.rate || employee.hourly_rate || payrollConfig?.default_hourly_rate || 100);
@@ -113,7 +115,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             }
         });
 
-        const netPayoutTarget = grossEarned - totalDeductions;
+        const netPayoutTarget = grossEarned + totalBonusPoints - totalDeductions;
         const netDisbursed = totalAdvancesStr + totalSalariesPaidStr + totalWagesPaidStr;
         const finalPendingBalanceForMonth = netPayoutTarget - netDisbursed;
 
@@ -128,7 +130,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             totalOTHours: totalOTHours.toFixed(1),
             totalBaseWage,
             totalOTPay,
-            grossEarned,
+            totalBonus: totalBonusPoints,
             totalDeductions,
             netPayoutTarget,
             totalAdvancesTaken: totalAdvancesStr,
@@ -319,9 +321,13 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                                 <td style={{ padding: '0.4rem 0', color: '#475569' }}>Overtime Pay</td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalOTPay)}</td>
                                             </tr>
+                                            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Bonus Payout</td>
+                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#a855f7' }}>{payslipData.totalBonus > 0 ? `+${formatCurrency(payslipData.totalBonus)}` : '₹0'}</td>
+                                            </tr>
                                             <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Gross Earnings</td>
-                                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{formatCurrency(payslipData.grossEarned)}</td>
+                                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Gross Earnings (Incl. Bonus)</td>
+                                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{formatCurrency(payslipData.grossEarned + payslipData.totalBonus)}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '0.4rem 0', color: '#475569', paddingTop: '0.8rem' }}>Penalties / Deductions</td>

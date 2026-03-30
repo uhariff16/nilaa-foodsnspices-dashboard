@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Database, Users, PlusCircle, ArrowLeft, LayoutGrid, Trash2, Settings, User, LogOut, List, ChevronDown } from 'lucide-react';
+import { Upload, Database, Users, PlusCircle, ArrowLeft, LayoutGrid, Trash2, Settings, User, LogOut, List, ChevronDown, DollarSign, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import AdminDataIngestion from './AdminDataIngestion';
@@ -10,6 +10,7 @@ import ManualEntry from './ManualEntry';
 import AdminSystemSettings from './AdminSystemSettings';
 import HumanResources from './HumanResources';
 import ItemMaster from './ItemMaster';
+import AdminProfitSettings from './AdminProfitSettings';
 
 const AdminPanel = () => {
     const navigate = useNavigate();
@@ -34,6 +35,13 @@ const AdminPanel = () => {
                 { id: 'manager', label: 'Data Manager', icon: Database },
                 { id: 'manual', label: 'Manual Entry', icon: PlusCircle },
                 { id: 'cleanup', label: 'Clean-up', icon: Trash2 }
+            ]
+        },
+        finance: {
+            label: 'Finance',
+            icon: DollarSign,
+            items: [
+                { id: 'profitConfig', label: 'Profit Settings', icon: Wallet }
             ]
         },
         people: {
@@ -152,6 +160,7 @@ const AdminPanel = () => {
                         {/* Dropdown Menus */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <DropdownMenu groupKey="data" config={menuGroups.data} />
+                            <DropdownMenu groupKey="finance" config={menuGroups.finance} />
                             <DropdownMenu groupKey="people" config={menuGroups.people} />
                             <DropdownMenu groupKey="settings" config={menuGroups.settings} />
                         </div>
@@ -238,6 +247,7 @@ const AdminPanel = () => {
                         {activeTab === 'manual' && <ManualEntry />}
                         {activeTab === 'hr' && <HumanResources />}
                         {activeTab === 'users' && <AdminUserAccess />}
+                        {activeTab === 'profitConfig' && <AdminProfitSettings />}
                         {activeTab === 'cleanup' && <AdminCleanup />}
                         {activeTab === 'settings' && <AdminSystemSettings />}
                     </div>

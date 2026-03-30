@@ -88,6 +88,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
     const [profitStakeholders, setProfitStakeholders] = React.useState([]);
     const [profitPayouts, setProfitPayouts] = React.useState([]);
+    const [profitReservePct, setProfitReservePct] = React.useState(0);
     const [isProfitLoading, setIsProfitLoading] = React.useState(false);
     const [activeAnalysisSubTab, setActiveAnalysisSubTab] = React.useState(forceTab || 'performance'); // 'performance' | 'profitHub'
     const [isTableMissing, setIsTableMissing] = React.useState(false);
@@ -100,9 +101,10 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         setIsProfitLoading(true);
         setIsTableMissing(false);
         try {
-            const [stkRes, payRes] = await Promise.all([
+            const [stkRes, payRes, setRes] = await Promise.all([
                 supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
-                supabase.from('profit_payouts').select('*').order('created_at', { ascending: true })
+                supabase.from('profit_payouts').select('*').order('created_at', { ascending: true }),
+                supabase.from('system_settings').select('value').eq('key', 'profit_reserve_percentage').maybeSingle()
             ]);
             
             if (stkRes.error || payRes.error) {
@@ -115,6 +117,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
             if (!stkRes.error) setProfitStakeholders(stkRes.data || []);
             if (!payRes.error) setProfitPayouts(payRes.data || []);
+            if (!setRes.error && setRes.data) setProfitReservePct(parseFloat(setRes.data.value) || 0);
+            else setProfitReservePct(0);
         } catch (e) {
             console.error("Error fetching profit hub data:", e);
         } finally {
@@ -742,6 +746,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                     </div>
                 </div>
 
+                {activeAnalysisSubTab === 'performance' && (
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <TrendingUp size={24} color="#3b82f6" />
@@ -856,6 +861,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                         )}
             </div>
         </div>
+        )}
     </div>
 
     {activeAnalysisSubTab === 'performance' ? (
@@ -1550,7 +1556,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     
                                     profitStakeholders.forEach(s => {
                                         const p = monthPayouts.find(p => p.stakeholder_id === s.id);
-                                        const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                        const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.default_percent) || 0)) / 100);
                                         totalDistributedShares += share;
                                         
                                         if (p && p.status === 'paid') {
@@ -1560,7 +1566,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 });
                                 
                                 const totalPendingAmount = totalDistributedShares - totalPaidAmount;
-                                const totalReservedFund = totalStats.profit - totalDistributedShares;
+                                const totalReservedFund = (totalStats.profit * profitReservePct) / 100;
                                 const distributionRatio = totalStats.profit > 0 ? (totalDistributedShares / totalStats.profit) * 100 : 0;
                                 
                                 return (
@@ -1580,7 +1586,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             </p>
                                             <h3 style={{ margin: 0, fontSize: '1.6rem', color: 'var(--amber-text)', fontWeight: 800 }}>{formatCurrency(totalReservedFund)}</h3>
                                             <div style={{ fontSize: '0.65rem', color: 'var(--amber-text)', opacity: 0.7, marginTop: '0.25rem' }}>
-                                                {(100 - distributionRatio).toFixed(1)}% retention rate
+                                                {profitReservePct.toFixed(1)}% retention rate
                                             </div>
                                         </div>
                                     </>
@@ -1596,8 +1602,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     <PieChart>
                                         <Pie
                                             data={[
-                                                ...profitStakeholders.map(s => ({ name: s.name, value: s.percentage, color: '#3b82f6' })),
-                                                { name: 'Reserve', value: Math.max(0, 100 - profitStakeholders.reduce((a, b) => a + (b.percentage || 0), 0)), color: '#f59e0b' }
+                                                ...profitStakeholders.map(s => ({ name: s.name, value: s.default_percent, color: '#3b82f6' })),
+                                                { name: 'Reserve', value: profitReservePct, color: '#f59e0b' }
                                             ]}
                                             cx="50%" cy="50%" innerRadius={30} outerRadius={45} paddingAngle={5} dataKey="value"
                                         >
@@ -1641,9 +1647,9 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             <th style={{ textAlign: 'left', padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>MONTH</th>
                                             <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>TOTAL PROFIT</th>
                                             {profitStakeholders.map(s => (
-                                                <th key={s.id} style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{s.name} ({Number(s.percentage) || 0}%)</th>
+                                                <th key={s.id} style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--blue-text)', background: 'var(--blue-bg)' }}>{s.name} ({Number(s.default_percent) || 0}%)</th>
                                             ))}
-                                            <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--amber-text)', background: 'var(--amber-bg)' }}>RESERVE</th>
+                                            <th style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--amber-text)', background: 'var(--amber-bg)' }}>RESERVE ({profitReservePct.toFixed(1)}%)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1655,10 +1661,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             let monthDistributedTotal = 0;
                                             profitStakeholders.forEach(s => {
                                                 const p = monthPayouts.find(pay => pay.stakeholder_id === s.id);
-                                                const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                                const share = (p && p.status === 'paid' && Number(p.amount) > 0) ? Number(p.amount) : ((monthlyProfit * (Number(s.default_percent) || 0)) / 100);
                                                 monthDistributedTotal += share;
                                             });
-                                            const actualReservedAmount = Math.max(0, monthlyProfit - monthDistributedTotal);
+                                            const targetReservedAmount = (monthlyProfit * profitReservePct) / 100;
+                                            const actualReservedAmount = Math.max(0, monthlyProfit - monthDistributedTotal); // Backup leftover
+                                            
+                                            // Prefer target percentage for display to match configuration
+                                            const displayReservedAmount = profitReservePct > 0 ? targetReservedAmount : actualReservedAmount;
                                             
                                             return (
                                                 <tr key={month.name} className="analysis-row" style={{ borderBottom: '1px solid var(--glass-border)' }}>
@@ -1678,7 +1688,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                         if (window.confirm(`Mark all distributions for ${month.name} ${selectedYear} as PAID? This will snapshot the current values.`)) {
                                                                             const promises = profitStakeholders.map(s => {
                                                                                 const p = monthPayouts.find(p => p.stakeholder_id === s.id);
-                                                                                const amt = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
+                                                                                const amt = (monthlyProfit * (Number(s.default_percent) || 0)) / 100;
                                                                                 if (p) {
                                                                                     return supabase.from('profit_payouts').update({ status: 'paid', amount: amt, paid_at: new Date().toISOString() }).eq('id', p.id);
                                                                                 } else {
@@ -1718,7 +1728,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                         // What to physically display on screen (respect saved amount if paid, else preview live calculation)
                                                         const displayShare = (p && p.status === 'paid' && Number(p.amount) >= 0) 
                                                             ? p.amount 
-                                                            : ((monthlyProfit * (Number(s.percentage) || 0)) / 100);
+                                                            : ((monthlyProfit * (Number(s.default_percent) || 0)) / 100);
                                                             
                                                         return (
                                                             <td key={s.id} style={{ padding: '1rem', fontSize: '0.85rem' }}>
@@ -1728,7 +1738,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                         value={currentStatus}
                                                                         onChange={async (e) => {
                                                                             const newStatus = e.target.value;
-                                                                            const freshCalculatedShare = (monthlyProfit * (Number(s.percentage) || 0)) / 100;
+                                                                            const freshCalculatedShare = (monthlyProfit * (Number(s.default_percent) || 0)) / 100;
                                                                             
                                                                             try {
                                                                                 let res;
@@ -1779,7 +1789,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                         );
                                                     })}
                                                     <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--amber-text)', fontWeight: 600 }}>
-                                                        {formatCurrency(actualReservedAmount)}
+                                                        {formatCurrency(displayReservedAmount)}
                                                     </td>
                                                 </tr>
                                             );
@@ -1789,89 +1799,51 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                             </div>
                         </div>
 
-                        {/* Stakeholder Management Card */}
+                        {/* Stakeholder Details Card */}
                         <div className="glass-panel" style={{ padding: '1.5rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Users size={18} color="#3b82f6" />
-                                    Manage Stakeholders
+                                    Stakeholders & Reserved Fund
                                 </h3>
                                 {(() => {
-                                    const total = profitStakeholders.reduce((sum, s) => {
-                                        const val = parseFloat(s.percentage) || 0;
-                                        return sum + val;
-                                    }, 0);
+                                    const total = profitStakeholders.reduce((sum, s) => sum + (parseFloat(s.default_percent) || 0), 0) + profitReservePct;
                                     return (
                                         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: total > 100 ? '#ef4444' : (total === 100 ? '#10b981' : '#f59e0b') }}>
-                                            {total.toFixed(1).replace(/\.0$/, '')}% Total
+                                            {total.toFixed(1).replace(/\.0$/, '')}% Allocated
                                         </div>
                                     );
                                 })()}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {/* Global Reserve Fund Display */}
+                                <div style={{ padding: '1rem', background: 'var(--amber-bg)', borderRadius: '0.75rem', border: '1px solid var(--amber-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--amber-text)' }}>Global Reserved Fund</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--amber-text)' }}>{profitReservePct.toFixed(1)}%</div>
+                                    </div>
+                                </div>
+
                                 {profitStakeholders.length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                        No stakeholders added yet.
+                                        No stakeholders found.
                                     </div>
                                 )}
                                 {profitStakeholders.map(s => (
-                                    <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: `1px solid ${s.percentage > 0 ? 'var(--blue-border)' : 'var(--glass-border)'}` }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                            <input 
-                                                value={s.name} 
-                                                onChange={async (e) => {
-                                                    const val = e.target.value;
-                                                    setProfitStakeholders(prev => prev.map(old => old.id === s.id ? { ...old, name: val } : old));
-                                                }}
-                                                onBlur={async (e) => {
-                                                    await supabase.from('profit_stakeholders').update({ name: e.target.value }).eq('id', s.id);
-                                                }}
-                                                style={{ background: 'transparent', border: 'none', fontWeight: 600, color: 'var(--text-primary)', outline: 'none', width: '70%' }}
-                                            />
-                                            <button 
-                                                onClick={async () => {
-                                                    await supabase.from('profit_stakeholders').delete().eq('id', s.id);
-                                                    fetchProfitHubData();
-                                                }}
-                                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <input 
-                                                type="number"
-                                                value={s.percentage === 0 ? '' : s.percentage}
-                                                placeholder="0"
-                                                onChange={(e) => {
-                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                                    setProfitStakeholders(prev => prev.map(old => old.id === s.id ? { ...old, percentage: val } : old));
-                                                }}
-                                                onBlur={async (e) => {
-                                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                                    await supabase.from('profit_stakeholders').update({ percentage: val }).eq('id', s.id);
-                                                }}
-                                                style={{ width: '60px', padding: '0.4rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.1)', color: 'var(--text-primary)', textAlign: 'center' }}
-                                            />
-                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>% share of profit</span>
+                                    <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: `1px solid ${s.default_percent > 0 ? 'var(--blue-border)' : 'var(--glass-border)'}` }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.default_percent}</div>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>% share</span>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
                                 
-                                <button 
-                                    className="btn-primary" 
-                                    disabled={isTableMissing}
-                                    style={{ marginTop: '0.5rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: isTableMissing ? 0.5 : 1 }}
-                                    onClick={async () => {
-                                        await supabase.from('profit_stakeholders').insert({ name: 'New Stakeholder', percentage: 10 });
-                                        fetchProfitHubData();
-                                    }}
-                                >
-                                    <Plus size={16} /> Add Stakeholder
-                                </button>
-                                
-                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--amber-bg)', borderRadius: '0.5rem', border: '1px solid var(--amber-border)', fontSize: '0.75rem', color: 'var(--amber-text)' }}>
-                                    <Info size={14} style={{ marginRight: '0.4rem', verticalAlign: 'middle' }} />
+                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.75rem', color: '#60a5fa', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                    <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    <span>Stakeholders and Reserve percentages are managed centrally. To modify these values, please navigate to <strong>Admin Console &gt; Finance</strong>.</span>
                                 </div>
                             </div>
                         </div>

@@ -528,16 +528,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
 
             if (matchesSearch && matchesDate) {
-                const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
-                const displayOT = isSpecial ? (parseFloat(row.hoursWorked) || 0) : (parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8)));
-                const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                const regularHoursForWage = isSpecial ? 0 : (parseFloat(row.hoursWorked) || 0) - displayOT;
-                const dailyWage = (regularHoursForWage * rate) + otPay;
-                const deductions = parseFloat(row.deductions) || 0;
-
-                const netDailyPay = dailyWage + (otPay > 0 ? otPay : 0) - deductions;
-                stats.totalEarned += netDailyPay;
+                const dailyWage = parseFloat(row.daily_wage || row.dailyWage || 0);
+                const bonus = parseFloat(row.bonus || 0);
+                const deductions = parseFloat(row.deductions || 0);
+                stats.totalEarned += (dailyWage + bonus - deductions);
             }
         });
 
@@ -553,16 +547,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         // Accumulate earnings
         attendanceData.forEach(row => {
             if (!balances[row.empId]) balances[row.empId] = { earned: 0, paid: 0 };
-
-            const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
-            const displayOT = isSpecial ? (parseFloat(row.hoursWorked) || 0) : (parseFloat(row.otHours) || Math.max(0, (parseFloat(row.hoursWorked) || 0) - parseFloat(payrollConfig.standard_daily_hours || 8)));
-            const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-            const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-            const regularHoursForWage = isSpecial ? 0 : (parseFloat(row.hoursWorked) || 0) - displayOT;
-            const dailyWage = (regularHoursForWage * rate) + otPay;
-            const deductions = parseFloat(row.deductions) || 0;
-
-            balances[row.empId].earned += (dailyWage - deductions);
+            const dailyWage = parseFloat(row.daily_wage || row.dailyWage || 0);
+            const bonus = parseFloat(row.bonus || 0);
+            const deductions = parseFloat(row.deductions || 0);
+            balances[row.empId].earned += (dailyWage + bonus - deductions);
         });
 
         // Accumulate payments
@@ -583,20 +571,18 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         const totalEmployees = employees.length;
 
         // Count attendance for the specific Context Date
-        // We use attendanceData (raw) here to ensure cards reflect the specific day even if table is seaerched
         const dailyLogs = attendanceData.filter(r => r.date === contextDate);
-        const presentCount = dailyLogs.filter(r => (r.attendance_status || 'Present') === 'Present').length;
-        const leaveCount = dailyLogs.filter(r => ['Casual Leave', 'Medical Leave'].includes(r.attendance_status)).length;
+        const todayPresentCount = dailyLogs.filter(r => (r.attendance_status || 'Present') === 'Present').length;
+        const todayLeaveCount = dailyLogs.filter(r => ['Casual Leave', 'Medical Leave'].includes(r.attendance_status)).length;
 
-        // Staff type specific counts
-        const tempPresentCount = dailyLogs.filter(r => {
+        // Staff type specific counts for Today
+        const todayTempPresentCount = dailyLogs.filter(r => {
             const emp = employees.find(e => e.emp_id === r.empId);
             return (r.attendance_status || 'Present') === 'Present' && emp?.staff_type === 'Temporary';
         }).length;
 
-        // Absent count logic: Total - (Present + Leave) for that specific date
-        // This accounts for both manual "Absent" logs and inferred absences
-        const absentCount = Math.max(0, totalEmployees - (presentCount + leaveCount));
+        // Absent count logic for Today
+        const todayAbsentCount = Math.max(0, totalEmployees - (todayPresentCount + todayLeaveCount));
 
         // staff type metrics for current view
         let totalHours = 0;
@@ -604,71 +590,85 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         let totalOTPay = 0;
         let totalCost = 0;
         let totalDeductions = 0;
+        let totalBonus = 0;
 
         let tempTotalHours = 0;
         let tempTotalOTHours = 0;
         let tempTotalOTPay = 0;
         let tempTotalCost = 0;
         let tempTotalDeductions = 0;
+        let tempTotalBonus = 0;
 
         let permTotalHours = 0;
         let permTotalOTHours = 0;
         let permTotalOTPay = 0;
         let permTotalCost = 0;
         let permTotalDeductions = 0;
+        let permTotalBonus = 0;
+        let permPresentCount = 0;
+        let tempPresentCount = 0;
+        let presentCount = 0;
+        let leaveCount = 0;
+        let absentCount = 0;
 
         const currentLogs = filteredAttendance;
-        currentLogs.forEach(r => {
-            const emp = employees.find(e => e.emp_id === r.empId);
-            const isTemp = emp?.staff_type === 'Temporary';
-            const isPerm = !emp || emp.staff_type === 'Permanent' || !emp.staff_type;
+        currentLogs.forEach(d => {
+            const emp = employees.find(e => e.emp_id === d.empId);
+            const rate = parseFloat(emp?.hourly_rate || payrollConfig?.default_hourly_rate || 23);
+            const otRate = rate * parseFloat(payrollConfig?.ot_multiplier || 1.5);
+            const cost = parseFloat(d.daily_wage || 0);
+            const bonus = parseFloat(d.bonus || 0);
+            const deductions = parseFloat(d.deductions || 0);
+            const ot = parseFloat(d.ot_hours || 0);
+            const hours = parseFloat(d.total_hours || 0);
+            const otPay = ot * otRate;
+            
+            if (d.attendance_status === 'Present') presentCount++;
+            else if (d.attendance_status === 'Absent') absentCount++;
+            else if (d.attendance_status?.toLowerCase().includes('leave')) leaveCount++;
 
-            const hours = parseFloat(r.hoursWorked) || 0;
-            const isSpecial = isSpecialDay(r.date, payrollConfig.national_holidays);
-            const ot = isSpecial ? hours : (parseFloat(r.otHours) || Math.max(0, hours - parseFloat(payrollConfig.standard_daily_hours || 8)));
-            const rate = parseFloat(r.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-            const otPay = ot * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-            const regularHoursForWage = isSpecial ? 0 : hours - ot;
-            const cost = (regularHoursForWage * rate) + otPay;
-            const deductions = parseFloat(r.deductions) || 0;
-
-            // Add to totals
             totalHours += hours;
             totalOTHours += ot;
             totalOTPay += otPay;
-            totalCost += cost;
             totalDeductions += deductions;
+            totalBonus += bonus;
+            totalCost += cost;
 
-            // Add to staff type specific metrics
-            if (isTemp) {
+            if (emp?.staff_type === 'Temporary') {
+                tempPresentCount++;
                 tempTotalHours += hours;
                 tempTotalOTHours += ot;
                 tempTotalOTPay += otPay;
                 tempTotalCost += cost;
                 tempTotalDeductions += deductions;
+                tempTotalBonus += bonus;
             } else {
+                permPresentCount++;
                 permTotalHours += hours;
                 permTotalOTHours += ot;
                 permTotalOTPay += otPay;
                 permTotalCost += cost;
                 permTotalDeductions += deductions;
+                permTotalBonus += bonus;
             }
         });
 
-        const grossPay = totalCost + totalOTPay;
-        const tempGrossPay = tempTotalCost + tempTotalOTPay;
-        const permGrossPay = permTotalCost + permTotalOTPay;
-
-        const netPayout = grossPay - totalDeductions;
-        const tempNetPayout = tempGrossPay - tempTotalDeductions;
-        const permNetPayout = permGrossPay - permTotalDeductions;
+        const grossPay = totalCost;
+        const netPayout = grossPay + totalBonus - totalDeductions;
+        const permGrossPay = permTotalCost;
+        const permNetPayout = permGrossPay + permTotalBonus - permTotalDeductions;
+        const tempGrossPay = tempTotalCost;
+        const tempNetPayout = tempGrossPay + tempTotalBonus - tempTotalDeductions;
 
         const s = {
             totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, grossPay,
-            presentCount, leaveCount, absentCount, contextDate, totalDeductions,
-            tempPresentCount,
-            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempNetPayout, tempGrossPay,
-            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permNetPayout, permGrossPay
+            presentCount: todayPresentCount, 
+            leaveCount: todayLeaveCount, 
+            absentCount: todayAbsentCount, 
+            contextDate, totalDeductions, totalBonus,
+            tempPresentCount: todayTempPresentCount,
+            tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempTotalBonus, tempNetPayout, tempGrossPay,
+            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permTotalBonus, permNetPayout, permGrossPay
         };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
@@ -727,31 +727,44 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             { header: 'Date', key: 'date', width: 15 },
             { header: 'Emp ID', key: 'id', width: 15 },
             { header: 'Emp Name', key: 'name', width: 25 },
-            { header: 'In 1', key: 'in1', width: 12 },
-            { header: 'Out 1', key: 'out1', width: 12 },
-            { header: 'In 2', key: 'in2', width: 12 },
-            { header: 'Out 2', key: 'out2', width: 12 },
-            { header: 'In 3', key: 'in3', width: 12 },
-            { header: 'Out 3', key: 'out3', width: 12 },
-            { header: 'In 4', key: 'in4', width: 12 },
-            { header: 'Out 4', key: 'out4', width: 12 },
-            { header: 'Break (min)', key: 'break', width: 15 },
-            { header: 'Salary Advance', key: 'salaryAdvance', width: 18 },
-            { header: 'Other Deductions', key: 'deductions', width: 18 },
+            { header: 'In 1', key: 'in1', width: 10 },
+            { header: 'Out 1', key: 'out1', width: 10 },
+            { header: 'In 2', key: 'in2', width: 10 },
+            { header: 'Out 2', key: 'out2', width: 10 },
+            { header: 'In 3', key: 'in3', width: 10 },
+            { header: 'Out 3', key: 'out3', width: 10 },
+            { header: 'In 4', key: 'in4', width: 10 },
+            { header: 'Out 4', key: 'out4', width: 10 },
+            { header: 'Work Hours', key: 'hours', width: 12 },
+            { header: 'OT Hours', key: 'ot', width: 10 },
+            { header: 'Break (min)', key: 'break', width: 12 },
+            { header: 'Salary Advance', key: 'salaryAdvance', width: 15 },
+            { header: 'Other Deductions', key: 'deductions', width: 15 },
+            { header: 'Bonus (₹)', key: 'bonus', width: 12 },
+            { header: 'Daily Wage', key: 'wage', width: 12 },
+            { header: 'Net Earned', key: 'net', width: 15 },
             { header: 'Deduction Reason', key: 'deductionReason', width: 25 }
         ];
 
-        // Prepare Break Dropdown list (0-240 mins)
-        const breakOptions = [];
-        for (let m = 0; m <= 240; m += 15) breakOptions.push(m);
-        listSheet.getColumn(3).values = ['BreakOptions', ...breakOptions];
-
-        const deductionReasons = ['Salary Advance', 'Late Arrival', 'Damage Recovery', 'Loan Repayment', 'Other'];
-        listSheet.getColumn(4).values = ['DeductionReasons', ...deductionReasons];
+        // Prepare data for summary
+        const employeeSummary = employees.reduce((acc, emp) => {
+            acc[emp.emp_id] = { id: emp.emp_id, name: emp.name, hours: 0, ot: 0, wages: 0, bonuses: 0, deductions: 0, net: 0 };
+            return acc;
+        }, {});
 
         // Add Existing Attendance Data
         attendanceData.forEach((rec) => {
-            const isAdvance = rec.deductionReason === 'Salary Advance' || (rec.deduction_reason === 'Salary Advance');
+            const isAdvance = rec.deduction_reason === 'Salary Advance' || rec.deductionReason === 'Salary Advance';
+            const bonus = parseFloat(rec.bonus || 0);
+            const deductions = parseFloat(rec.deductions || 0);
+            const wage = parseFloat(rec.daily_wage || rec.dailyWage || 0);
+            const net = wage + bonus - (isAdvance ? deductions : deductions); // Simplified as deductions already include advance in this context if specified but usually they are separate fields in the DB. Actually in this code deductions is the only field.
+            
+            // For report consistency, we'll use advance and other deductions separately if possible, 
+            // but the current logic puts everything in rec.deductions.
+            const adv = isAdvance ? deductions : 0;
+            const otherDed = isAdvance ? 0 : deductions;
+
             attendanceSheet.addRow({
                 date: new Date(rec.date),
                 id: rec.empId,
@@ -764,97 +777,145 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 out3: rec.shifts?.[2]?.out === '-' ? null : rec.shifts?.[2]?.out,
                 in4: rec.shifts?.[3]?.in === '-' ? null : rec.shifts?.[3]?.in,
                 out4: rec.shifts?.[3]?.out === '-' ? null : rec.shifts?.[3]?.out,
+                hours: parseFloat(rec.hoursWorked || 0).toFixed(2),
+                ot: parseFloat(rec.otHours || 0).toFixed(2),
                 break: Math.round((rec.breakHours || 0) * 60),
-                salaryAdvance: isAdvance ? (rec.deductions || 0) : 0,
-                deductions: isAdvance ? 0 : (rec.deductions || 0),
+                salaryAdvance: adv,
+                deductions: otherDed,
+                bonus: bonus,
+                wage: wage,
+                net: wage + bonus - deductions,
                 deductionReason: rec.deductionReason || rec.deduction_reason || ''
             });
+
+            // Update Summary
+            if (employeeSummary[rec.empId]) {
+                employeeSummary[rec.empId].hours += parseFloat(rec.hoursWorked || 0);
+                employeeSummary[rec.empId].ot += parseFloat(rec.otHours || 0);
+                employeeSummary[rec.empId].wages += wage;
+                employeeSummary[rec.empId].bonuses += bonus;
+                employeeSummary[rec.empId].deductions += deductions;
+                employeeSummary[rec.empId].net += (wage + bonus - deductions);
+            }
         });
 
-        // Add blank rows
-        for (let i = 0; i < 50; i++) attendanceSheet.addRow({});
+        // 4. Monthly Summary Sheet
+        const summarySheet = workbook.addWorksheet('Monthly Summary');
+        summarySheet.columns = [
+            { header: 'Emp ID', key: 'id', width: 15 },
+            { header: 'Emp Name', key: 'name', width: 25 },
+            { header: 'Total Hours', key: 'hours', width: 15 },
+            { header: 'OT Hours', key: 'ot', width: 15 },
+            { header: 'Total Wages', key: 'wages', width: 15 },
+            { header: 'Total Bonuses', key: 'bonuses', width: 15 },
+            { header: 'Total Deductions', key: 'deductions', width: 18 },
+            { header: 'Net Payout (Target)', key: 'net', width: 18 }
+        ];
 
-        // Apply styles and alignment
-        attendanceSheet.getRow(1).font = { bold: true };
-        attendanceSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-        attendanceSheet.getRow(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE0E0E0' }
-        };
+        Object.values(employeeSummary).forEach(s => {
+            if (s.hours > 0 || s.net !== 0) {
+                summarySheet.addRow({
+                    id: s.id,
+                    name: s.name,
+                    hours: s.hours.toFixed(1),
+                    ot: s.ot.toFixed(1),
+                    wages: s.wages,
+                    bonuses: s.bonuses,
+                    deductions: s.deductions,
+                    net: s.net
+                });
+            }
+        });
 
-        // Align all data rows and set borders
-        attendanceSheet.eachRow((row, rowNumber) => {
-            row.eachCell((cell) => {
-                cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                cell.border = {
-                    top: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    left: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    bottom: { style: 'thin', color: { argb: 'FFD4D4D4' } },
-                    right: { style: 'thin', color: { argb: 'FFD4D4D4' } }
-                };
+        // Styling for all sheets
+        [attendanceSheet, summarySheet, masterSheet].forEach(sheet => {
+            sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; // Indigo background
+            sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+            sheet.getRow(1).height = 25;
+
+            sheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return;
+                row.height = 20;
+                row.eachCell((cell, colNumber) => {
+                    // Default alignment: Left for text, Center for dates, Right for numbers
+                    const colKey = sheet.getColumn(colNumber).key;
+                    if (['id', 'name', 'deductionReason'].includes(colKey)) {
+                        cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+                    } else if (['date'].includes(colKey)) {
+                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                    } else {
+                        cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+                    }
+                    
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                    };
+                });
             });
         });
 
-        // Apply formatting and validation (1-based index)
+        // Add dropdowns and formatting for Attendance Log blank rows
+        for (let i = 0; i < 50; i++) attendanceSheet.addRow({});
         const totalSheetRows = attendanceSheet.rowCount;
+        const breakOptions = [];
+        for (let m = 0; m <= 240; m += 15) breakOptions.push(m);
+        const deductionReasons = ['Salary Advance', 'Late Arrival', 'Damage Recovery', 'Loan Repayment', 'Other'];
+
         for (let rowNumber = 2; rowNumber <= totalSheetRows; rowNumber++) {
             const row = attendanceSheet.getRow(rowNumber);
-
-            // Date Dropdown
             row.getCell(1).numFmt = 'DD-MM-YYYY';
             row.getCell(1).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: [`'Lists'!$A$2:$A$${monthDates.length + 1}`]
+                type: 'list', allowBlank: true, formulae: [`'Lists'!$A$2:$A$${monthDates.length + 1}`]
             };
-
-            // ID Dropdown
             row.getCell(2).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: ["'Employee Details'!$A$2:$A$1000"]
+                type: 'list', allowBlank: true, formulae: ["'Employee Details'!$A$2:$A$1000"]
             };
-
-            // Name Lookup
-            if (!row.getCell(3).value) {
+            if (!row.getCell(3).formula) {
                 row.getCell(3).value = {
                     formula: `=IF(B${rowNumber}="","",VLOOKUP(B${rowNumber},'Employee Details'!$A$2:$B$1000,2,FALSE))`,
                     result: undefined
                 };
             }
-
-            // Shift Time Dropdowns (Cols 4-11)
             for (let col = 4; col <= 11; col++) {
                 row.getCell(col).numFmt = 'HH:mm';
-                row.getCell(col).dataValidation = {
-                    type: 'list',
-                    allowBlank: true,
-                    formulae: ["'Lists'!$B$2:$B$98"]
-                };
+                row.getCell(col).dataValidation = { type: 'list', allowBlank: true, formulae: ["'Lists'!$B$2:$B$98"] };
             }
-
-            // Break Dropdown (Col 12)
-            row.getCell(12).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: [`'Lists'!$C$2:$C$${breakOptions.length + 1}`]
+            // Work Hours (12) and OT Hours (13) - Numeric
+            [12, 13].forEach(col => {
+                row.getCell(col).numFmt = '0.00';
+            });
+            // Break (14)
+            row.getCell(14).dataValidation = {
+                type: 'list', allowBlank: true, formulae: [`'Lists'!$C$2:$C$${breakOptions.length + 1}`]
             };
-
-            // Deduction Reason Dropdown (Col 15)
-            row.getCell(15).dataValidation = {
-                type: 'list',
-                allowBlank: true,
-                formulae: [`'Lists'!$D$2:$D$${deductionReasons.length + 1}`]
+            // Col 20 is Deduction Reason
+            row.getCell(20).dataValidation = {
+                type: 'list', allowBlank: true, formulae: [`'Lists'!$D$2:$D$${deductionReasons.length + 1}`]
             };
+            // Add currency formatting for Cols 15-19
+            [15, 16, 17, 18, 19].forEach(col => {
+                row.getCell(col).numFmt = '"₹"#,##0';
+            });
         }
+
+        // Currency formatting for summary sheet
+        summarySheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            [5, 6, 7, 8].forEach(col => {
+                row.getCell(col).numFmt = '"₹"#,##0';
+            });
+        });
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = `Attendance_Logs_${monthName}_${year}.xlsx`;
+        anchor.download = `NILAA_Attendance_Report_${monthName}_${year}.xlsx`;
         anchor.click();
         window.URL.revokeObjectURL(url);
     };
@@ -1089,7 +1150,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Overall Summary (All Staff)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
                                 <div className="glass-panel" style={{ padding: '1rem' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
                                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
@@ -1101,6 +1162,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                 <div className="glass-panel" style={{ padding: '1rem' }}>
                                     <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
                                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                    <div style={{ color: '#a855f7', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Bonus</div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.totalBonus)}</div>
                                 </div>
                                 <div className="glass-panel" style={{ padding: '1rem' }}>
                                     <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
@@ -1116,7 +1181,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Temporary Staff (Field Metrics)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
                                     <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
                                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
@@ -1128,6 +1193,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
                                     <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
                                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Bonus</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.tempTotalBonus)}</div>
                                 </div>
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
                                     <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
@@ -1143,7 +1212,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Permanent Staff (Core Team)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
                                     <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
                                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
@@ -1155,6 +1224,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
                                     <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
                                     <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Bonus</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.permTotalBonus)}</div>
                                 </div>
                                 <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
                                     <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
@@ -1383,6 +1456,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Non OT Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>OT Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Total Pay</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right', color: '#a855f7' }}>Bonus</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right' }}>Deductions</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right', color: '#60a5fa', borderRight: '1px solid var(--glass-border)' }}>Net Pay</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'center' }}>Actions</th>
@@ -1504,6 +1578,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                     return formatCurrency(totalPay);
                                                                 })()}
                                                             </td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', color: '#a855f7', fontWeight: 600 }}>{row.bonus > 0 ? `+${formatCurrency(row.bonus)}` : '-'}</td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>{row.deductions > 0 ? `-${formatCurrency(row.deductions)}` : '-'}</td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)', fontSize: '0.95rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 {(() => {
@@ -1518,8 +1593,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                         const regH = isSpecial ? 0 : Math.min(total, parseFloat(payrollConfig.standard_daily_hours || 8));
                                                                         totalPay = (regH * rate) + otPay;
                                                                     }
+                                                                    const bonus = parseFloat(row.bonus) || 0;
                                                                     const deductions = parseFloat(row.deductions) || 0;
-                                                                    return formatCurrency(Math.max(0, totalPay - deductions));
+                                                                    return formatCurrency(Math.max(0, totalPay + bonus - deductions));
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'center' }}>
@@ -1776,6 +1852,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
             : Array.from({ length: 4 }, () => ({ in: '', out: '' })),
         breakMins: initialData?.break_hours ? initialData.break_hours * 60 : 0,
         rate: initialData?.rate || config.default_hourly_rate,
+        bonus: initialData?.bonus || 0,
+        bonusReason: initialData?.bonus_reason || '',
         deductions: initialData?.deductions || 0,
         deductionReason: initialData?.deduction_reason || '',
         attendance_status: initialData?.attendance_status || 'Present',
@@ -1835,8 +1913,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                     emp_name: formData.empName,
                     type: formData.paymentType === 'Salary Payout' ? 'Salary' : formData.paymentType,
                     amount: parseFloat(formData.paymentAmount),
-                    remarks: formData.paymentType === 'Salary Payout'
-                        ? (formData.paymentRemarks ? `Full Payout - ${formData.paymentRemarks}` : `Full Payout`)
+                    remarks: formData.paymentType === 'Salary Payout' || formData.paymentType === 'Bonus'
+                        ? (formData.paymentRemarks ? `${formData.paymentType} Payout - ${formData.paymentRemarks}` : `${formData.paymentType} Payout`)
                         : formData.paymentRemarks
                 };
 
@@ -1910,6 +1988,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 break_hours: isPresent ? formData.breakMins / 60 : 0,
                 daily_wage: wage,
                 rate: rate,
+                bonus: parseFloat(formData.bonus || 0),
+                bonus_reason: formData.bonusReason,
                 deductions: parseFloat(formData.deductions || 0),
                 deduction_reason: formData.deductionReason,
                 attendance_status: formData.attendance_status,
@@ -2011,6 +2091,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                     <option value="Advance" style={{ background: 'var(--bg-secondary)' }}>Salary Advance</option>
                                     <option value="Salary" style={{ background: 'var(--bg-secondary)' }}>Salary Installment</option>
                                     <option value="Wages" style={{ background: 'var(--bg-secondary)' }}>Wages</option>
+                                    <option value="Bonus" style={{ background: 'var(--bg-secondary)' }}>Bonus Payout</option>
                                     <option value="Salary Payout" style={{ background: 'var(--bg-secondary)' }}>Salary Payout</option>
                                 </select>
                             </div>
@@ -2044,6 +2125,13 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                         <option value="Loan Repayment" style={{ background: 'var(--bg-secondary)' }}>Loan Repayment</option>
                                         <option value="Other" style={{ background: 'var(--bg-secondary)' }}>Other</option>
                                     </select>
+                                </div>
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Bonus Payout (₹)</label>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <input type="number" value={formData.bonus} onChange={e => setFormData({ ...formData, bonus: e.target.value })} placeholder="0" style={{ flex: 1, padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                                        <input type="text" value={formData.bonusReason} onChange={e => setFormData({ ...formData, bonusReason: e.target.value })} placeholder="Reason for bonus..." style={{ flex: 2, padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                                    </div>
                                 </div>
                             </div>
                             {/* ... existing attendance details section ... */}

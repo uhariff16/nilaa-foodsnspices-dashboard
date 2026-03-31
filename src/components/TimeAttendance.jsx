@@ -546,6 +546,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             totalSalary: 0,
             totalAdvance: 0,
             totalWages: 0,
+            totalBonus: 0,
             totalEarned: 0
         };
 
@@ -555,6 +556,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             if (p.type === 'Salary') stats.totalSalary += amt;
             else if (p.type === 'Advance') stats.totalAdvance += amt;
             else if (p.type === 'Wages') stats.totalWages += amt;
+            else if (p.type === 'Bonus') stats.totalBonus += amt;
         });
 
         // 2. Calculate Total Earned from matching attendance records
@@ -578,7 +580,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         });
 
-        stats.balance = stats.totalEarned - (stats.totalSalary + stats.totalAdvance + stats.totalWages);
+        stats.balance = stats.totalEarned - (stats.totalSalary + stats.totalAdvance + stats.totalWages + stats.totalBonus);
 
         return stats;
     }, [filteredPayments, attendanceData, searchTerm, monthFilter, yearFilter, payrollConfig]);
@@ -1700,9 +1702,13 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Wages</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(paymentStats.totalWages)}</div>
                         </div>
+                        <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #a855f7' }}>
+                            <div style={{ color: '#a855f7', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Bonus</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(paymentStats.totalBonus)}</div>
+                        </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.05)' }}>
                             <div style={{ color: '#a78bfa', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Financial Outflow</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.totalBonus)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ec4899', background: 'rgba(236, 72, 153, 0.05)' }}>
                             <div style={{ color: '#f472b6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Earned (Attendance)</div>

@@ -17,9 +17,9 @@ const defaultPermissions = {
         profitHub: false
     },
     attendance: {
-        tracking: false,
-        payouts: false,
-        salaries: false
+        tracking: { read: false, write: false, delete: false, bulk: false },
+        payouts: { read: false, write: false, delete: false },
+        salaries: { read: false, write: false, delete: false }
     },
     payouts: false
 };
@@ -30,7 +30,11 @@ const mergePermissions = (fetched) => {
         ...defaultPermissions,
         ...fetched,
         dashboard: { ...defaultPermissions.dashboard, ...(fetched.dashboard || {}) },
-        attendance: { ...defaultPermissions.attendance, ...(fetched.attendance || {}) }
+        attendance: {
+            tracking: { ...defaultPermissions.attendance.tracking, ...(fetched.attendance?.tracking || {}) },
+            payouts: { ...defaultPermissions.attendance.payouts, ...(fetched.attendance?.payouts || {}) },
+            salaries: { ...defaultPermissions.attendance.salaries, ...(fetched.attendance?.salaries || {}) }
+        }
     };
 };
 
@@ -279,8 +283,14 @@ export const AuthProvider = ({ children }) => {
                 const parts = path.split('.');
                 let current = permissions;
                 for (const part of parts) {
-                    if (current[part] === undefined) return false;
+                    if (!current || typeof current !== 'object') return false;
                     current = current[part];
+                }
+                
+                // If it's a leaf boolean, return it. 
+                // If it's an object (multi-perm), return true if it exists.
+                if (typeof current === 'object' && current !== null) {
+                    return Object.values(current).some(v => v === true);
                 }
                 return !!current;
             },

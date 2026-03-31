@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Package, Factory, TrendingUp, AlertCircle, Settings, Clock, Zap } from 'lucide-react';
+import { Package, Factory, TrendingUp, AlertCircle, Settings, Clock, Zap, PlusCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 // Images (Relative paths assuming they are in the public/assets or accessible)
 // Since we generated them, we'll assume they are served. If not, we fall back to icons.
@@ -73,14 +74,192 @@ const MetricCard = ({ title, value, subtext, icon: Icon, trend, image, color, ba
     );
 };
 
+// [NEW] Stock Adjustment Modal Component
+const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
+    const [formData, setFormData] = useState({
+        date: new Date().toISOString().split('T')[0],
+        material: 'GINGER RAW',
+        weight: '',
+        remarks: ''
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!isOpen) return null;
+
+    const materials = [
+        'GINGER RAW', 'GARLIC RAW',
+        'GINGER PEELED', 'GARLIC PEELED'
+    ];
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!formData.weight || isNaN(formData.weight)) {
+            alert("Please enter a valid weight.");
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const { error } = await supabase
+                .from('production_logs')
+                .insert([{
+                    date: formData.date,
+                    type: 'adjustment',
+                    material: formData.material,
+                    weight: parseFloat(formData.weight),
+                    remarks: formData.remarks || 'Manual Adjustment'
+                }]);
+
+            if (error) throw error;
+            
+            alert("Adjustment recorded successfully!");
+            onSave();
+            onClose();
+        } catch (err) {
+            console.error("Error saving adjustment:", err);
+            alert("Failed to save adjustment: " + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)'
+        }}>
+            <div className="glass-panel" style={{ width: '90%', maxWidth: '450px', padding: '2rem', border: '1px solid var(--accent-color)' }}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: 'var(--accent-color)' }}>
+                    <PlusCircle size={24} /> Stock Adjustment
+                </h2>
+
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Adjustment Date</label>
+                        <input
+                            type="date"
+                            value={formData.date}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Material Type</label>
+                        <select
+                            value={formData.material}
+                            onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                        >
+                            {materials.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                            Weight Change (Kg)
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
+                                (Use negative for loss/damage)
+                            </span>
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g. -5.2"
+                            value={formData.weight}
+                            onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Remarks</label>
+                        <textarea
+                            placeholder="Reason for adjustment..."
+                            value={formData.remarks}
+                            onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem', height: '80px',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)', resize: 'none'
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            style={{
+                                flex: 1, padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'transparent', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-secondary)', cursor: 'pointer'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSaving}
+                            style={{
+                                flex: 2, padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--accent-color)', border: 'none',
+                                color: 'white', fontWeight: 600, cursor: 'pointer',
+                                opacity: isSaving ? 0.7 : 1
+                            }}
+                        >
+                            {isSaving ? 'Processing...' : 'Record Adjustment'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }) => {
-    // Wastage Settings State (Persisted in localStorage)
+    const [showSettings, setShowSettings] = useState(false);
+    const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+    const [adjustments, setAdjustments] = useState([]);
     const [wastageSettings, setWastageSettings] = useState(() => {
         const saved = localStorage.getItem('productionWastageSettings');
         return saved ? JSON.parse(saved) : { ginger: 10, garlic: 3 };
     });
 
-    const [showSettings, setShowSettings] = useState(false);
+    // Fetch Manual Adjustments from DB
+    const fetchAdjustments = async () => {
+        try {
+            const { data: logs, error } = await supabase
+                .from('production_logs')
+                .select('*')
+                .eq('type', 'adjustment')
+                .order('date', { ascending: false });
+
+            if (error) throw error;
+            setAdjustments(logs || []);
+        } catch (err) {
+            console.error("Error fetching adjustments:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchAdjustments();
+    }, []);
 
     // Save handler
     const saveSettings = () => {
@@ -221,21 +400,22 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
         const uniqueMonths = [...new Set(allDates.map(getMonthKey))].sort();
 
         const ledger = {};
-        let runningGinger = 0;
-        let runningGarlic = 0;
+        let runningRawGinger = 0;
+        let runningRawGarlic = 0;
+        let runningPeeledGinger = 0;
+        let runningPeeledGarlic = 0;
 
         uniqueMonths.forEach(monthKey => {
             // Filter items for this month
-            const inItemsAll = data.stockIn.filter(i => i.date && i.date.startsWith(monthKey));
-            const outItems = data.preProduction.filter(i => i.date && i.date.startsWith(monthKey));
+            const inItemsAll = (data.stockIn || []).filter(i => i.date && i.date.startsWith(monthKey));
+            const usageItems = (data.preProduction || []).filter(i => i.date && i.date.startsWith(monthKey));
+            const prodItems = (data.postProduction || []).filter(i => i.date && i.date.startsWith(monthKey));
+            const monthAdjustments = adjustments.filter(i => i.date && i.date.startsWith(monthKey));
 
-            // Separate OS (Opening Stock) explicitly
-            // isOS is defined at component level now
-
+            // 1. RAW STOCK CALCULATION
             const osItems = inItemsAll.filter(isOS);
             const purchaseItems = inItemsAll.filter(i => !isOS(i));
 
-            // Explicit Opening (Sum of OS rows for this month)
             const explicitGingerOS = osItems.reduce((acc, i) => {
                 const norm = localNormalizeStr(i.material);
                 return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
@@ -245,7 +425,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
-            // Purchases (In)
             const gingerIn = purchaseItems.reduce((acc, i) => {
                 const norm = localNormalizeStr(i.material);
                 return (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
@@ -255,28 +434,29 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                 return (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) ? acc + i.weight : acc;
             }, 0);
 
-            // Calculate Opening for THIS month (Pre-calculation needed for Wastage Base)
-            // Logic Fix: Use Explicit OS (File Truth) if available. Else use Running Balance.
-            const gingerOpening = explicitGingerOS > 0 ? explicitGingerOS : runningGinger;
-            const garlicOpening = explicitGarlicOS > 0 ? explicitGarlicOS : runningGarlic;
+            const gingerRawAdjustment = monthAdjustments.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('ginger') && norm.includes('raw')) ? acc + i.weight : acc;
+            }, 0);
+            const garlicRawAdjustment = monthAdjustments.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('garlic') && norm.includes('raw')) ? acc + i.weight : acc;
+            }, 0);
 
-            // Wastage Calculation: Option 2 (Stock-Based) -> (Opening + Purchases) * %
-            const gingerTotalIn = gingerOpening + gingerIn;
-            const garlicTotalIn = garlicOpening + garlicIn;
+            const gingerOpening = explicitGingerOS > 0 ? explicitGingerOS : runningRawGinger;
+            const garlicOpening = explicitGarlicOS > 0 ? explicitGarlicOS : runningRawGarlic;
 
-            const gingerWastage = gingerTotalIn * (wastageSettings.ginger / 100);
-            const garlicWastage = garlicTotalIn * (wastageSettings.garlic / 100);
+            const gingerTotalRawIn = gingerOpening + gingerIn + gingerRawAdjustment;
+            const garlicTotalRawIn = garlicOpening + garlicIn + garlicRawAdjustment;
 
-            // Usage (Out) - Strictly Raw Usage
-            const gingerRawUsage = outItems.reduce((acc, i) => {
+            const gingerWastage = usageItems.reduce((acc, i) => {
                 const norm = localNormalizeStr(i.material);
                 if (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) {
                     return acc + i.weight;
                 }
                 return acc;
             }, 0);
-
-            const garlicRawUsage = outItems.reduce((acc, i) => {
+            const garlicWastage = usageItems.reduce((acc, i) => {
                 const norm = localNormalizeStr(i.material);
                 if (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) {
                     return acc + i.weight;
@@ -284,27 +464,76 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                 return acc;
             }, 0);
 
-            const gingerOutTotal = gingerRawUsage + gingerWastage;
-            const garlicOutTotal = garlicRawUsage + garlicWastage;
+            const gingerRawClosing = gingerTotalRawIn - gingerWastage;
+            const garlicRawClosing = garlicTotalRawIn - garlicWastage;
 
-            // Calculate Closing
-            const gingerClosing = gingerTotalIn - gingerOutTotal;
-            const garlicClosing = garlicTotalIn - garlicOutTotal;
+            // 2. PROCESS (PEELED) STOCK CALCULATION
+            const gingerPeeledIn = usageItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                if (norm.includes('ginger') && norm.includes('peeled')) {
+                    return acc + i.weight;
+                }
+                // If weight not explicitly logged as PEELED, we estimate based on usage - wastage
+                if (norm.includes('ginger') && !norm.includes('garlic') && !norm.includes('paste') && !norm.includes('peeled')) {
+                    return acc + (i.weight * (1 - wastageSettings.ginger / 100));
+                }
+                return acc;
+            }, 0);
 
-            // Update running balance for next iteration
-            runningGinger = gingerClosing;
-            runningGarlic = garlicClosing;
+            const garlicPeeledIn = usageItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                if (norm.includes('garlic') && norm.includes('peeled')) {
+                    return acc + i.weight;
+                }
+                if (norm.includes('garlic') && !norm.includes('ginger') && !norm.includes('paste') && !norm.includes('peeled')) {
+                    return acc + (i.weight * (1 - wastageSettings.garlic / 100));
+                }
+                return acc;
+            }, 0);
+
+            const gingerPeeledOut = prodItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('ginger') && !norm.includes('garlic')) ? acc + i.weight : acc;
+            }, 0);
+            const garlicPeeledOut = prodItems.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('garlic') && !norm.includes('ginger')) ? acc + i.weight : acc;
+            }, 0);
+
+            const gingerPeeledAdjustment = monthAdjustments.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('ginger') && norm.includes('peeled')) ? acc + i.weight : acc;
+            }, 0);
+            const garlicPeeledAdjustment = monthAdjustments.reduce((acc, i) => {
+                const norm = localNormalizeStr(i.material);
+                return (norm.includes('garlic') && norm.includes('peeled')) ? acc + i.weight : acc;
+            }, 0);
+
+            const gingerPeeledOpening = runningPeeledGinger;
+            const garlicPeeledOpening = runningPeeledGarlic;
+
+            const gingerPeeledClosing = gingerPeeledOpening + gingerPeeledIn - gingerPeeledOut + gingerPeeledAdjustment;
+            const garlicPeeledClosing = garlicPeeledOpening + garlicPeeledIn - garlicPeeledOut + garlicPeeledAdjustment;
+
+            runningRawGinger = gingerRawClosing;
+            runningRawGarlic = garlicRawClosing;
+            runningPeeledGinger = gingerPeeledClosing;
+            runningPeeledGarlic = garlicPeeledClosing;
 
             ledger[monthKey] = {
-                ginger: { opening: gingerOpening, in: gingerIn, out: gingerOutTotal, closing: gingerClosing, wastage: gingerWastage },
-                garlic: { opening: garlicOpening, in: garlicIn, out: garlicOutTotal, closing: garlicClosing, wastage: garlicWastage },
+                ginger: { opening: gingerOpening, in: gingerIn, out: gingerWastage, closing: gingerRawClosing, adjustment: gingerRawAdjustment },
+                garlic: { opening: garlicOpening, in: garlicIn, out: garlicWastage, closing: garlicRawClosing, adjustment: garlicRawAdjustment },
+                peeled: {
+                    ginger: { opening: gingerPeeledOpening, in: gingerPeeledIn, out: gingerPeeledOut, closing: gingerPeeledClosing, adjustment: gingerPeeledAdjustment },
+                    garlic: { opening: garlicPeeledOpening, in: garlicPeeledIn, out: garlicPeeledOut, closing: garlicPeeledClosing, adjustment: garlicPeeledAdjustment }
+                }
             };
         });
 
         // 'Overall' key for latest closing
         ledger['Overall'] = {
-            ginger: { closing: runningGinger },
-            garlic: { closing: runningGarlic }
+            ginger: { closing: runningRawGinger },
+            garlic: { closing: runningRawGarlic }
         };
 
         return ledger;
@@ -566,23 +795,44 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
     return (
         <div className="animate-fade-in">
-            {/* Admin Settings Toggle */}
+            {/* Admin Controls */}
             {isAdmin && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <button
+                        onClick={() => setShowAdjustmentModal(true)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            background: 'var(--glass-highlight)',
+                            border: '1px solid var(--accent-color)',
+                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                            transition: 'all 0.2s'
+                        }}
+                        className="hover-scale"
+                    >
+                        <PlusCircle size={18} color="var(--accent-color)" /> Manual Adjustment
+                    </button>
                     <button
                         onClick={() => setShowSettings(!showSettings)}
                         style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             background: showSettings ? 'var(--accent-color)' : 'var(--glass-highlight)',
                             border: '1px solid var(--glass-border)',
-                            color: 'var(--text-primary)', padding: '0.5rem 1rem', borderRadius: '0.5rem',
-                            cursor: 'pointer', fontSize: '0.875rem'
+                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500
                         }}
                     >
-                        <Settings size={16} /> Production Wastage Settings
+                        <Settings size={18} /> Production Wastage
                     </button>
                 </div>
             )}
+
+            <StockAdjustmentModal 
+                isOpen={showAdjustmentModal} 
+                onClose={() => setShowAdjustmentModal(false)}
+                onSave={() => fetchAdjustments()}
+                isAdmin={isAdmin}
+            />
 
             {/* Admin Settings Panel */}
             {isAdmin && showSettings && (

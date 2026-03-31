@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil, User, LogOut, Plus, Sun, Moon } from 'lucide-react';
+import { Upload, Users, Clock, DollarSign, Calendar, FileText, Download, ArrowLeft, TrendingUp, Trash2, UserCheck, UserMinus, Pencil, User, LogOut, Plus, Sun, Moon, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
@@ -90,6 +90,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
     const [editingRecord, setEditingRecord] = useState(null);
     const [activeTab, setActiveTab] = useState('attendance'); // 'attendance' or 'payments'
+
+    // Deletion Request States
+    const [showDeleteRequest, setShowDeleteRequest] = useState(false);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [recordToRequest, setRecordToRequest] = useState(null);
     const [paymentData, setPaymentData] = useState([]);
     const [isPayslipOpen, setIsPayslipOpen] = useState(false);
 
@@ -255,21 +260,59 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         }
     };
 
-    const handleDelete = async (row) => {
-        if (!window.confirm(`Are you sure you want to delete the attendance log for ${row.name} on ${row.date}?`)) return;
-
+    const submitDeletionRequest = async () => {
+        if (!deleteReason.trim()) return alert("Please provide a reason for deletion.");
         try {
             const { error } = await supabase
                 .from('employee_attendance')
-                .delete()
+                .update({
+                    deletion_status: 'Pending Deletion',
+                    deletion_remarks: deleteReason,
+                    requested_by: user.email
+                })
+                .match({ date: recordToRequest.date, emp_id: recordToRequest.empId });
+
+            if (error) throw error;
+            setShowDeleteRequest(false);
+            setDeleteReason('');
+            fetchAttendance();
+        } catch (err) {
+            alert("Error requesting deletion: " + err.message);
+        }
+    };
+
+    const handleRejectDelete = async (row) => {
+        try {
+            const { error } = await supabase
+                .from('employee_attendance')
+                .update({
+                    deletion_status: null,
+                    deletion_remarks: null,
+                    requested_by: null
+                })
                 .match({ date: row.date, emp_id: row.empId });
 
             if (error) throw error;
-            console.log("Delete Successful");
             fetchAttendance();
         } catch (err) {
-            console.error("Delete Error:", err);
-            alert("Failed to delete record: " + err.message);
+            alert("Error rejecting request: " + err.message);
+        }
+    };
+
+    const handleDelete = async (row, isApproved = false) => {
+        if (isApproved || window.confirm(`Are you sure you want to delete the attendance log for ${row.name} on ${row.date}?`)) {
+            try {
+                const { error } = await supabase
+                    .from('employee_attendance')
+                    .delete()
+                    .match({ date: row.date, emp_id: row.empId });
+
+                if (error) throw error;
+                fetchAttendance();
+            } catch (err) {
+                console.error("Delete Error:", err);
+                alert("Failed to delete record: " + err.message);
+            }
         }
     };
 
@@ -653,6 +696,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         });
 
+        // [LOGICAL FIX] Include standalone Bonus Payouts from employee_payments
+        filteredPayments.forEach(p => {
+            if (p.type === 'Bonus') {
+                const emp = employees.find(e => e.emp_id === p.emp_id);
+                const amt = parseFloat(p.amount) || 0;
+                totalBonus += amt;
+                if (emp?.staff_type === 'Temporary') {
+                    tempTotalBonus += amt;
+                } else {
+                    permTotalBonus += amt;
+                }
+            }
+        });
+
         const grossPay = totalCost;
         const netPayout = grossPay + totalBonus - totalDeductions;
         const permGrossPay = permTotalCost;
@@ -962,20 +1019,24 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                     {/* Action Group */}
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
-                        <button onClick={() => setShowManualEntry(true)} className="btn-action btn-outline" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem' }}>
-                            <FileText size={18} />
-                            Manual Entry
-                        </button>
-                        <button onClick={() => document.getElementById('attendance-upload').click()} className="btn-action btn-outline" style={{
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            borderColor: 'rgba(59, 130, 246, 0.2)',
-                            color: 'var(--accent-primary)',
-                            borderRadius: '0.75rem',
-                            padding: '0.6rem 1rem'
-                        }}>
-                            <Upload size={18} />
-                            Upload Sheet
-                        </button>
+                        {hasPermission('attendance.tracking.write') && (
+                            <>
+                                <button onClick={() => setShowManualEntry(true)} className="btn-action btn-outline" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem' }}>
+                                    <FileText size={18} />
+                                    Manual Entry
+                                </button>
+                                <button onClick={() => document.getElementById('attendance-upload').click()} className="btn-action btn-outline" style={{
+                                    background: 'rgba(59, 130, 246, 0.1)',
+                                    borderColor: 'rgba(59, 130, 246, 0.2)',
+                                    color: 'var(--accent-primary)',
+                                    borderRadius: '0.75rem',
+                                    padding: '0.6rem 1rem'
+                                }}>
+                                    <Upload size={18} />
+                                    Upload Sheet
+                                </button>
+                            </>
+                        )}
                         <button onClick={() => setIsPayslipOpen(true)} className="btn-action btn-outline" title="Generate Monthly Payslips" style={{ borderRadius: '0.75rem', padding: '0.6rem 1rem', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
                             <FileText size={18} />
                             Payslips
@@ -1659,9 +1720,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
                                 <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Payment Register (Salaries & Advances)</h3>
                                 <div style={{ display: 'flex', gap: '1rem' }}>
-                                    <button onClick={() => setShowManualEntry(true)} className="btn-action btn-primary" style={{ background: '#3b82f6', borderRadius: '0.5rem' }}>
-                                        <Plus size={18} /> Register Payment
-                                    </button>
+                                    {hasPermission('attendance.payouts.write') && (
+                                        <button onClick={() => setShowManualEntry(true)} className="btn-action btn-primary" style={{ background: '#3b82f6', borderRadius: '0.5rem' }}>
+                                            <Plus size={18} /> Register Payment
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -1793,12 +1856,14 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                 <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)', borderRight: '1px solid var(--glass-border)' }}>{formatCurrency(row.amount)}</td>
                                                 <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', borderRight: '1px solid var(--glass-border)' }}>{row.remarks || '-'}</td>
                                                 <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                                    <button
-                                                        onClick={() => deletePayment(row.id)}
-                                                        style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    {hasPermission('attendance.payouts.delete') && (
+                                                        <button
+                                                            onClick={() => deletePayment(row.id)}
+                                                            style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -1837,6 +1902,38 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 paymentData={paymentData}
                 payrollConfig={payrollConfig}
             />
+
+            {/* Deletion Request Modal */}
+            {showDeleteRequest && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, backdropFilter: 'blur(8px)' }}>
+                    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '1.25rem', padding: '2rem', width: '100%', maxWidth: '450px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', color: '#f59e0b' }}>
+                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '0.75rem', borderRadius: '1rem' }}>
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Request Deletion</h3>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Explain why this log should be removed</p>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Reason for deletion</label>
+                            <textarea
+                                value={deleteReason}
+                                onChange={(e) => setDeleteReason(e.target.value)}
+                                placeholder="e.g. Mistake in manual entry, double entry, etc."
+                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', padding: '1rem', color: 'var(--text-primary)', fontSize: '0.9rem', minHeight: '120px', outline: 'none', resize: 'none' }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <button onClick={() => setShowDeleteRequest(false)} style={{ flex: 1, padding: '0.8rem', background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)', borderRadius: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={submitDeletionRequest} style={{ flex: 1, padding: '0.8rem', background: '#f59e0b', border: 'none', color: 'white', borderRadius: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>Submit Request</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

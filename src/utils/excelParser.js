@@ -354,13 +354,20 @@ export const parseExcelFile = (files) => {
                                     let qty = 1;
                                     if (qtyColIdx !== -1 && row[qtyColIdx]) qty = parseFloat(String(row[qtyColIdx]).replace(/,/g, '')) || 1;
 
+                                    // [NEW] Detect Returns
+                                    const isReturn = desc.includes('return') || desc.includes('credit') || desc.includes('cn') || desc.includes(' spoiled') || amount < 0;
+                                    if (isReturn && type === 'Sales') {
+                                        type = 'Return';
+                                    }
+
                                     if (finalDate) {
                                         mergedData.transactions.push({
                                             id: `txn-${finalDate}-${amount}-${index}`,
                                             parsedDate: finalDate, // DB Column: date
                                             parsedAmount: Math.abs(amount), // [FIX] Store absolute value for consistency
                                             parsedQty: qty, // DB Column: quantity
-                                            parsedType: type, // [FIX] Dynamic Type
+                                            parsedType: type, // [FIX] Dynamic Type (Sales, Return, Invoice Total)
+                                            isReturn: isReturn, // Explicit flag for easier filtering
                                             originalDesc: colParticulars || (isStructureTotal ? 'Invoice Total' : 'Item'), // DB Column: item_name
                                             // Priority: 1. Stateful Customer (Header), 2. Column Customer
                                             customerName: currentCustomer || ((custColIdx !== -1 && row[custColIdx]) ? String(row[custColIdx]).trim() : null),

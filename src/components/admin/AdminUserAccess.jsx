@@ -16,9 +16,9 @@ const initialPermissions = {
         profitHub: false
     },
     attendance: {
-        tracking: false,
-        payouts: false,
-        salaries: false
+        tracking: { read: false, write: false, delete: false, bulk: false },
+        payouts: { read: false, write: false, delete: false },
+        salaries: { read: false, write: false, delete: false }
     },
     payouts: false
 };
@@ -27,7 +27,13 @@ const getRolePermissions = (role) => {
     const p = JSON.parse(JSON.stringify(initialPermissions));
     if (role === 'admin') {
         Object.keys(p.dashboard).forEach(k => p.dashboard[k] = true);
-        Object.keys(p.attendance).forEach(k => p.attendance[k] = true);
+        Object.keys(p.attendance).forEach(k => {
+            if (typeof p.attendance[k] === 'object') {
+                Object.keys(p.attendance[k]).forEach(sub => p.attendance[k][sub] = true);
+            } else {
+                p.attendance[k] = true;
+            }
+        });
         p.payouts = true;
     } else if (role === 'executive') {
         p.dashboard.overview = true;
@@ -40,27 +46,38 @@ const getRolePermissions = (role) => {
         p.dashboard.simulator = true;
     } else if (role === 'attendance_manager') {
         p.dashboard.overview = true;
-        p.attendance.tracking = true;
-        p.attendance.payouts = true;
-        p.attendance.salaries = true;
+        p.attendance.tracking = { read: true, write: true, delete: true, bulk: true };
+        p.attendance.payouts = { read: true, write: true, delete: true };
+        p.attendance.salaries = { read: true, write: true, delete: true };
+    } else if (role === 'data_entry') {
+        p.dashboard.overview = true;
+        p.attendance.tracking = { read: true, write: true, delete: false, bulk: false };
     } else if (role === 'financial_controller') {
         p.dashboard.overview = true;
         p.dashboard.sales = true;
         p.dashboard.expenses = true;
-        p.attendance.tracking = true;
-        p.attendance.payouts = true;
-        p.attendance.salaries = true;
+        p.attendance.tracking = { read: true, write: true, delete: false, bulk: false };
+        p.attendance.payouts = { read: true, write: true, delete: true };
+        p.attendance.salaries = { read: true, write: true, delete: true };
         p.payouts = true;
     }
     return p;
 };
 
 const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
-    const toggle = (section, key = null) => {
+    const toggle = (section, key = null, subKey = null) => {
         if (disabled) return;
         const newPerms = { ...permissions };
-        if (key) {
-            newPerms[section][key] = !newPerms[section][key];
+        if (subKey) {
+            newPerms[section][key][subKey] = !newPerms[section][key][subKey];
+        } else if (key) {
+            if (typeof newPerms[section][key] === 'object') {
+                // Toggle entire object (all true or all false)
+                const currentState = Object.values(newPerms[section][key]).some(v => v);
+                Object.keys(newPerms[section][key]).forEach(sub => newPerms[section][key][sub] = !currentState);
+            } else {
+                newPerms[section][key] = !newPerms[section][key];
+            }
         } else {
             newPerms[section] = !newPerms[section];
         }
@@ -144,22 +161,53 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
             {/* Attendance Section */}
             <div style={sectionStyle}>
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Time & Attendance Tabs</div>
-                <div style={gridStyle}>
+                <div style={{ ...gridStyle, gridTemplateColumns: '1fr' }}>
                     {[
-                        { id: 'tracking', label: 'Tracking', icon: <Clock size={14} /> },
-                        { id: 'payouts', label: 'Payouts', icon: <DollarSign size={14} /> },
-                        { id: 'salaries', label: 'Salaries', icon: <Wallet size={14} /> }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => toggle('attendance', tab.id)}
-                            style={toggleBtnStyle(mergedPerms.attendance?.[tab.id])}
-                        >
-                            {tab.icon}
-                            {tab.label}
-                        </button>
-                    ))}
+                        { id: 'tracking', label: 'Tracking', icon: <Clock size={14} />, sub: ['read', 'write', 'delete', 'bulk'] },
+                        { id: 'payouts', label: 'Payouts', icon: <DollarSign size={14} />, sub: ['read', 'write', 'delete'] },
+                        { id: 'salaries', label: 'Salaries', icon: <Wallet size={14} />, sub: ['read', 'write', 'delete'] }
+                    ].map(tab => {
+                        const isActive = typeof mergedPerms.attendance?.[tab.id] === 'object' ? Object.values(mergedPerms.attendance[tab.id]).some(v => v) : !!mergedPerms.attendance?.[tab.id];
+                        return (
+                            <div key={tab.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggle('attendance', tab.id)}
+                                        style={{ ...toggleBtnStyle(isActive), width: 'auto', flex: 1 }}
+                                    >
+                                        {tab.icon}
+                                        {tab.label}
+                                    </button>
+                                </div>
+                                {isActive && (
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingLeft: '2rem' }}>
+                                        {tab.sub.map(sub => (
+                                            <button
+                                                key={sub}
+                                                type="button"
+                                                onClick={() => toggle('attendance', tab.id, sub)}
+                                                style={{
+                                                    padding: '0.3rem 0.6rem',
+                                                    fontSize: '0.7rem',
+                                                    borderRadius: '0.4rem',
+                                                    border: '1px solid',
+                                                    fontWeight: 600,
+                                                    textTransform: 'capitalize',
+                                                    background: mergedPerms.attendance?.[tab.id]?.[sub] ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                                                    color: mergedPerms.attendance?.[tab.id]?.[sub] ? '#10b981' : 'var(--text-secondary)',
+                                                    borderColor: mergedPerms.attendance?.[tab.id]?.[sub] ? '#10b981' : 'var(--glass-border)',
+                                                    cursor: disabled ? 'default' : 'pointer'
+                                                }}
+                                            >
+                                                {sub}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -198,8 +246,9 @@ const AdminUserAccess = () => {
     const ROLES = [
         { id: 'admin', label: 'Master Admin', desc: 'Full access to all modules and settings' },
         { id: 'executive', label: 'Dashboard Executive', desc: 'View main Dashboard only' },
-        { id: 'attendance_manager', label: 'Attendance Manager', desc: 'Manage Time & Attendance only' },
-        { id: 'financial_controller', label: 'Financial Controller', desc: 'View Dashboard, Attendance, and Payouts' },
+        { id: 'attendance_manager', label: 'Attendance Manager', desc: 'Full Time & Attendance control' },
+        { id: 'data_entry', label: 'Data Entry Operator', desc: 'Add logs; cannot delete/edit without approval' },
+        { id: 'financial_controller', label: 'Financial Controller', desc: 'View Dashboard, Payouts, and Salaries' },
         { id: 'viewer', label: 'Custom Viewer', desc: 'Manually configure access permissions' }
     ];
 

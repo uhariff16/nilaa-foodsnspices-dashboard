@@ -26,14 +26,25 @@ const defaultPermissions = {
 
 const mergePermissions = (fetched) => {
     if (!fetched || typeof fetched !== 'object') return JSON.parse(JSON.stringify(defaultPermissions));
+
+    // Helper to safely expand boolean-true to a full object of that section's structure
+    const expandSection = (val, defaultObj) => {
+        if (val === true) {
+            const fullAccess = {};
+            Object.keys(defaultObj).forEach(k => fullAccess[k] = true);
+            return fullAccess;
+        }
+        return val || {};
+    };
+
     return {
         ...defaultPermissions,
         ...fetched,
         dashboard: { ...defaultPermissions.dashboard, ...(fetched.dashboard || {}) },
         attendance: {
-            tracking: { ...defaultPermissions.attendance.tracking, ...(fetched.attendance?.tracking || {}) },
-            payouts: { ...defaultPermissions.attendance.payouts, ...(fetched.attendance?.payouts || {}) },
-            salaries: { ...defaultPermissions.attendance.salaries, ...(fetched.attendance?.salaries || {}) }
+            tracking: { ...defaultPermissions.attendance.tracking, ...expandSection(fetched.attendance?.tracking, defaultPermissions.attendance.tracking) },
+            payouts: { ...defaultPermissions.attendance.payouts, ...expandSection(fetched.attendance?.payouts, defaultPermissions.attendance.payouts) },
+            salaries: { ...defaultPermissions.attendance.salaries, ...expandSection(fetched.attendance?.salaries, defaultPermissions.attendance.salaries) }
         }
     };
 };
@@ -43,8 +54,13 @@ export const hasPermission = (permissions, path) => {
     const parts = path.split('.');
     let current = permissions;
     for (const part of parts) {
+        if (current === true) return true; // If parent is true, all children are implicitly true
         if (!current || typeof current !== 'object') return false;
         current = current[part];
+    }
+    
+    if (typeof current === 'object' && current !== null) {
+        return Object.values(current).some(v => v === true);
     }
     return !!current;
 };
@@ -283,12 +299,12 @@ export const AuthProvider = ({ children }) => {
                 const parts = path.split('.');
                 let current = permissions;
                 for (const part of parts) {
+                    if (current === true) return true; // If parent is true, all sub-paths are granted
                     if (!current || typeof current !== 'object') return false;
                     current = current[part];
                 }
                 
-                // If it's a leaf boolean, return it. 
-                // If it's an object (multi-perm), return true if it exists.
+                // If it's an object (multi-perm section), return true if it has at least one active flag
                 if (typeof current === 'object' && current !== null) {
                     return Object.values(current).some(v => v === true);
                 }

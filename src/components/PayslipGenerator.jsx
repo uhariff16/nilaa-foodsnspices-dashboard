@@ -49,38 +49,28 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
         let daysPresent = 0;
 
         monthAttendance.forEach(att => {
-            if (att.attendance_status === 'Present' || !att.attendance_status) {
+            if (att.attendance_status === 'Present' || (att.attendance_status || '').toLowerCase().includes('present')) {
                 daysPresent += 1;
 
-                const worked = parseFloat(att.hoursWorked) || 0;
-                const standard = parseFloat(payrollConfig?.standard_daily_hours || 8);
-
-                // OT Logic mirroring backend/frontend
-                const ot = parseFloat(att.otHours) || Math.max(0, worked - standard);
-                const reg = Math.min(worked, standard);
+                const worked = parseFloat(att.total_hours || att.hoursWorked || 0);
+                const ot = parseFloat(att.ot_hours || 0); // Strictly use ot_hours to match dashboard
+                const reg = worked - ot;
 
                 totalWorkedHours += worked;
                 totalOTHours += ot;
                 totalBonusPoints += parseFloat(att.bonus || 0);
                 totalDeductions += parseFloat(att.deductions || 0);
 
-                const rate = parseFloat(att.rate || employee.hourly_rate || payrollConfig?.default_hourly_rate || 100);
-                const otRate = rate * parseFloat(payrollConfig?.ot_multiplier || 1.5);
+                const rate = parseFloat(employee.hourly_rate || payrollConfig?.default_hourly_rate || 23);
+                const otMultiplier = parseFloat(payrollConfig?.ot_multiplier || 1.5);
+                const otRate = rate * otMultiplier;
+                
+                const dailyTotal = parseFloat(att.daily_wage || att.dailyWage || 0);
+                const otPay = ot * otRate;
 
-                const thisBase = reg * rate;
-                const thisOT = ot * otRate;
-
-                let backendTotal = parseFloat(att.daily_wage || att.dailyWage) || 0;
-
-                if (backendTotal > 0) {
-                    totalDailyWageEarned += backendTotal;
-                    totalOTPay += thisOT;
-                    totalBaseWage += Math.max(0, backendTotal - thisOT);
-                } else {
-                    totalDailyWageEarned += (thisBase + thisOT);
-                    totalBaseWage += thisBase;
-                    totalOTPay += thisOT;
-                }
+                totalDailyWageEarned += dailyTotal;
+                totalOTPay += otPay;
+                totalBaseWage += Math.max(0, dailyTotal - otPay);
             }
         });
 
@@ -124,9 +114,12 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             }
         });
 
-        const netPayoutTarget = grossEarned + totalBonusPoints - totalDeductions;
-        const netDisbursed = totalAdvancesStr + totalSalariesPaidStr + totalWagesPaidStr;
-        const finalPendingBalanceForMonth = netPayoutTarget - netDisbursed;
+        const netEarningsForMonth = grossEarned + totalBonusPoints - totalDeductions;
+        const totalDisbursed = totalSalariesPaidStr + totalWagesPaidStr;
+        
+        // Consistent Settlement Logic matching Portal Dashboard
+        // Balance = Earnings - (Advances + Salaries + Wages)
+        const currentStandingBalance = netEarningsForMonth - (totalAdvancesStr + totalDisbursed);
 
         const monthName = new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' });
 
@@ -135,17 +128,17 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             monthName,
             year: selectedYear,
             daysPresent,
-            totalWorkedHours: totalWorkedHours.toFixed(1),
             totalOTHours: totalOTHours.toFixed(1),
+            totalRegHours: (totalWorkedHours - totalOTHours).toFixed(1),
             totalBaseWage,
             totalOTPay,
+            grossEarned,
             totalBonus: totalBonusPoints,
             totalDeductions,
-            netPayoutTarget,
+            netPayoutTarget: netEarningsForMonth,
             totalAdvancesTaken: totalAdvancesStr,
-            lifetimeAdvances: lifetimeTotalAdvances,
-            totalSalariesDisbursed: totalSalariesPaidStr + totalWagesPaidStr,
-            finalBalanceForMonth: finalPendingBalanceForMonth,
+            totalSalariesDisbursed: totalDisbursed,
+            finalBalanceForMonth: currentStandingBalance,
             generatedDate: new Date().toLocaleDateString('en-IN')
         };
 
@@ -302,16 +295,16 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                     <h3 style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>Time & Attendance</h3>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                                         <div style={{ padding: '0.5rem', background: '#f8fafc', borderRadius: '4px' }}>
-                                            <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.1rem' }}>Days Present</div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{payslipData.daysPresent}</div>
-                                        </div>
-                                        <div style={{ padding: '0.5rem', background: '#f8fafc', borderRadius: '4px' }}>
                                             <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.1rem' }}>Reg. Hours</div>
-                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{payslipData.totalWorkedHours}h</div>
+                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{payslipData.totalRegHours}h</div>
                                         </div>
                                         <div style={{ padding: '0.5rem', background: '#f8fafc', borderRadius: '4px' }}>
                                             <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginBottom: '0.1rem' }}>Overtime Hrs</div>
                                             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{payslipData.totalOTHours}h</div>
+                                        </div>
+                                        <div style={{ padding: '0.5rem', background: '#f8fafc', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.7rem', color: '#10b981', marginBottom: '0.1rem' }}>Total Hours</div>
+                                            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>{(parseFloat(payslipData.totalRegHours) + parseFloat(payslipData.totalOTHours)).toFixed(1)}h</div>
                                         </div>
                                     </div>
                                 </div>
@@ -320,7 +313,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                 <div>
                                     <h3 style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>Earnings & Deductions</h3>
 
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '1rem' }}>
                                         <tbody>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '0.4rem 0', color: '#475569' }}>Base Wages (Reg. Hours)</td>
@@ -335,28 +328,40 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#a855f7' }}>{payslipData.totalBonus > 0 ? `+${formatCurrency(payslipData.totalBonus)}` : '₹0'}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Gross Earnings (Incl. Bonus)</td>
+                                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Gross Earnings (Total)</td>
                                                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{formatCurrency(payslipData.grossEarned + payslipData.totalBonus)}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569', paddingTop: '0.8rem' }}>Penalties / Deductions</td>
-                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', color: '#ef4444', fontWeight: 600, paddingTop: '0.8rem' }}>{payslipData.totalDeductions > 0 ? `-${formatCurrency(payslipData.totalDeductions)}` : '₹0'}</td>
+                                                <td style={{ padding: '0.4rem 0', color: '#475569', paddingTop: '0.6rem' }}>Penalties / Deductions</td>
+                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', color: '#ef4444', fontWeight: 600, paddingTop: '0.6rem' }}>{payslipData.totalDeductions > 0 ? `-${formatCurrency(payslipData.totalDeductions)}` : '₹0'}</td>
                                             </tr>
-                                            <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Net Earned For Month</td>
-                                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6' }}>{formatCurrency(payslipData.netPayoutTarget)}</td>
+                                            <tr style={{ background: 'rgba(59, 130, 246, 0.03)', borderBottom: '2px solid #3b82f6' }}>
+                                                <td style={{ padding: '0.5rem 0.5rem', fontWeight: 800, color: '#0f172a' }}>Net Earned For Month</td>
+                                                <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right', fontWeight: 800, color: '#3b82f6' }}>{formatCurrency(payslipData.netPayoutTarget)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+
+                                    {/* Advance Settlement Section */}
+                                    <h3 style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem', marginTop: '1.25rem' }}>Settlement & Balance</h3>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                        <tbody>
+                                            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Total Advances (This Month)</td>
+                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>{formatCurrency(payslipData.totalAdvancesTaken)}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569', paddingTop: '0.8rem' }}>Advances Taken (This Month)</td>
-                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#f59e0b', paddingTop: '0.8rem' }}>{formatCurrency(payslipData.totalAdvancesTaken)}</td>
-                                            </tr>
-                                            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Total Historical Advances Taken</td>
-                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>{formatCurrency(payslipData.lifetimeAdvances)}</td>
-                                            </tr>
-                                            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Salary / Payouts Disbursed (This Month)</td>
+                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Salary/Wages Paid (Cash)</td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#3b82f6' }}>{formatCurrency(payslipData.totalSalariesDisbursed)}</td>
+                                            </tr>
+                                            <tr style={{ background: '#f8fafc', border: '1px solid #e2e8f0', marginTop: '0.5rem' }}>
+                                                <td style={{ padding: '0.6rem 0.5rem', fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>Closing Standing / Balance</td>
+                                                <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', fontWeight: 900, fontSize: '0.95rem', color: payslipData.finalBalanceForMonth < 0 ? '#ef4444' : '#10b981' }}>
+                                                    {formatCurrency(payslipData.finalBalanceForMonth)}
+                                                    <span style={{ fontSize: '0.65rem', marginLeft: '0.3rem', fontWeight: 600 }}>
+                                                        {payslipData.finalBalanceForMonth < 0 ? '(DEBT)' : '(CREDIT)'}
+                                                    </span>
+                                                </td>
                                             </tr>
                                         </tbody>
                                     </table>

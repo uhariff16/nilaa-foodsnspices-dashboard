@@ -547,20 +547,28 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             totalAdvance: 0,
             totalWages: 0,
             totalBonus: 0,
-            totalEarned: 0
+            totalEarned: 0,
+            nonDeductibleBonuses: 0,
+            deductibleBonuses: 0
         };
 
-        // 1. Calculate Payments
+        // 1. Calculate Payments from filteredPayments
         filteredPayments.forEach(p => {
             const amt = parseFloat(p.amount) || 0;
             if (p.type === 'Salary') stats.totalSalary += amt;
             else if (p.type === 'Advance') stats.totalAdvance += amt;
             else if (p.type === 'Wages') stats.totalWages += amt;
-            else if (p.type === 'Bonus') stats.totalBonus += amt;
+            else if (p.type === 'Bonus') {
+                stats.totalBonus += amt;
+                if (!p.remarks?.includes('[DEDUCTIBLE]')) {
+                    stats.nonDeductibleBonuses += amt;
+                } else {
+                    stats.deductibleBonuses += amt;
+                }
+            }
         });
 
         // 2. Calculate Total Earned from matching attendance records
-        // Using all attendanceData to find the total earned for the filtered employees/dates
         attendanceData.forEach(row => {
             const matchesSearch = row.empId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -580,7 +588,14 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         });
 
-        stats.balance = stats.totalEarned - (stats.totalSalary + stats.totalAdvance + stats.totalWages + stats.totalBonus);
+        // [LOGIC UPDATE]: Total Entitlement now includes ALL bonuses.
+        // Deductible bonuses reduce the pending balance (debt) because they are not paid as cash outflows.
+        const totalEntitled = stats.totalEarned + stats.nonDeductibleBonuses + stats.deductibleBonuses;
+
+        // Payer's Outflow excludes Deductible Bonuses (since they are just book-entry credits against advances)
+        const totalCashOutflow = stats.totalSalary + stats.totalAdvance + stats.totalWages + stats.nonDeductibleBonuses;
+
+        stats.balance = totalEntitled - totalCashOutflow;
 
         return stats;
     }, [filteredPayments, attendanceData, searchTerm, monthFilter, yearFilter, payrollConfig]);
@@ -667,7 +682,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const ot = parseFloat(d.ot_hours || 0);
             const hours = parseFloat(d.total_hours || 0);
             const otPay = ot * otRate;
-            
+
             if (d.attendance_status === 'Present') presentCount++;
             else if (d.attendance_status === 'Absent') absentCount++;
             else if (d.attendance_status?.toLowerCase().includes('leave')) leaveCount++;
@@ -721,13 +736,19 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
         const s = {
             totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, grossPay,
-            presentCount: todayPresentCount, 
-            leaveCount: todayLeaveCount, 
-            absentCount: todayAbsentCount, 
+            totalRegHours: totalHours - totalOTHours,
+            totalRegPay: grossPay - totalOTPay,
+            presentCount: todayPresentCount,
+            leaveCount: todayLeaveCount,
+            absentCount: todayAbsentCount,
             contextDate, totalDeductions, totalBonus,
             tempPresentCount: todayTempPresentCount,
             tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempTotalBonus, tempNetPayout, tempGrossPay,
-            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permTotalBonus, permNetPayout, permGrossPay
+            tempTotalRegHours: tempTotalHours - tempTotalOTHours,
+            tempTotalRegPay: tempGrossPay - tempTotalOTPay,
+            permTotalHours, permTotalOTHours, permTotalOTPay, permTotalCost, permTotalDeductions, permTotalBonus, permNetPayout, permGrossPay,
+            permTotalRegHours: permTotalHours - permTotalOTHours,
+            permTotalRegPay: permGrossPay - permTotalOTPay
         };
         localStorage.setItem('last_attendance_stats', JSON.stringify(s));
         return s;
@@ -818,7 +839,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const deductions = parseFloat(rec.deductions || 0);
             const wage = parseFloat(rec.daily_wage || rec.dailyWage || 0);
             const net = wage + bonus - (isAdvance ? deductions : deductions); // Simplified as deductions already include advance in this context if specified but usually they are separate fields in the DB. Actually in this code deductions is the only field.
-            
+
             // For report consistency, we'll use advance and other deductions separately if possible, 
             // but the current logic puts everything in rec.deductions.
             const adv = isAdvance ? deductions : 0;
@@ -906,7 +927,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     } else {
                         cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
                     }
-                    
+
                     cell.border = {
                         top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
                         left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
@@ -1213,30 +1234,50 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Overall Summary (All Staff)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                                <div className="glass-panel" style={{ padding: '1rem' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Hours</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{stats.totalHours.toFixed(1)}h</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem' }}>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.2rem' }}>Attendance Summary</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg Hrs:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.totalRegHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#f97316' }}>
+                                        <span>OT Hours:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.totalOTHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 800, marginTop: '0.4rem', paddingTop: '0.2rem', borderTop: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                                        <span>Total:</span>
+                                        <span>{stats.totalHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'var(--text-secondary)', marginTop: '0.3rem', textAlign: 'center', fontStyle: 'italic', opacity: 0.7 }}>
+                                        (Total = Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '1rem' }}>
-                                    <div style={{ color: '#f97316', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Hours</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.totalOTHours.toFixed(1)}h</div>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(16, 185, 129, 0.1)', paddingBottom: '0.2rem' }}>Pay Summary (Gross)</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.totalRegPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#f59e0b' }}>
+                                        <span>OT Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.totalOTPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 800, marginTop: '0.4rem', paddingTop: '0.2rem', borderTop: '1px solid rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                                        <span>Gross Total:</span>
+                                        <span>{formatCurrency(stats.grossPay)}</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'rgba(16, 185, 129, 0.6)', marginTop: '0.3rem', textAlign: 'center', fontStyle: 'italic' }}>
+                                        (Total = Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '1rem' }}>
-                                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total OT Pay</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.totalOTPay)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '1rem' }}>
+                                <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                     <div style={{ color: '#a855f7', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Bonus</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.totalBonus)}</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.totalBonus)}</div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '1rem' }}>
-                                    <div style={{ color: '#10b981', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Pay (Gross)</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.grossPay)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                     <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
                                 </div>
                             </div>
 
@@ -1244,30 +1285,50 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Temporary Staff (Field Metrics)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                                    <div style={{ color: 'rgba(245, 158, 11, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats.tempTotalHours.toFixed(1)}h</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(245, 158, 11, 0.1)', paddingBottom: '0.2rem' }}>Temp Staff Hrs</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.tempTotalRegHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#f97316' }}>
+                                        <span>OT:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.tempTotalOTHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginTop: '0.3rem', paddingTop: '0.2rem', borderTop: '1px solid rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+                                        <span>Total:</span>
+                                        <span>{stats.tempTotalHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'rgba(245, 158, 11, 0.5)', marginTop: '0.2rem', textAlign: 'center', fontStyle: 'italic' }}>
+                                        (Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                                    <div style={{ color: '#f97316', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f97316' }}>{stats.tempTotalOTHours.toFixed(1)}h</div>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', background: 'rgba(245, 158, 11, 0.02)' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(16, 185, 129, 0.1)', paddingBottom: '0.2rem' }}>Temp Pay Summary</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.tempTotalRegPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#f59e0b' }}>
+                                        <span>OT Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.tempTotalOTPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginTop: '0.3rem', paddingTop: '0.2rem', borderTop: '1px solid rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                                        <span>Gross:</span>
+                                        <span>{formatCurrency(stats.tempGrossPay)}</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'rgba(16, 185, 129, 0.5)', marginTop: '0.2rem', textAlign: 'center', fontStyle: 'italic' }}>
+                                        (Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(stats.tempTotalOTPay)}</div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div style={{ color: '#a855f7', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Bonus</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.tempTotalBonus)}</div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                                    <div style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Bonus</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.tempTotalBonus)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.02)' }}>
-                                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.tempGrossPay)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b' }}>
-                                    <div style={{ color: '#f59e0b', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderLeft: '3px solid #f59e0b', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div style={{ color: '#f59e0b', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(stats.tempNetPayout)}</div>
                                 </div>
                             </div>
 
@@ -1275,30 +1336,50 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1.25rem', fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.9 }}>
                                 Permanent Staff (Core Team)
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                                    <div style={{ color: 'rgba(59, 130, 246, 0.8)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Hours</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats.permTotalHours.toFixed(1)}h</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(59, 130, 246, 0.1)', paddingBottom: '0.2rem' }}>Perm Staff Hrs</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.permTotalRegHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#60a5fa' }}>
+                                        <span>OT:</span>
+                                        <span style={{ fontWeight: 600 }}>{stats.permTotalOTHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginTop: '0.3rem', paddingTop: '0.2rem', borderTop: '1px solid rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+                                        <span>Total:</span>
+                                        <span>{stats.permTotalHours.toFixed(1)}h</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'rgba(59, 130, 246, 0.5)', marginTop: '0.2rem', textAlign: 'center', fontStyle: 'italic' }}>
+                                        (Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                                    <div style={{ color: '#60a5fa', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Hours</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#60a5fa' }}>{stats.permTotalOTHours.toFixed(1)}h</div>
+                                <div className="glass-panel" style={{ padding: '0.75rem 1.25rem', background: 'rgba(59, 130, 246, 0.02)' }}>
+                                    <div style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.4rem', borderBottom: '1px solid rgba(16, 185, 129, 0.1)', paddingBottom: '0.2rem' }}>Perm Pay Summary</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem' }}>
+                                        <span>Reg Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.permTotalRegPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.2rem', color: '#60a5fa' }}>
+                                        <span>OT Pay:</span>
+                                        <span style={{ fontWeight: 600 }}>{formatCurrency(stats.permTotalOTPay)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginTop: '0.3rem', paddingTop: '0.2rem', borderTop: '1px solid rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                                        <span>Gross:</span>
+                                        <span>{formatCurrency(stats.permGrossPay)}</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.55rem', color: 'rgba(16, 185, 129, 0.5)', marginTop: '0.2rem', textAlign: 'center', fontStyle: 'italic' }}>
+                                        (Reg + OT)
+                                    </div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>OT Pay</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatCurrency(stats.permTotalOTPay)}</div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.02)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div style={{ color: '#a855f7', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Bonus</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.permTotalBonus)}</div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                                    <div style={{ color: '#a855f7', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Bonus</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.permTotalBonus)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.02)' }}>
-                                    <div style={{ color: '#10b981', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Gross Pay</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(stats.permGrossPay)}</div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '0.85rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6' }}>
-                                    <div style={{ color: '#3b82f6', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Net Payout</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(stats.permNetPayout)}</div>
                                 </div>
                             </div>
                         </>
@@ -1707,12 +1788,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(paymentStats.totalBonus)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.05)' }}>
-                            <div style={{ color: '#a78bfa', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Financial Outflow</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.totalBonus)}</div>
+                            <div style={{ color: '#a78bfa', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Financial Outflow (Cash)</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.nonDeductibleBonuses)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ec4899', background: 'rgba(236, 72, 153, 0.05)' }}>
-                            <div style={{ color: '#f472b6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Earned (Attendance)</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalEarned)}</div>
+                            <div style={{ color: '#f472b6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Gross Total Earnings (Incl. OT & Bonuses)</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalEarned + paymentStats.nonDeductibleBonuses + paymentStats.deductibleBonuses)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: `4px solid ${paymentStats.balance >= 0 ? '#10b981' : '#ef4444'}`, background: paymentStats.balance >= 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)' }}>
                             <div style={{ color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Balance Salary Pending</div>
@@ -1829,7 +1910,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                     {filteredPayments.map((row, i) => {
                                         const selectSpecial = getSpecialDayType(row.date, payrollConfig.national_holidays);
                                         const dayOfWeek = row.date ? new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
-                                        
+
                                         let rowBg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
                                         if (selectSpecial.type === 'holiday') rowBg = 'rgba(225, 29, 72, 0.08)';
                                         else if (selectSpecial.type === 'sunday') rowBg = 'rgba(79, 70, 229, 0.08)';
@@ -1860,16 +1941,35 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 700, color: '#3b82f6', background: 'rgba(59, 130, 246, 0.05)', borderRight: '1px solid var(--glass-border)' }}>{formatCurrency(row.amount)}</td>
-                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', borderRight: '1px solid var(--glass-border)' }}>{row.remarks || '-'}</td>
-                                                <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                                    {hasPermission('attendance.payouts.delete') && (
-                                                        <button
-                                                            onClick={() => deletePayment(row.id)}
-                                                            style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                    {row.remarks?.includes('[DEDUCTIBLE]')
+                                                        ? row.remarks.replace(/\[DEDUCTIBLE\]\s*/, '')
+                                                        : (row.remarks || '-')}
+                                                    {row.remarks?.includes('[DEDUCTIBLE]') && (
+                                                        <div style={{ fontSize: '0.65rem', color: '#f59e0b', fontWeight: 700, marginTop: '2px' }}>DEDUCTED FROM SALARY</div>
                                                     )}
+                                                </td>
+                                                <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                        {hasPermission('attendance.payouts.write') && (
+                                                            <button
+                                                                onClick={() => { setEditingRecord(row); setShowManualEntry(true); }}
+                                                                style={{ padding: '0.4rem', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#3b82f6', cursor: 'pointer' }}
+                                                                title="Edit Payment"
+                                                            >
+                                                                <Pencil size={16} />
+                                                            </button>
+                                                        )}
+                                                        {hasPermission('attendance.payouts.delete') && (
+                                                            <button
+                                                                onClick={() => deletePayment(row.id)}
+                                                                style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '0.4rem', color: '#ef4444', cursor: 'pointer' }}
+                                                                title="Delete Payment"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -1965,7 +2065,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
         // Payment specific
         paymentType: initialData?.type || 'Advance',
         paymentAmount: initialData?.amount || 0,
-        paymentRemarks: initialData?.remarks || ''
+        paymentRemarks: initialData?.remarks?.includes('[DEDUCTIBLE]') ? initialData.remarks.replace(/\[DEDUCTIBLE\]\s*/, '') : (initialData?.remarks || ''),
+        isDeductible: initialData?.remarks?.includes('[DEDUCTIBLE]') || false
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -2011,19 +2112,22 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
         try {
             if (isPaymentTab) {
                 const record = {
+                    ...(initialData?.id ? { id: initialData.id } : {}),
                     date: formData.date,
                     emp_id: formData.empId,
                     emp_name: formData.empName,
                     type: formData.paymentType === 'Salary Payout' ? 'Salary' : formData.paymentType,
                     amount: parseFloat(formData.paymentAmount),
-                    remarks: formData.paymentType === 'Salary Payout' || formData.paymentType === 'Bonus'
-                        ? (formData.paymentRemarks ? `${formData.paymentType} Payout - ${formData.paymentRemarks}` : `${formData.paymentType} Payout`)
-                        : formData.paymentRemarks
+                    remarks: formData.paymentType === 'Bonus'
+                        ? (formData.isDeductible ? `[DEDUCTIBLE] ${formData.paymentRemarks}` : formData.paymentRemarks)
+                        : (formData.paymentType === 'Salary Payout'
+                            ? (formData.paymentRemarks ? `${formData.paymentType} Payout - ${formData.paymentRemarks}` : `${formData.paymentType} Payout`)
+                            : formData.paymentRemarks)
                 };
 
                 const { error } = await supabase
                     .from('employee_payments')
-                    .insert([record]);
+                    .upsert([record]);
 
                 if (error) throw error;
                 onSave();
@@ -2073,7 +2177,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 });
 
                 totalH = Math.max(0, totalH - (formData.breakMins / 60));
-                
+
                 const isSpecial = isSpecialDay(formData.date, config.national_holidays);
                 regH = isSpecial ? 0 : Math.min(totalH, config.standard_daily_hours);
                 otH = isSpecial ? totalH : Math.max(0, totalH - config.standard_daily_hours);
@@ -2206,6 +2310,22 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Remarks</label>
                                 <input type="text" value={formData.paymentRemarks} onChange={e => setFormData({ ...formData, paymentRemarks: e.target.value })} placeholder="Any notes..." style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                             </div>
+                            {formData.paymentType === 'Bonus' && (
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.isDeductible}
+                                            onChange={e => setFormData({ ...formData, isDeductible: e.target.checked })}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                        <span>Deduct from Advance (Treat as Salary Advance)</span>
+                                    </label>
+                                    <p style={{ margin: '0.2rem 0 0 1.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                        If unchecked, it will be treated as a Gift (adds to earnings side, does not reduce salary balance).
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <>

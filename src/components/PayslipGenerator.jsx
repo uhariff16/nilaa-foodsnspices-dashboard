@@ -97,9 +97,10 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             const amt = parseFloat(p.amount) || 0;
             if (!p.type) return;
             const typeLower = p.type.toLowerCase();
+            const remarks = p.remarks || '';
 
             // Track lifetime advances
-            if (typeLower.includes('advance')) {
+            if (typeLower.includes('advance') || (typeLower === 'bonus' && remarks.includes('[DEDUCTIBLE]'))) {
                 lifetimeTotalAdvances += amt;
             }
 
@@ -109,9 +110,17 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             const isThisMonth = (d.getMonth() + 1) === parseInt(selectedMonth) && d.getFullYear() === parseInt(selectedYear);
 
             if (isThisMonth) {
-                if (typeLower.includes('advance')) totalAdvancesStr += amt;
-                else if (typeLower.includes('wages')) totalWagesPaidStr += amt;
-                else totalSalariesPaidStr += amt; // Everything else
+                if (typeLower.includes('advance')) {
+                    totalAdvancesStr += amt;
+                } else if (typeLower === 'bonus') {
+                    // [LOGIC UPDATE]: ALL bonuses (Deductible or Gift) are EARNINGS.
+                    // They all contribute to paying off or balancing the advances.
+                    totalBonusPoints += amt;
+                } else if (typeLower.includes('wages')) {
+                    totalWagesPaidStr += amt;
+                } else {
+                    totalSalariesPaidStr += amt; // Everything else
+                }
             }
         });
 

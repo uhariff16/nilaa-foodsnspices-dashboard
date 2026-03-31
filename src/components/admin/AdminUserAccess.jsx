@@ -67,21 +67,32 @@ const getRolePermissions = (role) => {
 const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
     const toggle = (section, key = null, subKey = null) => {
         if (disabled) return;
-        const newPerms = { ...permissions };
+        // Deep clone to avoid direct mutation and ensure structure
+        const next = JSON.parse(JSON.stringify(permissions || {}));
+        
+        if (!next[section]) next[section] = {};
+
         if (subKey) {
-            newPerms[section][key][subKey] = !newPerms[section][key][subKey];
+            if (!next[section][key] || typeof next[section][key] !== 'object') {
+                next[section][key] = { ...(initialPermissions[section]?.[key] || {}) };
+            }
+            next[section][key][subKey] = !next[section][key][subKey];
         } else if (key) {
-            if (typeof newPerms[section][key] === 'object') {
+            if (typeof (next[section][key] || initialPermissions[section]?.[key]) === 'object') {
                 // Toggle entire object (all true or all false)
-                const currentState = Object.values(newPerms[section][key]).some(v => v);
-                Object.keys(newPerms[section][key]).forEach(sub => newPerms[section][key][sub] = !currentState);
+                const currentObj = next[section][key] || initialPermissions[section][key];
+                const currentState = Object.values(currentObj).some(v => v);
+                next[section][key] = {};
+                Object.keys(initialPermissions[section][key]).forEach(sub => {
+                    next[section][key][sub] = !currentState;
+                });
             } else {
-                newPerms[section][key] = !newPerms[section][key];
+                next[section][key] = !next[section][key];
             }
         } else {
-            newPerms[section] = !newPerms[section];
+            next[section] = !next[section];
         }
-        onChange(newPerms);
+        onChange(next);
     };
 
     const sectionStyle = {

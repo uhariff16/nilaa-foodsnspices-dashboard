@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, Clock, Target } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -57,7 +57,7 @@ const getValueColor = (value, type) => {
 };
 
 const Dashboard = (props) => {
-    const { data, onReset, onRefresh } = props;
+    const { data, onReset, onRefresh, loading } = props;
     const { logout, user, role, isAdmin, canAccessAttendance, hasPermission } = useAuth();
     const navigate = useNavigate();
     // Default to Overview tab (per user request)
@@ -127,10 +127,37 @@ const Dashboard = (props) => {
         }
     });
 
-    // Sorting State for Expenses
     const [expenseSort, setExpenseSort] = React.useState({ key: 'total', direction: 'desc' });
     const [expenseListView, setExpenseListView] = React.useState('compact'); // 'compact' or 'detailed'
     const [selectedExpenseCategory, setSelectedExpenseCategory] = React.useState(null); // [NEW] Filter State
+
+    const [invoiceSearch, setInvoiceSearch] = useState(''); // [NEW] Search invoices
+    const [invoiceSort, setInvoiceSort] = useState('date_desc'); // [NEW] Sort invoices
+
+    const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState(null); // [NEW] Modal State for Sales Returns / Invoices
+
+    // [NEW] Invoice Discounts State
+    const [invoiceDiscounts, setInvoiceDiscounts] = useState([]);
+    const [discountForm, setDiscountForm] = useState({ invoice_no: '', discount_amount: '', discount_date: new Date().toISOString().split('T')[0], remarks: '' });
+    const [discountLoading, setDiscountLoading] = useState(false);
+
+    // Fetch Discounts
+    useEffect(() => {
+        const fetchDiscounts = async () => {
+            try {
+                const { data, error } = await supabase.from('invoice_discounts').select('*').order('created_at', { ascending: false });
+                if (!error && data) setInvoiceDiscounts(data);
+            } catch(e) { console.error('Error fetching discounts:', e); }
+        };
+        fetchDiscounts();
+        
+        const channel = supabase.channel('public:invoice_discounts')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_discounts' }, () => {
+                fetchDiscounts();
+            }).subscribe();
+            
+        return () => { supabase.removeChannel(channel); };
+    }, []);
 
 
 
@@ -251,6 +278,11 @@ const Dashboard = (props) => {
         });
     }, [data.transactions, selectedMonth, selectedYear]);
 
+    // [NEW] Identify Returns early for cross-referencing
+    const salesReturns = React.useMemo(() => {
+        return filteredTransactions.filter(t => t.parsedType === 'Sales Return');
+    }, [filteredTransactions]);
+
 
     // Derived Data for Tabs (using filteredTransactions)
     // [FIX] Separate Granular Sales from Summary Rows to prevent double counting
@@ -358,25 +390,46 @@ const Dashboard = (props) => {
     }, [invoiceTotalRows, salesAppearsGranular, salesSummaryRows]);
 
     // Metric Calculations
-    const salesRevenue = salesTransactions.reduce((sum, t) => {
+    const grossSalesRevenue = salesTransactions.reduce((sum, t) => {
         const amt = parseFloat(t.parsedAmount) || 0;
-        const desc = String(t.originalDesc || '').toLowerCase();
-        const inv = String(t.invoiceNo || '').toLowerCase();
-
-        // Check for Return/Credit Note indicators
-        // [ADJUSTMENT] User's Expected Total (356,886.80) implies Gross Sum (ignoring CN deduction)
-        // or Credit Notes are not present/should be added.
-        // We will sum everything as positive to match potential Excel SUM(Amount) behavior.
-        /* 
-        const isReturn = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || 
-            inv.startsWith('cn-') || inv.includes('credit note');
-
-        if (isReturn) {
-            return sum - Math.abs(amt);
-        }
-        */
         return sum + Math.abs(amt);
     }, 0);
+
+    const totalReturns = salesReturns.reduce((sum, t) => sum + (parseFloat(t.parsedAmount) || 0), 0);
+
+    // [NEW] Calculate Total Discounts for the selected period
+    const filteredDiscounts = React.useMemo(() => {
+        return invoiceDiscounts.filter(d => {
+            if (!d.discount_date) return false;
+            if (!d.discount_date.startsWith(selectedYear)) return false;
+            if (selectedMonth === 'Overall') return true;
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const [mStr, yStr] = selectedMonth.split(' ');
+            const mIdx = monthNames.indexOf(mStr);
+            if (mIdx === -1) return false;
+            const targetPrefix = `${yStr}-${String(mIdx + 1).padStart(2, '0')}`;
+            return d.discount_date.startsWith(targetPrefix);
+        });
+    }, [invoiceDiscounts, selectedMonth, selectedYear]);
+
+    const totalDiscounts = filteredDiscounts.reduce((sum, d) => sum + parseFloat(d.discount_amount || 0), 0);
+    const salesRevenue = grossSalesRevenue - totalReturns - totalDiscounts;
+
+    // [NEW] Calculate matched customer for the discount form
+    const matchedCustomerForDiscount = React.useMemo(() => {
+        if (!discountForm.invoice_no) return null;
+        const invNo = String(discountForm.invoice_no).trim().toUpperCase();
+        const originalTxns = (data.transactions || []).filter(t => 
+            String(t.invoiceNo || '').trim().toUpperCase() === invNo &&
+            t.parsedType !== 'Sales Return' &&
+            t.parsedType !== 'Invoice Total'
+        );
+        if (originalTxns.length > 0) {
+            const customerTx = originalTxns.find(t => t.customerName);
+            return customerTx ? String(customerTx.customerName).toUpperCase() : null;
+        }
+        return null;
+    }, [discountForm.invoice_no, data.transactions]);
 
     const expenseTransactions = filteredTransactions
         .filter(t => String(t.parsedType).toLowerCase().includes('expense') || t.parsedType === 'Purchase')
@@ -509,12 +562,22 @@ const Dashboard = (props) => {
             const wb = XLSX.utils.book_new();
 
             // 1. Overview Sheet (Filtered)
-            let sales = 0; let parsedExpenses = 0;
+            const returnsAmt = filteredTransactions
+                .filter(t => t.parsedType === 'Sales Return')
+                .reduce((s, t) => s + (t.parsedAmount || 0), 0);
+
+            let grossSales = 0; let parsedExpenses = 0;
             filteredTransactions.forEach(t => {
                 const type = String(t.parsedType || '').toLowerCase();
-                if (type.includes('sale')) sales += t.parsedAmount || 0;
+                if (type === 'sales return' || type === 'invoice total') return; // Skip returns and totals for raw addition 
+
+                // [FIX] Use the same logic as dashboard revenue
+                if (type.includes('sale')) grossSales += t.parsedAmount || 0;
                 else parsedExpenses += t.parsedAmount || 0;
             });
+
+            // Adjust sales with returns
+            const netSales = grossSales - returnsAmt;
 
             const manualSalary = parseFloat(manualExpenses.salary) || 0;
             const manualDaily = parseFloat(manualExpenses.daily) || 0;
@@ -531,14 +594,16 @@ const Dashboard = (props) => {
             const overviewData = [
                 ["Metric", "Value"],
                 ["Period", selectedMonth],
-                ["Total Sales", sales],
+                ["Gross Sales", grossSales],
+                ["Sales Returns", returnsAmt],
+                ["Net Sales (Total)", netSales],
                 ["Total Expenses", totalExpenses],
                 ["  - Parsed Expenses", parsedExpenses],
                 ["  - Staff Salary (Est)", manualSalary],
                 ["  - Other Daily (Est)", manualDaily],
                 ["  - Attendance Payroll (For Ref)", attendPay], // [FIX] Kept as reference only
-                ["Net Profit", netProfit],
-                ["Profit Margin", sales > 0 ? (netProfit / sales * 100).toFixed(2) + "%" : "0%"]
+                ["Net Profit", netSales - totalExpenses],
+                ["Profit Margin", netSales > 0 ? ((netSales - totalExpenses) / netSales * 100).toFixed(2) + "%" : "0%"]
             ];
             const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
             XLSX.utils.book_append_sheet(wb, wsOverview, "Financial Overview");
@@ -584,11 +649,34 @@ const Dashboard = (props) => {
         let itemsToFilter = data.items || [];
         let result = [];
 
+        // [NEW] Identify items that were returned (spoiled) via Invoice Lookup
+        const returnedItemsMap = {};
+        if (salesReturns.length > 0) {
+            salesReturns.forEach(ret => {
+                const invNo = String(ret.invoiceNo || '').trim().toUpperCase();
+                if (!invNo) return;
+
+                // Find ORGINAL items in the full transaction list matching this invoice
+                // Important: Look at all transactions, not just filtered ones, to find historical matches
+                const originalTxns = (data.transactions || []).filter(t => 
+                    String(t.invoiceNo || '').trim().toUpperCase() === invNo &&
+                    t.parsedType !== 'Sales Return' &&
+                    t.parsedType !== 'Invoice Total'
+                );
+
+                originalTxns.forEach(t => {
+                    const name = (t.originalDesc || 'Unknown Item').trim();
+                    const qty = parseFloat(t.parsedQty || 0);
+                    if (!returnedItemsMap[name]) returnedItemsMap[name] = 0;
+                    returnedItemsMap[name] += qty;
+                });
+            });
+        }
+
         if (selectedMonth === 'Overall') {
-            // Strict Year Filtering for Overall View
             const yearFiltered = itemsToFilter.filter(item => {
                 if (!item.parsedDate) return false;
-                return item.parsedDate.includes(selectedYear); // Simple check as parsedDate normally contains YYYY
+                return item.parsedDate.includes(selectedYear);
             });
             result = aggregateByName(yearFiltered);
         } else {
@@ -616,24 +704,31 @@ const Dashboard = (props) => {
             result = aggregateByName(strictFiltered);
         }
 
-        // Fallback: If no items found for month, aggregate from Transactions (Revenue/Qty only)
+        // Fallback: If no items found for month, aggregate from Transactions
         if (result.length === 0 && selectedMonth !== 'Overall' && filteredTransactions.length > 0) {
-            console.log("Using Fallback Item Aggregation from Transactions");
-            const salesTx = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
+            const salesTx = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale') && t.parsedType !== 'Sales Return');
             const fallbackMap = {};
             salesTx.forEach(t => {
                 const name = (t.originalDesc || 'Unknown Item').trim();
                 if (!fallbackMap[name]) fallbackMap[name] = { name, qty: 0, revenue: 0, profit: 0, count: 0 };
                 fallbackMap[name].revenue += (t.parsedAmount || 0);
                 fallbackMap[name].count += 1;
-                // Estimate Qty as count if unknown? Or just 1. Using 1 per tx as basic proxy.
                 fallbackMap[name].qty += (t.parsedQty || 1);
             });
             result = Object.values(fallbackMap);
         }
 
-        return result;
-    }, [data.items, selectedMonth, filteredTransactions, selectedYear]);
+        // [FIX] Apply Deductions for Returned (Spoiled) Items
+        return result.map(item => {
+            const returnedQty = returnedItemsMap[item.name] || 0;
+            return {
+                ...item,
+                qty: Math.max(0, item.qty - returnedQty),
+                revenue: Math.max(0, item.revenue - (returnedQty * (item.revenue / item.qty || 0))) // Pro-rata revenue reduction if needed
+            };
+        }).filter(item => item.qty > 0 || item.revenue > 0);
+
+    }, [data.items, data.transactions, selectedMonth, filteredTransactions, selectedYear, salesReturns]);
 
 
 
@@ -1079,7 +1174,14 @@ const Dashboard = (props) => {
     }
 
     return (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in" style={{ position: 'relative', minHeight: '100vh' }}>
+            {/* Loading Overlay */}
+            {loading && (
+                <div className="loading-overlay">
+                    <div className="spinner"></div>
+                    <div className="loading-text">NILAA FOODS - LOADING DATA</div>
+                </div>
+            )}
             <header style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem',
                 borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem'
@@ -1550,6 +1652,7 @@ const Dashboard = (props) => {
                             manualExpenses={manualExpenses}
                             overrideSales={salesRevenue}
                             overrideInvoiceCount={salesCount}
+                            totalReturns={totalReturns}
                         />
 
                         {/* Material Flow Analysis Section */}
@@ -1885,11 +1988,50 @@ const Dashboard = (props) => {
                                     <Package size={14} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
                                     Item Wise
                                 </button>
+                                <button
+                                    onClick={() => setSalesViewMode('invoices')}
+                                    style={{
+                                        background: salesViewMode === 'invoices' ? 'var(--glass-border)' : 'transparent',
+                                        border: 'none',
+                                        color: salesViewMode === 'invoices' ? 'white' : 'var(--text-secondary)',
+                                        padding: '0.5rem 1rem', borderRadius: '0.25rem',
+                                        cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <List size={14} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                    Invoices
+                                </button>
+                                <button
+                                    onClick={() => setSalesViewMode('returns')}
+                                    style={{
+                                        background: salesViewMode === 'returns' ? 'var(--glass-border)' : 'transparent',
+                                        border: 'none',
+                                        color: salesViewMode === 'returns' ? 'white' : 'var(--text-secondary)',
+                                        padding: '0.5rem 1rem', borderRadius: '0.25rem',
+                                        cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <TrendingDown size={14} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                    Returns
+                                </button>
+                                <button
+                                    onClick={() => setSalesViewMode('discounts')}
+                                    style={{
+                                        background: salesViewMode === 'discounts' ? 'var(--glass-border)' : 'transparent',
+                                        border: 'none',
+                                        color: salesViewMode === 'discounts' ? 'white' : 'var(--text-secondary)',
+                                        padding: '0.5rem 1rem', borderRadius: '0.25rem',
+                                        cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <Tag size={14} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                                    Discounts
+                                </button>
                             </div>
                         </div>
 
 
-                        <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                             {/* [NEW] Today's Sales Card */}
                             <Card
                                 title="Today's Total Sales"
@@ -1900,7 +2042,11 @@ const Dashboard = (props) => {
                                 subtext={new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             />
 
-                            <Card title="Total Sales" value={salesRevenue} icon={IndianRupee} color="16, 185, 129" type="sales" />
+                            <Card title="Total Sales (Net)" value={salesRevenue} icon={IndianRupee} color="16, 185, 129" type="sales" />
+
+                            <Card title="Total Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
+
+                            <Card title="Total Discounts" value={totalDiscounts} icon={Tag} color="234, 179, 8" type="expense" />
 
                             {/* Merged Avg Order + Daily Avg Sales */}
                             {(() => {
@@ -1972,10 +2118,257 @@ const Dashboard = (props) => {
                         </div>
 
 
-                        <SalesSummaryTable
-                            transactions={salesTransactions}
-                            groupBy={salesViewMode === 'item' ? 'item' : 'date'}
-                        />
+                        {(salesViewMode === 'summary' || salesViewMode === 'item' || salesViewMode === 'daily') && (
+                            <SalesSummaryTable
+                                transactions={salesViewMode === 'item' ? salesAppearsGranular : salesTransactions}
+                                groupBy={salesViewMode === 'item' ? 'item' : 'date'}
+                            />
+                        )}
+
+                        {salesViewMode === 'invoices' && (
+                            <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '2rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>All Invoices</h3>
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search invoice or customer..." 
+                                            value={invoiceSearch}
+                                            onChange={(e) => setInvoiceSearch(e.target.value)}
+                                            style={{ padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minWidth: '250px' }}
+                                        />
+                                        <select 
+                                            value={invoiceSort} 
+                                            onChange={(e) => setInvoiceSort(e.target.value)}
+                                            style={{ padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                        >
+                                            <option value="date_desc">Newest First</option>
+                                            <option value="date_asc">Oldest First</option>
+                                            <option value="amount_desc">Amount (High to Low)</option>
+                                            <option value="amount_asc">Amount (Low to High)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                {salesTransactions.length > 0 ? (
+                                    <div style={{ overflowX: 'auto', maxHeight: '500px' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                            <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-primary)', zIndex: 10 }}>
+                                                <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
+                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Date</th>
+                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Invoice No</th>
+                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Customer</th>
+                                                    <th style={{ textAlign: 'right', padding: '1rem', fontWeight: 500 }}>Total Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {salesTransactions.filter(t => {
+                                                    if(!t.invoiceNo) return false;
+                                                    if(!invoiceSearch) return true;
+                                                    const s = invoiceSearch.toLowerCase();
+                                                    return (t.invoiceNo || '').toLowerCase().includes(s) || (t.customerName || '').toLowerCase().includes(s);
+                                                }).sort((a,b) => {
+                                                    if (invoiceSort === 'date_desc') return new Date(b.parsedDate) - new Date(a.parsedDate);
+                                                    if (invoiceSort === 'date_asc') return new Date(a.parsedDate) - new Date(b.parsedDate);
+                                                    if (invoiceSort === 'amount_desc') return b.parsedAmount - a.parsedAmount;
+                                                    if (invoiceSort === 'amount_asc') return a.parsedAmount - b.parsedAmount;
+                                                    return 0;
+                                                }).map((inv, i) => {
+                                                    const originalTxns = (data.transactions || []).filter(t => 
+                                                        String(t.invoiceNo || '').trim().toUpperCase() === String(inv.invoiceNo || '').trim().toUpperCase() &&
+                                                        t.parsedType !== 'Sales Return' &&
+                                                        t.parsedType !== 'Invoice Total'
+                                                    );
+                                                    return (
+                                                        <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{inv.parsedDate}</td>
+                                                            <td 
+                                                                style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
+                                                                onClick={() => setSelectedInvoiceDetails({ invoiceNo: String(inv.invoiceNo).toUpperCase(), amount: inv.parsedAmount, items: originalTxns, isReturn: false })}
+                                                                title="Click to view details"
+                                                            >{String(inv.invoiceNo).toUpperCase()}</td>
+                                                            <td style={{ padding: '1rem', color: 'var(--text-primary)' }}>{inv.customerName ? String(inv.customerName).toUpperCase() : '-'}</td>
+                                                            <td style={{ padding: '1rem', textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>
+                                                                {formatCurrency(inv.parsedAmount)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                        No invoices found for this period.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {salesViewMode === 'returns' && (
+                            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                <h3 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>Detailed Sales Returns</h3>
+                                {salesReturns.length > 0 ? (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
+                                                    <th style={{ textAlign: 'left', padding: '0.75rem' }}>Date</th>
+                                                    <th style={{ textAlign: 'left', padding: '0.75rem' }}>Invoice No</th>
+                                                    <th style={{ textAlign: 'left', padding: '0.75rem' }}>Customer</th>
+                                                    <th style={{ textAlign: 'left', padding: '0.75rem' }}>Returned Item</th>
+                                                    <th style={{ textAlign: 'right', padding: '0.75rem' }}>Amount Returned</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {salesReturns.map((ret, i) => {
+                                                    // Map to original item by doing lookback
+                                                    const originalTxns = (data.transactions || []).filter(t => 
+                                                        String(t.invoiceNo || '').trim().toUpperCase() === String(ret.invoiceNo || '').trim().toUpperCase() &&
+                                                        t.parsedType !== 'Sales Return' &&
+                                                        t.parsedType !== 'Invoice Total'
+                                                    );
+                                                    const resolvedItem = originalTxns.length === 1 
+                                                        ? originalTxns[0].originalDesc 
+                                                        : (originalTxns.length > 1 ? 'Multiple Items / Partial' : 'Unknown Item');
+                                                    
+                                                    return (
+                                                        <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                            <td style={{ padding: '0.75rem' }}>{ret.parsedDate}</td>
+                                                            <td 
+                                                                style={{ padding: '0.75rem', fontWeight: 500, color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
+                                                                onClick={() => setSelectedInvoiceDetails({ invoiceNo: ret.invoiceNo, amount: ret.parsedAmount, items: originalTxns, isReturn: true })}
+                                                                title="Click to view original invoice items"
+                                                            >{ret.invoiceNo}</td>
+                                                            <td style={{ padding: '0.75rem' }}>{ret.customerName ? String(ret.customerName).toUpperCase() : '-'}</td>
+                                                            <td style={{ padding: '0.75rem' }}>{resolvedItem}</td>
+                                                            <td style={{ padding: '0.75rem', textAlign: 'right', color: '#ef4444', fontWeight: 500 }}>
+                                                                {formatCurrency(ret.parsedAmount)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                        No sales returns found for this period.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {salesViewMode === 'discounts' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)' }}>
+                                    <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                                        <Tag size={18} color="#eab308" />
+                                        Apply Invoice Discount
+                                    </h3>
+                                    <form onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        if(!discountForm.invoice_no || !discountForm.discount_amount) return;
+                                        setDiscountLoading(true);
+                                        const newDiscount = {
+                                            invoice_no: discountForm.invoice_no,
+                                            discount_amount: parseFloat(discountForm.discount_amount),
+                                            discount_date: discountForm.discount_date,
+                                            remarks: discountForm.remarks
+                                        };
+                                        const { data: newRow, error } = await supabase.from('invoice_discounts').insert([newDiscount]).select('*');
+                                        if(!error && newRow && newRow.length > 0) {
+                                            setInvoiceDiscounts(prev => [newRow[0], ...prev]);
+                                            setDiscountForm({ invoice_no: '', discount_amount: '', discount_date: new Date().toISOString().split('T')[0], remarks: '' });
+                                        } else {
+                                            alert("Failed to save discount: " + error.message);
+                                        }
+                                        setDiscountLoading(false);
+                                    }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Invoice No *</label>
+                                            <input type="text" required value={discountForm.invoice_no} onChange={(e) => setDiscountForm({...discountForm, invoice_no: e.target.value})} style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.5rem' }} placeholder="e.g. INV-100" />
+                                            {discountForm.invoice_no && (
+                                                <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', color: matchedCustomerForDiscount ? '#10b981' : 'var(--text-secondary)' }}>
+                                                    {matchedCustomerForDiscount ? `Customer: ${matchedCustomerForDiscount}` : 'Customer not found'}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Discount Amount (₹) *</label>
+                                            <input type="number" required min="0" step="0.01" value={discountForm.discount_amount} onChange={(e) => setDiscountForm({...discountForm, discount_amount: e.target.value})} style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.5rem' }} placeholder="0.00" />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Date</label>
+                                            <input type="date" required value={discountForm.discount_date} onChange={(e) => setDiscountForm({...discountForm, discount_date: e.target.value})} style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.5rem' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Remarks (Optional)</label>
+                                            <input type="text" value={discountForm.remarks} onChange={(e) => setDiscountForm({...discountForm, remarks: e.target.value})} style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.5rem' }} placeholder="Reason for discount" />
+                                        </div>
+                                        <button type="submit" disabled={discountLoading} style={{ background: '#eab308', color: '#111827', border: 'none', padding: '0.75rem', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer', height: '42px' }}>
+                                            {discountLoading ? 'Applying...' : 'Apply Discount'}
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                    <h3 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>Applied Discounts (Active Period)</h3>
+                                    {filteredDiscounts.length > 0 ? (
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
+                                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>Date</th>
+                                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>Invoice No</th>
+                                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>Customer</th>
+                                                        <th style={{ textAlign: 'right', padding: '0.75rem' }}>Discount Amount</th>
+                                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>Remarks</th>
+                                                        <th style={{ textAlign: 'right', padding: '0.75rem' }}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredDiscounts.map((d, i) => {
+                                                        const invNoMatch = String(d.invoice_no).trim().toUpperCase();
+                                                        const pastTxns = (data.transactions || []).filter(t => 
+                                                            String(t.invoiceNo || '').trim().toUpperCase() === invNoMatch &&
+                                                            t.parsedType !== 'Sales Return' && t.parsedType !== 'Invoice Total'
+                                                        );
+                                                        const custFound = pastTxns.find(t => t.customerName);
+                                                        const resolvedCust = custFound ? String(custFound.customerName).toUpperCase() : '-';
+                                                        return (
+                                                        <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                            <td style={{ padding: '0.75rem' }}>{d.discount_date}</td>
+                                                            <td style={{ padding: '0.75rem', fontWeight: 500, color: '#3b82f6' }}>{d.invoice_no}</td>
+                                                            <td style={{ padding: '0.75rem' }}>{resolvedCust}</td>
+                                                            <td style={{ padding: '0.75rem', textAlign: 'right', color: '#eab308', fontWeight: 500 }}>
+                                                                {formatCurrency(d.discount_amount)}
+                                                            </td>
+                                                            <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{d.remarks || '-'}</td>
+                                                            <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                                                                <button onClick={async () => {
+                                                                    if(window.confirm('Remove this discount?')) {
+                                                                        const { error } = await supabase.from('invoice_discounts').delete().eq('id', d.id);
+                                                                        if (!error) {
+                                                                            setInvoiceDiscounts(prev => prev.filter(item => item.id !== d.id));
+                                                                        }
+                                                                    }
+                                                                }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                            No discounts applied for this period.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                     </div>
                 )
             }
@@ -2587,6 +2980,7 @@ const Dashboard = (props) => {
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
+                        invoiceDiscounts={invoiceDiscounts}
                         forceTab="performance"
                     />
                 )
@@ -2599,10 +2993,54 @@ const Dashboard = (props) => {
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
+                        invoiceDiscounts={invoiceDiscounts}
                         forceTab="profitHub"
                     />
                 )
             }
+
+            {selectedInvoiceDetails && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setSelectedInvoiceDetails(null)}>
+                    <div className="glass-panel" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', maxWidth: '600px', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Original Invoice Details: {selectedInvoiceDetails.invoiceNo}</h3>
+                            <button onClick={() => setSelectedInvoiceDetails(null)} style={{ background: 'var(--glass-border)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '1.25rem', width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>&times;</button>
+                        </div>
+                        
+                        <div style={{ marginBottom: '1rem', fontSize: '1rem', color: selectedInvoiceDetails.isReturn ? '#ef4444' : '#10b981', fontWeight: 600 }}>
+                            {selectedInvoiceDetails.isReturn ? 'Total Returned Amount: ' : 'Total Invoice Amount: '} {formatCurrency(selectedInvoiceDetails.amount)}
+                        </div>
+                        
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.5 }}>{selectedInvoiceDetails.isReturn ? 'Because Excel does not explicitly specify which quantities were returned, here are the original items sold on this invoice for your reference:' : 'Here are the individual items parsed from this invoice:'}</p>
+                        
+                        <div style={{ overflowX: 'auto', flex: 1, minHeight: 0 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zIndex: 1 }}>
+                                    <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
+                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>Item</th>
+                                        <th style={{ textAlign: 'right', padding: '0.75rem' }}>Qty</th>
+                                        <th style={{ textAlign: 'right', padding: '0.75rem' }}>Original Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {selectedInvoiceDetails.items.length > 0 ? selectedInvoiceDetails.items.map((it, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                            <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{it.originalDesc || it.name}</td>
+                                            <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-primary)' }}>{it.parsedQty || '1'}</td>
+                                            <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(it.parsedAmount)}</td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan="3" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No original items found in ledger for this invoice.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ marginTop: '2rem', textAlign: 'right', flexShrink: 0 }}>
+                            <button onClick={() => setSelectedInvoiceDetails(null)} style={{ background: 'var(--glass-highlight)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)', padding: '0.5rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 500, transition: 'all 0.2s' }}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );

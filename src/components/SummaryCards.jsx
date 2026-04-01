@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { TrendingUp, TrendingDown, IndianRupee, Wallet } from 'lucide-react';
 
 const getValueColor = (value, type) => {
-    if (value < 0) return '#ef4444'; // Always Red for negative (refunds/losses)
+    if (value < 0 || type === 'return') return '#ef4444'; // Red for returns/losses
     if (type === 'expense') return '#f59e0b'; // Orange for Expenses
     if (type === 'sales') return '#10b981';   // Green for Sales
     if (value > 0) return '#10b981'; // Green for Profit/Margin
@@ -37,7 +37,7 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
     </div>
 );
 
-const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, overrideSales, overrideInvoiceCount }) => {
+const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, overrideSales, overrideInvoiceCount, totalReturns = 0 }) => {
     const stats = useMemo(() => {
         let summarySales = 0;
         let summaryProfit = 0;
@@ -154,8 +154,9 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, override
     }, [data, manualExpenses, overrideSales, overrideInvoiceCount]);
 
     return (
-        <div className="responsive-grid-4" style={{ marginBottom: '2rem' }}>
+        <div className="responsive-grid-5" style={{ marginBottom: '2rem' }}>
             <Card title="Total Sales" value={stats.sales} subtext={`${stats.invoiceCount} Invoices`} icon={IndianRupee} color="59, 130, 246" type="sales" />
+            <Card title="Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
             <Card title="Total Expenses" value={stats.expenses} icon={Wallet} color="239, 68, 68" type="expense" />
             <Card title="Net Profit" value={stats.netProfit} icon={TrendingUp} color="16, 185, 129" type="profit" />
             <Card title="Profit Margin" value={stats.margin} icon={TrendingDown} color="245, 158, 11" isPercentage type="margin" />

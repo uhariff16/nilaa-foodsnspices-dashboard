@@ -557,6 +557,40 @@ export const parseExcelFile = (files) => {
                         debugLog.push(`NO MATCH (Skipped). Content: ${contentString.substring(0, 50)}...`);
                     }
 
+                    // --- TYPE 8: SALES RETURN ---
+                    if (contentString.includes('return no.') && contentString.includes('invoice no.')) {
+                        debugLog.push("Matched Type 8 (Sales Return)");
+                        const retNoIdx = headerRow.findIndex(h => /return no/i.test(h));
+                        const invNoIdx = headerRow.findIndex(h => /invoice no/i.test(h));
+                        const dateIdx = headerRow.findIndex(h => /date/i.test(h));
+                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
+                        const custIdx = headerRow.findIndex(h => /customer/i.test(h));
+
+                        if (invNoIdx !== -1 && amountIdx !== -1) {
+                            jsonData.slice(1).forEach((row, index) => {
+                                if (!row || !row[invNoIdx]) return;
+                                const amount = parseFloat(String(row[amountIdx] || 0).replace(/,/g, ''));
+                                if (!isNaN(amount) && amount > 0) {
+                                    const pDate = (row[dateIdx] ? normalizeDate(row[dateIdx]) : null) || effectiveDate;
+                                    const retNo = String(row[retNoIdx] || '');
+                                    const invNo = String(row[invNoIdx] || '');
+                                    const customer = String(row[custIdx] || '');
+
+                                    mergedData.transactions.push({
+                                        id: `ret-${pDate}-${amount}-${invNo}-${index}`,
+                                        parsedDate: pDate,
+                                        parsedAmount: amount,
+                                        parsedType: 'Sales Return',
+                                        originalDesc: `Sales Return: ${invNo}${retNo ? ' (Ref: ' + retNo + ')' : ''}`,
+                                        customerName: customer,
+                                        invoiceNo: invNo,
+                                        returnRef: retNo
+                                    });
+                                }
+                            });
+                        }
+                    }
+
                 }); // end sheets loop
 
                 // --- PASS 3 (Backfill) ---

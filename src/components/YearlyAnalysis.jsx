@@ -42,7 +42,7 @@ const getPackWeight = (desc) => {
 
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
-const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, forceTab = null }) => {
+const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, invoiceDiscounts = [], forceTab = null }) => {
     const { hasPermission } = useAuth();
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -226,13 +226,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             if (monthTxns.length > 0) {
                 // --- SALES LOGIC ---
                 const allSales = monthTxns.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
+                const salesReturns = monthTxns.filter(t => t.parsedType === 'Sales Return');
                 const invoiceTotalRows = monthTxns.filter(t => t.parsedType === 'Invoice Total');
-                const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary');
+                const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary' && t.parsedType !== 'Sales Return');
 
                 const salesAppearsGranular = allSales.filter(t => {
                     const type = String(t.parsedType || '').toLowerCase();
                     const desc = String(t.originalDesc || '').toLowerCase();
-                    if (type === 'sales summary' || type === 'profitsummary' || type === 'invoice total') return false;
+                    if (type === 'sales summary' || type === 'profitsummary' || type === 'invoice total' || type === 'sales return') return false;
                     const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
                     const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
                     if (isCreditNote) return true;
@@ -286,20 +287,40 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 });
                 const finalSales = Array.from(uniqueSalesMap.values());
 
-                // 4. Calculate Overall Revenue (Match Dashboard Strategy: Prefer Totals)
-                finalSales.forEach(t => {
-                    revenue += Math.abs(parseFloat(t.parsedAmount || 0));
-                });
+                const grossRevenue = finalSales.reduce((acc, t) => acc + Math.abs(parseFloat(t.parsedAmount || 0)), 0);
+                const returnRevenue = salesReturns.reduce((acc, t) => acc + Math.abs(parseFloat(t.parsedAmount || 0)), 0);
+                
+                // Calculate Discounts for this month
+                const monthDiscounts = invoiceDiscounts.filter(d => d.discount_date && d.discount_date.startsWith(targetPrefix));
+                const discountRevenue = monthDiscounts.reduce((acc, d) => acc + (parseFloat(d.discount_amount) || 0), 0);
+
+                revenue = grossRevenue - returnRevenue - discountRevenue;
 
                 // 5. Build Item Breakdown from ALL Granular Sales
+                // [NEW] Identify items that were returned in this month via Invoice Lookup
+                const returnedItemsMap = {};
+                salesReturns.forEach(ret => {
+                    const invNo = String(ret.invoiceNo || '').trim().toUpperCase();
+                    if (!invNo) return;
+                    const originalTxns = (transactions || []).filter(t => 
+                        String(t.invoiceNo || '').trim().toUpperCase() === invNo &&
+                        t.parsedType !== 'Sales Return' &&
+                        t.parsedType !== 'Invoice Total'
+                    );
+                    originalTxns.forEach(t => {
+                        const name = normalizeName(t.originalDesc || '');
+                        const packWeight = getPackWeight(t.originalDesc || '');
+                        const qtyWeight = parseFloat(t.parsedQty || 0) * packWeight;
+                        if (!returnedItemsMap[name]) returnedItemsMap[name] = 0;
+                        returnedItemsMap[name] += qtyWeight;
+                    });
+                });
+
                 salesAppearsGranular.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const qty = parseFloat(t.parsedQty || 0);
-                    salesKg += qty;
-
                     const rawName = (t.originalDesc || 'Generic Item').trim().toUpperCase();
 
-                    // Filter out accounting noise and summary rows
                     const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) ||
                         rawName === 'ITEM' || rawName === 'PRODUCT' ||
                         rawName === 'AMOUNT' || rawName === 'SUBTOTAL' || rawName === 'INVOICE TOTAL' || rawName === 'TOTAL';
@@ -322,6 +343,18 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                             itemSalesData[normName].maxPrice = Math.max(itemSalesData[normName].maxPrice, pricePerKg);
                         }
                     }
+                });
+
+                // Apply Deductions to item breakdown and total sales volume
+                Object.keys(itemSalesData).forEach(normName => {
+                    const deduction = returnedItemsMap[normName] || 0;
+                    if (deduction > 0) {
+                        const originalWeight = itemSalesData[normName].weight;
+                        const asp = originalWeight > 0 ? itemSalesData[normName].revenue / originalWeight : 0;
+                        itemSalesData[normName].weight = Math.max(0, originalWeight - deduction);
+                        itemSalesData[normName].revenue = Math.max(0, itemSalesData[normName].revenue - (deduction * asp));
+                    }
+                    salesKg += itemSalesData[normName].weight;
                 });
 
                 // --- EXPENSES LOGIC ---
@@ -538,7 +571,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 }
             };
         });
-    }, [selectedYear, transactions, productionData, simHistory]);
+    }, [selectedYear, transactions, productionData, invoiceDiscounts, simHistory]);
 
     // Set default analysis month to the latest active month
     React.useEffect(() => {

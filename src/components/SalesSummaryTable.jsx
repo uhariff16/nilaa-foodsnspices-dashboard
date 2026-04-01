@@ -16,7 +16,11 @@ const SalesSummaryTable = ({ transactions, groupBy = 'date' }) => {
 
             if (!grouped[key]) grouped[key] = { key, amount: 0, count: 0 };
             grouped[key].amount += Math.abs(t.parsedAmount || 0); // Always positive for sales
-            grouped[key].count += 1;
+            if (groupBy === 'item') {
+                grouped[key].count += (parseFloat(t.parsedQty) || 1);
+            } else {
+                grouped[key].count += 1; // In 'date' groupBy, this counts the number of row entries
+            }
             totalSales += Math.abs(t.parsedAmount || 0);
         });
 
@@ -46,7 +50,7 @@ const SalesSummaryTable = ({ transactions, groupBy = 'date' }) => {
                             <th style={{ textAlign: 'left', padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                 {groupBy === 'item' ? 'Item Name' : 'Date'}
                             </th>
-                            <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Transactions</th>
+                            <th style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{groupBy === 'item' ? 'Qty Sold' : 'Entries'}</th>
                             <th style={{ textAlign: 'right', padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Sales</th>
                         </tr>
                     </thead>

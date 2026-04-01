@@ -86,9 +86,9 @@ export const AuthProvider = ({ children }) => {
         try {
             console.log("Fetching role for:", email);
 
-            // Timeout Promise (10s)
+            // Timeout Promise (30s for safety)
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Role fetch timeout')), 10000)
+                setTimeout(() => reject(new Error('Role fetch timeout')), 30000)
             );
 
             const fetchPromise = supabase
@@ -98,6 +98,7 @@ export const AuthProvider = ({ children }) => {
                 .single();
 
             // Race against timeout
+            console.log("Starting Auth Race for:", email);
             const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
             if (error || !data) {

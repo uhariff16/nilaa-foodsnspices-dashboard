@@ -119,26 +119,48 @@ const DashboardLayout = () => {
         }
     }, [isAdminParam, navigate]);
 
+    const fetchAllRows = async (table, select = '*', orderBy = 'date', ascending = false) => {
+        let allRows = [];
+        let from = 0;
+        const batchSize = 1000;
+        
+        // Safety: If orderBy is 'date', check if it exists or fallback to id
+        let sortCol = orderBy;
+        
+        while (true) {
+            let query = supabase.from(table).select(select);
+            if (sortCol) {
+                query = query.order(sortCol, { ascending });
+            }
+            const { data, error } = await query.range(from, from + batchSize - 1);
+            
+            if (error) {
+                // If 'date' column doesn't exist, retry once without sorting
+                if (error.code === '42703' && sortCol === 'date') {
+                    console.warn(`Column 'date' missing in ${table}, retrying without sort.`);
+                    sortCol = null;
+                    continue; 
+                }
+                throw error;
+            }
+            allRows = [...allRows, ...data];
+            if (data.length < batchSize) break;
+            from += batchSize;
+        }
+        return allRows;
+    };
+
     const loadData = async () => {
-        console.log("Starting loadData...");
+        console.log("Starting Optimized loadData (Parallel)...");
         setLoading(true);
         try {
-            console.log("Fetching data from Supabase DB...");
-            const batchSize = 1000;
-
-            // 1. Fetch Transactions
-            let allTxns = [];
-            let tFrom = 0;
-            while (true) {
-                const { data, error } = await supabase.from('transactions')
-                    .select('*').order('date', { ascending: false }).range(tFrom, tFrom + batchSize - 1);
-                if (error) throw error;
-                allTxns = [...allTxns, ...data];
-                if (data.length < batchSize) break;
-                tFrom += batchSize;
-            }
-
-            // Deduplication Logic
+            // Parallel fetch with individual error handling
+            const [allTxns, allLogs, allAttendance, allItemMaster] = await Promise.all([
+                fetchAllRows('transactions', '*', 'date', false).catch(e => { console.error("Txns Fetch Error:", e); return []; }),
+                fetchAllRows('production_logs', '*', 'date', true).catch(e => { console.error("Logs Fetch Error:", e); return []; }),
+                fetchAllRows('employee_attendance', '*', 'date', false).catch(e => { console.error("Attendance Fetch Error:", e); return []; }),
+                fetchAllRows('item_master', '*', null).catch(e => { console.error("ItemMaster Fetch Error:", e); return []; })
+            ]);
             const uniqueTxnsMap = new Map();
             allTxns.forEach(t => {
                 // [FIX] Deduplication Strategy - Content Based
@@ -168,37 +190,11 @@ const DashboardLayout = () => {
                 parsedQty: Number(t.quantity || 1)
             }));
 
-            // 2. Fetch Production Logs
-            let allLogs = [];
-            let pFrom = 0;
-            while (true) {
-                const { data, error } = await supabase.from('production_logs')
-                    .select('*').order('date', { ascending: true }).range(pFrom, pFrom + batchSize - 1);
-                if (error) throw error;
-                allLogs = [...allLogs, ...data];
-                if (data.length < batchSize) break;
-                pFrom += batchSize;
-            }
+            // Deduplication Logic
 
 
-            // 4. Fetch Attendance Data
-            let allAttendance = [];
-            try {
-                let aFrom = 0;
-                while (true) {
-                    const { data: aData, error: aError } = await supabase.from('employee_attendance')
-                        .select('*').order('date', { ascending: false }).range(aFrom, aFrom + batchSize - 1);
-                    if (aError) break;
-                    allAttendance = [...allAttendance, ...aData];
-                    if (aData.length < batchSize) break;
-                    aFrom += batchSize;
-                }
-            } catch (e) {
-                console.warn("employee_attendance table might be empty or missing:", e);
-            }
 
-
-            // Split logs
+            // Split Production Logs
             const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
             allLogs.forEach(log => {
                 const entry = { id: log.id, date: log.date, createdAt: log.created_at, material: log.material, weight: Number(log.weight), source: 'Database' };
@@ -207,22 +203,12 @@ const DashboardLayout = () => {
                 else if (log.type === 'production') newProdData.postProduction.push(entry);
             });
 
-            // 6. Fetch Item Master
-            let allItemMaster = [];
-            try {
-                const { data: imData, error: imError } = await supabase.from('item_master').select('*');
-                if (!imError && imData) {
-                    allItemMaster = imData;
-                }
-            } catch (e) {
-                console.warn("item_master table might not exist yet:", e);
-            }
-
-            // Update State
+            // Update State (Using functional update to prevent key loss)
             setData(prev => ({
+                ...prev,
                 transactions: mappedTransactions,
-                attendance: allAttendance, // [NEW] Pass attendance to Dashboard
-                itemMaster: allItemMaster // [NEW] Pass Item Master to Dashboard
+                attendance: allAttendance,
+                itemMaster: allItemMaster
             }));
             setProductionData(newProdData);
             setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense' || t.parsedType === 'Purchase'));
@@ -289,6 +275,7 @@ const DashboardLayout = () => {
             isSyncing={isSyncing}
             debugError={debugError}
             isAdmin={role === 'admin'}
+            loading={loading}
         />
     );
 };

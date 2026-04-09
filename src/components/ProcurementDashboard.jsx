@@ -110,11 +110,21 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     const filteredPurchases = useMemo(() => {
         const dateFiltered = getFilteredItems(purchases);
         return dateFiltered.filter(item => {
-            // [FIX] Concatenate all fields to ensure keywords in Supplier are caught even if Desc is present
+            const inv = String(item.invoice_no || item.invoiceNo || '').trim().toUpperCase();
             const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
-            // Whitelist: Only allow Ginger and Garlic related records OR explicit 'Purchase' type
-            // Also explicit allow for 'jayakodi' as fallback if item name is missing
-            return item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || desc.includes('desi') || desc.includes('naatu');
+            
+            // Procurement bills have bill numbers starting with "P" (e.g., P-255).
+            // We also keep the keyword whitelist for resilience, but we MUST reject clear expenses.
+            // If it starts with P, it is undeniably a procurement bill.
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
+            
+            // Enforce: Either it starts with 'P', or it's a known keyword AND it's not explicitly an expense
+            if (inv.startsWith('P')) return true;
+            
+            const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
+            if (isExpense) return false;
+            
+            return isPurchaseKeyword;
         });
     }, [purchases, selectedMonth, selectedYear]);
 
@@ -137,7 +147,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             // Smart Mapping
             if (desc.includes('ginger') || desc.includes('jayakodi')) name = 'Ginger';
-            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu') || desc.includes('desi') || desc.includes('naatu')) name = 'Garlic';
+            else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu') || /\bdesi\b/.test(desc) || desc.includes('naatu')) name = 'Garlic';
             else {
                 // Fallback to extraction if possible or 'Others'
                 if (desc.includes('onion')) name = 'Onion';
@@ -230,7 +240,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 if (stats['Ginger'] && (str.includes('ginger') || str.includes('jayakodi'))) {
                     stats['Ginger'].cost += amt;
                     stats['Ginger'].invoices.add(inv);
-                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu') || str.includes('desi') || str.includes('naatu'))) {
+                } else if (stats['Garlic'] && (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu') || /\bdesi\b/.test(str) || str.includes('naatu'))) {
                     stats['Garlic'].cost += amt;
                     stats['Garlic'].invoices.add(inv);
                 }

@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -415,18 +415,31 @@ const Dashboard = (props) => {
     const totalDiscounts = filteredDiscounts.reduce((sum, d) => sum + parseFloat(d.discount_amount || 0), 0);
     const salesRevenue = grossSalesRevenue - totalReturns - totalDiscounts;
 
-    // [NEW] Calculate matched customer for the discount form
-    const matchedCustomerForDiscount = React.useMemo(() => {
+    // [NEW] Calculate matched invoice data for the discount form
+    const matchedInvoiceData = React.useMemo(() => {
         if (!discountForm.invoice_no) return null;
-        const invNo = String(discountForm.invoice_no).trim().toUpperCase();
-        const originalTxns = (data.transactions || []).filter(t => 
-            String(t.invoiceNo || '').trim().toUpperCase() === invNo &&
-            t.parsedType !== 'Sales Return' &&
-            t.parsedType !== 'Invoice Total'
+        const input = String(discountForm.invoice_no).trim().toUpperCase();
+        
+        // Exact match
+        let match = (data.transactions || []).find(t => 
+            String(t.invoiceNo || '').trim().toUpperCase() === input &&
+            t.parsedType !== 'Sales Return' && t.parsedType !== 'Invoice Total'
         );
-        if (originalTxns.length > 0) {
-            const customerTx = originalTxns.find(t => t.customerName);
-            return customerTx ? String(customerTx.customerName).toUpperCase() : null;
+
+        // Flexible matching (e.g. user types "2208" but it's "INV-2208" in DB)
+        if (!match && /^\d+$/.test(input)) {
+            match = (data.transactions || []).find(t => {
+                const rowInv = String(t.invoiceNo || '').trim().toUpperCase();
+                return (rowInv === `INV-${input}` || rowInv === `INV${input}` || rowInv.endsWith(`-${input}`)) &&
+                       t.parsedType !== 'Sales Return' && t.parsedType !== 'Invoice Total';
+            });
+        }
+
+        if (match) {
+            return {
+                customerName: match.customerName ? String(match.customerName).toUpperCase() : 'Unknown Customer',
+                fullInvoiceNo: match.invoiceNo
+            };
         }
         return null;
     }, [discountForm.invoice_no, data.transactions]);
@@ -2288,8 +2301,26 @@ const Dashboard = (props) => {
                                             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Invoice No *</label>
                                             <input type="text" required value={discountForm.invoice_no} onChange={(e) => setDiscountForm({...discountForm, invoice_no: e.target.value})} style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.5rem' }} placeholder="e.g. INV-100" />
                                             {discountForm.invoice_no && (
-                                                <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', color: matchedCustomerForDiscount ? '#10b981' : 'var(--text-secondary)' }}>
-                                                    {matchedCustomerForDiscount ? `Customer: ${matchedCustomerForDiscount}` : 'Customer not found'}
+                                                <div style={{ fontSize: '0.75rem', marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                    {matchedInvoiceData ? (
+                                                        <>
+                                                            <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 500 }}>
+                                                                <Check size={14} />
+                                                                Customer: {matchedInvoiceData.customerName}
+                                                            </div>
+                                                            {String(matchedInvoiceData.fullInvoiceNo).toUpperCase() !== String(discountForm.invoice_no).trim().toUpperCase() && (
+                                                                <div 
+                                                                    onClick={() => setDiscountForm({...discountForm, invoice_no: matchedInvoiceData.fullInvoiceNo})}
+                                                                    style={{ color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline', fontStyle: 'italic', display: 'inline-block' }}
+                                                                    title="Click to use full invoice number"
+                                                                >
+                                                                    Apply full number: {matchedInvoiceData.fullInvoiceNo}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <div style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>Customer not found</div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

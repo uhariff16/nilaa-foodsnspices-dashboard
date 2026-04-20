@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Plus, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { useSettingsStore } from '../lib/store';
 
 export default function Financials() {
+  const { session, activeResortId } = useSettingsStore();
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,14 +14,14 @@ export default function Financials() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [activeResortId]);
 
   const fetchData = async () => {
     if (!isSupabaseConfigured()) { setLoading(false); return; }
     try {
       const [inc, exp] = await Promise.all([
-        supabase.from('incomes').select('*').order('date', { ascending: false }),
-        supabase.from('expenses').select('*').order('date', { ascending: false })
+        supabase.from('incomes').select('*, bookings(reference_number)').eq('resort_id', activeResortId).order('date', { ascending: false }),
+        supabase.from('expenses').select('*').eq('resort_id', activeResortId).order('date', { ascending: false })
       ]);
       setIncomes(inc.data || []);
       setExpenses(exp.data || []);
@@ -31,7 +33,7 @@ export default function Financials() {
   const handleIncomeSubmit = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...newIncome };
+      const payload = { ...newIncome, tenant_id: session.user.id, resort_id: activeResortId };
       if (payload.source === 'Other') payload.source = payload.custom_source || 'Other';
       delete payload.custom_source;
       const { data, error } = await supabase.from('incomes').insert([payload]).select();
@@ -44,7 +46,7 @@ export default function Financials() {
   const handleExpenseSubmit = async (e) => {
     e.preventDefault();
     try {
-      const payload = { ...newExpense };
+      const payload = { ...newExpense, tenant_id: session.user.id, resort_id: activeResortId };
       if (payload.category === 'Other') payload.category = payload.custom_category || 'Other';
       delete payload.custom_category;
       const { data, error } = await supabase.from('expenses').insert([payload]).select();
@@ -80,14 +82,14 @@ export default function Financials() {
   if(loading) return <div>Loading...</div>;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+    <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
       {/* INCOMES */}
       <div className="card">
         <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', marginBottom: '1.5rem' }}>
           <ArrowUpRight /> Income
         </h2>
         <form onSubmit={handleIncomeSubmit} style={{ background: 'var(--bg-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group"><label className="form-label">Date</label><input type="date" required className="form-input" value={newIncome.date} onChange={e => setNewIncome({...newIncome, date: e.target.value})} /></div>
             <div className="form-group">
               <label className="form-label">Source</label>
@@ -116,7 +118,15 @@ export default function Financials() {
               {incomes.map(i => (
                 <tr key={i.id}>
                   <td>{i.date}</td>
-                  <td><strong>{i.source}</strong><br/><small>{i.payment_mode}</small></td>
+                  <td>
+                    <strong>{i.source}</strong>
+                    {i.bookings?.reference_number && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 'bold' }}>
+                        Ref: {i.bookings.reference_number}
+                      </div>
+                    )}
+                    <br/><small>{i.payment_mode}</small>
+                  </td>
                   <td style={{ color: 'var(--success)', fontWeight: 'bold' }}>+₹{i.amount}</td>
                   <td><button className="btn btn-outline" style={{ padding: '0.2rem 0.5rem' }} onClick={() => deleteRecord('incomes', i.id)}><Trash2 size={16}/></button></td>
                 </tr>

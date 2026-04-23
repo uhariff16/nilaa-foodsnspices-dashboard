@@ -1166,7 +1166,7 @@ const CostSimulator = ({ previousMonthStats, selectedMonth }) => {
                         </div>
                     </div>
 
-                    <div style={{ overflowX: 'auto', padding: '0 1.5rem 1.5rem 1.5rem' }}>
+                    <div className="custom-scrollbar" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '400px', padding: '0 1.5rem 1.5rem 1.5rem' }}>
                         {(historyTab === 'retail' ? historyRetail : historyWholesale).length > 0 ? (
                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                                 <thead>

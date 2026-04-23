@@ -252,8 +252,27 @@ export default function Bookings() {
       delete payload.is_loading_edit;
 
       if (editingBookingId) {
+        const oldBooking = bookings.find(b => b.id === editingBookingId);
+        const oldAdvance = Number(oldBooking?.advance_paid || 0);
+        const newAdvance = Number(payload.advance_paid || 0);
+
         const { data, error } = await supabase.from('bookings').update(payload).eq('id', editingBookingId).select();
         if (error) throw error;
+        
+        if (newAdvance > oldAdvance) {
+          const diff = newAdvance - oldAdvance;
+          await supabase.from('incomes').insert([{
+            date: new Date().toISOString().split('T')[0],
+            source: `Advance Payment (Updated): ${payload.guest_name}`,
+            booking_id: editingBookingId,
+            amount: diff,
+            payment_mode: 'Cash',
+            notes: 'Auto-added from Edit Booking',
+            tenant_id: session.user.id,
+            resort_id: activeResortId
+          }]);
+        }
+
         setBookings(bookings.map(b => b.id === editingBookingId ? data[0] : b));
         alert('Booking Updated Successfully!');
       } else {
@@ -288,6 +307,10 @@ export default function Bookings() {
   };
 
   const handleCheckIn = async (b) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (b.check_in_date > todayStr) {
+      return alert(`Cannot check-in yet. The scheduled check-in date is ${new Date(b.check_in_date).toLocaleDateString()}.`);
+    }
     if (!window.confirm(`Check-in guest: ${b.guest_name}?`)) return;
     try {
       await supabase.from('bookings').update({ status: 'Checked-in' }).eq('id', b.id);

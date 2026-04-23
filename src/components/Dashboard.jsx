@@ -1187,7 +1187,7 @@ const Dashboard = (props) => {
     }
 
     return (
-        <div className="animate-fade-in" style={{ position: 'relative', minHeight: '100vh' }}>
+        <>
             {/* Loading Overlay */}
             {loading && (
                 <div className="loading-overlay">
@@ -1195,6 +1195,8 @@ const Dashboard = (props) => {
                     <div className="loading-text">NILAA FOODS - LOADING DATA</div>
                 </div>
             )}
+            <div className="animate-fade-in" style={{ position: 'relative', minHeight: '100vh' }}>
+
             <header style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem',
                 borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem'
@@ -3074,6 +3076,7 @@ const Dashboard = (props) => {
             )}
 
         </div >
+        </>
     );
 };
 

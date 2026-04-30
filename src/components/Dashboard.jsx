@@ -278,21 +278,31 @@ const Dashboard = (props) => {
         });
     }, [data.transactions, selectedMonth, selectedYear]);
 
-    // [NEW] Identify Returns early for cross-referencing
+    // [NEW] Identify Returns early for cross-referencing, explicitly ignoring orphaned MISSING data
     const salesReturns = React.useMemo(() => {
-        return filteredTransactions.filter(t => t.parsedType === 'Sales Return');
+        return filteredTransactions.filter(t => 
+            t.parsedType === 'Sales Return' && 
+            !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+        );
     }, [filteredTransactions]);
 
 
     // Derived Data for Tabs (using filteredTransactions)
-    // [FIX] Separate Granular Sales from Summary Rows to prevent double counting
-    const allSalesTransactions = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
+    // [FIX] Separate Granular Sales from Summary Rows to prevent double counting.
+    // Explicitly filter out MISSING invoices to keep data consistent with expected verified totals.
+    const allSalesTransactions = filteredTransactions.filter(t => 
+        String(t.parsedType).toLowerCase().includes('sale') &&
+        !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+    );
 
     // Identify Summary Rows (usually Type='Sales Summary' or similar)
     // We assume anything NOT 'Sales Summary' (and is 'Sales') is a granular row.
 
     // [FIX] New Priority: "Invoice Total" rows from parser
-    const invoiceTotalRows = filteredTransactions.filter(t => t.parsedType === 'Invoice Total');
+    const invoiceTotalRows = filteredTransactions.filter(t => 
+        t.parsedType === 'Invoice Total' &&
+        !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+    );
 
     const salesAppearsGranular = allSalesTransactions.filter(t => {
         const type = String(t.parsedType || '').toLowerCase();
@@ -318,76 +328,10 @@ const Dashboard = (props) => {
     });
 
     // Strategy Logic:
-    // [FIX] Per-Invoice Aggregation Strategy
-    // Instead of choosing "All Totals" vs "All Granular" (which fails if some totals are missing),
-    // we now group by Invoice Number and choose the best available data for EACH invoice.
-
-    const salesTransactions = React.useMemo(() => {
-        const totals = invoiceTotalRows;
-        const granular = salesAppearsGranular;
-
-        // Fallback: If no invoiced data at all, use Sales Summaries (Legacy)
-        if (totals.length === 0 && granular.length === 0) {
-            return salesSummaryRows;
-        }
-
-        // Grouping
-        const invoiceMap = new Map(); // Key -> { totals: [], granular: [] }
-
-        // Helper to get key
-        const getKey = (t) => {
-            if (!t.invoiceNo) return 'NO_INVOICE_' + t.id;
-            return String(t.invoiceNo).trim().toUpperCase();
-        };
-
-        // 1. Add Granular
-        granular.forEach(t => {
-            const k = getKey(t);
-            if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
-            invoiceMap.get(k).granular.push(t);
-        });
-
-        // 2. Add Totals
-        totals.forEach(t => {
-            const k = getKey(t);
-            if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
-            invoiceMap.get(k).totals.push(t);
-        });
-
-        // 3. Select Best Rows
-        let selectedRows = [];
-        invoiceMap.forEach((group, key) => {
-            if (group.totals.length > 0) {
-                // If we have explicit Total rows, use them.
-                // [FIX] Deduplicate: If multiple Total rows exist (e.g. revisions), pick the LATEST one.
-                if (group.totals.length === 1) {
-                    selectedRows.push(group.totals[0]);
-                } else {
-                    // Sort by createdAt descending (if available), else by ID or assumed order
-                    const sorted = [...group.totals].sort((a, b) => {
-                        const tA = new Date(a.createdAt || 0).getTime();
-                        const tB = new Date(b.createdAt || 0).getTime();
-                        return tB - tA;
-                    });
-                    selectedRows.push(sorted[0]);
-                }
-            } else {
-                // Otherwise sum the granular items
-                selectedRows.push(...group.granular);
-            }
-        });
-
-        // 4. Deduplicate (Final Safety - should be redundant now for Totals, but good for items)
-        const uniqueMap = new Map();
-        selectedRows.forEach(t => {
-            const key = t.id || `${t.invoiceNo}-${t.parsedDate}-${t.parsedAmount}-${t.originalDesc}`;
-            if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, t);
-            }
-        });
-        return Array.from(uniqueMap.values());
-
-    }, [invoiceTotalRows, salesAppearsGranular, salesSummaryRows]);
+    // Simply use the granular sales rows. The previous logic of trying to match Totals
+    // caused double counting for invoices without explicit numbers (INV-MISSING).
+    // The filter for MISSING is now applied upstream to `allSalesTransactions`.
+    const salesTransactions = salesAppearsGranular;
 
     // Metric Calculations
     const grossSalesRevenue = salesTransactions.reduce((sum, t) => {
@@ -582,6 +526,11 @@ const Dashboard = (props) => {
             let grossSales = 0; let parsedExpenses = 0;
             filteredTransactions.forEach(t => {
                 const type = String(t.parsedType || '').toLowerCase();
+                const invNo = String(t.invoiceNo || '').toUpperCase();
+                
+                // Skip missing/orphaned invoices entirely for sales consistency
+                if ((type.includes('sale') || type.includes('invoice total')) && invNo.includes('MISSING')) return;
+
                 if (type === 'sales return' || type === 'invoice total') return; // Skip returns and totals for raw addition 
 
                 // [FIX] Use the same logic as dashboard revenue
@@ -719,7 +668,11 @@ const Dashboard = (props) => {
 
         // Fallback: If no items found for month, aggregate from Transactions
         if (result.length === 0 && selectedMonth !== 'Overall' && filteredTransactions.length > 0) {
-            const salesTx = filteredTransactions.filter(t => String(t.parsedType).toLowerCase().includes('sale') && t.parsedType !== 'Sales Return');
+            const salesTx = filteredTransactions.filter(t => 
+                String(t.parsedType).toLowerCase().includes('sale') && 
+                t.parsedType !== 'Sales Return' &&
+                !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+            );
             const fallbackMap = {};
             salesTx.forEach(t => {
                 const name = (t.originalDesc || 'Unknown Item').trim();

@@ -240,9 +240,18 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
             if (monthTxns.length > 0) {
                 // --- SALES LOGIC ---
-                const allSales = monthTxns.filter(t => String(t.parsedType).toLowerCase().includes('sale'));
-                const salesReturns = monthTxns.filter(t => t.parsedType === 'Sales Return');
-                const invoiceTotalRows = monthTxns.filter(t => t.parsedType === 'Invoice Total');
+                const allSales = monthTxns.filter(t => 
+                    String(t.parsedType).toLowerCase().includes('sale') &&
+                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                );
+                const salesReturns = monthTxns.filter(t => 
+                    t.parsedType === 'Sales Return' &&
+                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                );
+                const invoiceTotalRows = monthTxns.filter(t => 
+                    t.parsedType === 'Invoice Total' &&
+                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                );
                 const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary' && t.parsedType !== 'Sales Return');
 
                 const salesAppearsGranular = allSales.filter(t => {
@@ -260,39 +269,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 if (invoiceTotalRows.length === 0 && salesAppearsGranular.length === 0) {
                     selectedSalesRows = salesSummaryRows;
                 } else {
-                    const invoiceMap = new Map();
-                    const getKey = (t) => t.invoiceNo ? String(t.invoiceNo).trim().toUpperCase() : 'NO_INVOICE_' + t.id;
-
-                    salesAppearsGranular.forEach(t => {
-                        const k = getKey(t);
-                        if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
-                        invoiceMap.get(k).granular.push(t);
-                    });
-
-                    invoiceTotalRows.forEach(t => {
-                        const k = getKey(t);
-                        if (!invoiceMap.has(k)) invoiceMap.set(k, { totals: [], granular: [] });
-                        invoiceMap.get(k).totals.push(t);
-                    });
-
-                    invoiceMap.forEach(group => {
-                        // MATCH DASHBOARD LOGIC: Prefer Totals for overall revenue accuracy
-                        if (group.totals.length > 0) {
-                            if (group.totals.length === 1) {
-                                selectedSalesRows.push(group.totals[0]);
-                            } else {
-                                const sorted = [...group.totals].sort((a, b) => {
-                                    const tA = new Date(a.createdAt || 0).getTime();
-                                    const tB = new Date(b.createdAt || 0).getTime();
-                                    return tB - tA;
-                                });
-                                selectedSalesRows.push(sorted[0]);
-                            }
-                        } else {
-                            // Otherwise use granular items
-                            selectedSalesRows.push(...group.granular);
-                        }
-                    });
+                    // [FIX] MATCH DASHBOARD LOGIC: Use only granular sales items to prevent double-counting.
+                    selectedSalesRows = salesAppearsGranular;
                 }
 
                 const uniqueSalesMap = new Map();

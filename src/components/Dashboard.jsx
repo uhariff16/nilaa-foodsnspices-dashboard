@@ -2669,7 +2669,23 @@ const Dashboard = (props) => {
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                         <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--glass-border)', padding: '0.2rem', borderRadius: '0.5rem' }}>
                                             <button
-                                                onClick={() => setExpenseListView('detailed')}
+                                                onClick={() => {
+                                                    setExpenseListView('datewise');
+                                                    setExpenseSort({ key: 'date', direction: 'desc' });
+                                                }}
+                                                style={{
+                                                    background: expenseListView === 'datewise' ? '#3b82f6' : 'transparent',
+                                                    border: 'none', color: expenseListView === 'datewise' ? '#fff' : 'var(--text-secondary)',
+                                                    padding: '0.25rem 0.5rem', borderRadius: '0.3rem', fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 500
+                                                }}
+                                            >
+                                                Datewise
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setExpenseListView('detailed');
+                                                    if (expenseSort.key === 'date') setExpenseSort({ key: 'total', direction: 'desc' });
+                                                }}
                                                 style={{
                                                     background: expenseListView === 'detailed' ? '#3b82f6' : 'transparent',
                                                     border: 'none', color: expenseListView === 'detailed' ? '#fff' : 'var(--text-secondary)',
@@ -2679,7 +2695,10 @@ const Dashboard = (props) => {
                                                 Detailed
                                             </button>
                                             <button
-                                                onClick={() => setExpenseListView('compact')}
+                                                onClick={() => {
+                                                    setExpenseListView('compact');
+                                                    if (expenseSort.key === 'date') setExpenseSort({ key: 'total', direction: 'desc' });
+                                                }}
                                                 style={{
                                                     background: expenseListView === 'compact' ? '#3b82f6' : 'transparent',
                                                     border: 'none', color: expenseListView === 'compact' ? '#fff' : 'var(--text-secondary)',
@@ -2701,11 +2720,23 @@ const Dashboard = (props) => {
                                     </div>
                                 </div>
                                 <div style={{
-                                    display: 'grid', gridTemplateColumns: expenseListView === 'detailed' ? 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)' : 'minmax(250px, 2fr) 100px 120px', padding: '0.75rem',
+                                    display: 'grid', gridTemplateColumns: expenseListView === 'datewise' ? '120px minmax(200px, 2fr) 120px' : (expenseListView === 'detailed' ? 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)' : 'minmax(250px, 2fr) 100px 120px'), padding: '0.75rem',
                                     borderBottom: '1px solid var(--glass-border)',
                                     fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase'
                                 }}>
-                                    {expenseListView === 'detailed' ? (
+                                    {expenseListView === 'datewise' ? (
+                                        <>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'date', direction: p.key === 'date' && p.direction === 'desc' ? 'asc' : 'desc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                Date {expenseSort.key === 'date' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                Expense Details {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                            <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setExpenseSort(p => ({ key: 'total', direction: p.key === 'total' && p.direction === 'desc' ? 'asc' : 'desc' }))}>
+                                                Amount {expenseSort.key === 'total' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
+                                            </div>
+                                        </>
+                                    ) : expenseListView === 'detailed' ? (
                                         <>
                                             <div onClick={() => setExpenseSort(p => ({ key: 'type', direction: p.key === 'type' && p.direction === 'asc' ? 'desc' : 'asc' }))} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                                 Item / Category {expenseSort.key === 'type' && (expenseSort.direction === 'asc' ? '↑' : '↓')}
@@ -2736,6 +2767,38 @@ const Dashboard = (props) => {
                                 </div>
                                 <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                                     {(() => {
+                                        const getCategoryInfo = (keyName) => {
+                                            const nameUpper = keyName.toUpperCase();
+                                            const typePart = nameUpper.split(' - ')[0].trim();
+                                            
+                                            const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A', 'DESI 4A'];
+                                            const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
+                                            const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
+                                            const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
+                                            const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
+                                            const marketingKeywords = ['PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN', 'ADVERTISEMENT'];
+
+                                            const isWaterType = typePart === 'WATER CANE' || waterKeywords.some(k => nameUpper.includes(k));
+                                            const isLabourType = ['SALARY', 'WAGES', 'SALARY ADVANCE'].includes(typePart) || (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP'));
+                                            const isPackagingType = typePart === 'PACKING MATERIALS' || packagingKeywords.some(k => nameUpper.includes(k));
+                                            const isBillType = ['BILLS', 'RENT'].includes(typePart) || billsKeywords.some(k => nameUpper.includes(k));
+                                            const isMarketingType = marketingKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('ESSENTIAL') && !nameUpper.includes('INVOICE DISCOUNT');
+                                            const isExplicitOther = nameUpper.includes('OTHER EXP') || typePart === 'OTHER EXP';
+
+                                            let category = 'Other';
+                                            let badgeColor = 'var(--text-secondary)';
+                                            let badgeBg = 'var(--glass-border)';
+
+                                            if (isWaterType) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
+                                            else if (materialKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP') && typePart !== 'ESSENTIAL ITEMS') { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
+                                            else if (isLabourType) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
+                                            else if (isPackagingType) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
+                                            else if (isBillType) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
+                                            else if (isMarketingType && !isExplicitOther) { category = 'Marketing'; badgeColor = '#eab308'; badgeBg = 'rgba(234, 179, 8, 0.1)'; }
+                                            
+                                            return { category, badgeColor, badgeBg };
+                                        };
+
                                         // Inline Aggregation Logic
                                         const summary = {};
                                         let grandTotal = 0;
@@ -2751,37 +2814,10 @@ const Dashboard = (props) => {
                                                 const type = parts[0];
                                                 const receiver = parts.length > 1 ? parts.slice(1).join(' - ') : '-';
 
-                                                // Categorization for Badges
-                                                let category = 'Other';
-                                                let badgeColor = 'var(--text-secondary)';
-                                                let badgeBg = 'var(--glass-border)';
-
-                                                const nameUpper = key.toUpperCase();
-                                                const typePart = nameUpper.split(' - ')[0].trim();
-
-                                                const materialKeywords = ['GINGER', 'GARLIC', 'JAYAKODI', 'SENTHIL', 'SVG', 'PK', 'PURCHASE', 'POONDU', 'DESI 3A', 'DESI 4A'];
-                                                const labourKeywords = ['SALARY', 'LABOUR', 'WAGES', 'EMPLOYEE', 'DRIVER', 'BATA', 'ADVANCE', 'BONUS', 'OT', 'OVERTIME', 'STAFF', 'COOK'];
-                                                const packagingKeywords = ['POUCH', 'BOX', 'LABEL', 'PACKING', 'PACKAGING', 'ALUMINIUM', 'FOIL', 'COVER', 'TAPE', 'CARRY BAG', 'STICKER'];
-                                                const waterKeywords = ['WATER', 'CAN WATER', 'WATER CAN'];
-                                                const billsKeywords = ['RENT', 'EB BILL', 'ELECTRICITY', 'POWER', 'INTERNET', 'WIFI', 'BROADBAND', 'PHONE', 'RECHARGE', 'BILL'];
-                                                const marketingKeywords = ['PROMO', 'FACEBOOK', 'INSTAGRAM', 'GOOGLE', 'MARKETING', 'ADS', 'CAMPAIGN', 'ADVERTISEMENT'];
-
-                                                const isWaterType = typePart === 'WATER CANE' || waterKeywords.some(k => nameUpper.includes(k));
-                                                const isLabourType = ['SALARY', 'WAGES', 'SALARY ADVANCE'].includes(typePart) || (labourKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP'));
-                                                const isPackagingType = typePart === 'PACKING MATERIALS' || packagingKeywords.some(k => nameUpper.includes(k));
-                                                const isBillType = ['BILLS', 'RENT'].includes(typePart) || billsKeywords.some(k => nameUpper.includes(k));
-                                                const isMarketingType = marketingKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('ESSENTIAL') && !nameUpper.includes('INVOICE DISCOUNT');
-                                                const isExplicitOther = nameUpper.includes('OTHER EXP') || typePart === 'OTHER EXP';
-
-                                                if (isWaterType) { category = 'Water'; badgeColor = '#06b6d4'; badgeBg = 'rgba(6, 182, 212, 0.1)'; }
-                                                else if (materialKeywords.some(k => nameUpper.includes(k)) && !nameUpper.includes('OTHER EXP') && typePart !== 'ESSENTIAL ITEMS') { category = 'Material'; badgeColor = '#f97316'; badgeBg = 'rgba(249, 115, 22, 0.1)'; }
-                                                else if (isLabourType) { category = 'Labour'; badgeColor = '#3b82f6'; badgeBg = 'rgba(59, 130, 246, 0.1)'; }
-                                                else if (isPackagingType) { category = 'Packaging'; badgeColor = '#ec4899'; badgeBg = 'rgba(236, 72, 153, 0.1)'; }
-                                                else if (isBillType) { category = 'Bills'; badgeColor = '#8b5cf6'; badgeBg = 'rgba(139, 92, 246, 0.1)'; }
-                                                else if (isMarketingType && !isExplicitOther) { category = 'Marketing'; badgeColor = '#eab308'; badgeBg = 'rgba(234, 179, 8, 0.1)'; }
+                                                const catInfo = getCategoryInfo(key);
 
                                                 summary[key] = {
-                                                    name: key, type, receiver, category, badgeColor, badgeBg,
+                                                    name: key, type, receiver, category: catInfo.category, badgeColor: catInfo.badgeColor, badgeBg: catInfo.badgeBg,
                                                     total: 0, count: 0, latestDate: ''
                                                 };
                                             }
@@ -2825,6 +2861,91 @@ const Dashboard = (props) => {
                                                 // Handle "Water" as part of Material visually if needed, but strictly it's a category
                                                 if (selectedExpenseCategory === 'Material') return item.category === 'Material' || item.category === 'Water';
                                                 return item.category === selectedExpenseCategory;
+                                            });
+                                        }
+
+                                        if (expenseListView === 'datewise') {
+                                            let datewiseItems = [...expenseTransactions];
+                                            
+                                            // Apply Category Filter
+                                            if (selectedExpenseCategory) {
+                                                datewiseItems = datewiseItems.filter(t => {
+                                                    const key = t.originalDesc || 'Uncategorized';
+                                                    const catInfo = getCategoryInfo(key);
+                                                    if (selectedExpenseCategory === 'Material') return catInfo.category === 'Material' || catInfo.category === 'Water';
+                                                    return catInfo.category === selectedExpenseCategory;
+                                                });
+                                            }
+
+                                            // Sort transactions
+                                            datewiseItems.sort((a, b) => {
+                                                if (expenseSort.key === 'date') {
+                                                    const dA = a.parsedDate || '';
+                                                    const dB = b.parsedDate || '';
+                                                    return expenseSort.direction === 'asc' ? dA.localeCompare(dB) : dB.localeCompare(dA);
+                                                }
+                                                if (expenseSort.key === 'amount' || expenseSort.key === 'total') {
+                                                    const amtA = Math.abs(a.parsedAmount || 0);
+                                                    const amtB = Math.abs(b.parsedAmount || 0);
+                                                    return expenseSort.direction === 'asc' ? amtA - amtB : amtB - amtA;
+                                                }
+                                                const nA = (a.originalDesc || '').toLowerCase();
+                                                const nB = (b.originalDesc || '').toLowerCase();
+                                                return expenseSort.direction === 'asc' ? nA.localeCompare(nB) : nB.localeCompare(nA);
+                                            });
+
+                                            if (datewiseItems.length === 0) {
+                                                return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No transactions found.</div>;
+                                            }
+
+                                            // Format Date Helper
+                                            const formatDateStr = (dateStr) => {
+                                                if (!dateStr) return 'Unknown Date';
+                                                try {
+                                                    const d = new Date(dateStr);
+                                                    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                                } catch(e) { return dateStr; }
+                                            };
+
+                                            return datewiseItems.map((t, i) => {
+                                                const key = t.originalDesc || 'Uncategorized';
+                                                const amount = Math.abs(t.parsedAmount || 0);
+                                                const catInfo = getCategoryInfo(key);
+                                                
+                                                const parts = key.split(' - ');
+                                                const type = parts[0];
+                                                const receiver = parts.length > 1 ? parts.slice(1).join(' - ') : '-';
+
+                                                return (
+                                                    <div key={i} style={{
+                                                        display: 'grid', gridTemplateColumns: '120px minmax(200px, 2fr) 120px', padding: '0.75rem',
+                                                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                                        background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
+                                                    }}>
+                                                        <div style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                            {formatDateStr(t.parsedDate)}
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                                            <div style={{ color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={key}>
+                                                                {type}
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <span style={{
+                                                                    fontSize: '0.65rem', padding: '0.1rem 0.3rem', borderRadius: '0.25rem',
+                                                                    background: catInfo.badgeBg, color: catInfo.badgeColor, fontWeight: 600
+                                                                }}>
+                                                                    {catInfo.category.toUpperCase()}
+                                                                </span>
+                                                                {receiver !== '-' && (
+                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Paid to: {receiver}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ textAlign: 'right', color: 'var(--danger)', fontWeight: 600 }}>
+                                                            {formatCurrency(amount)}
+                                                        </div>
+                                                    </div>
+                                                );
                                             });
                                         }
 

@@ -18,7 +18,8 @@ const initialPermissions = {
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },
         payouts: { read: false, write: false, delete: false },
-        salaries: { read: false, write: false, delete: false }
+        salaries: { read: false, write: false, delete: false },
+        salaryCalculator: false
     },
     payouts: false
 };
@@ -176,7 +177,8 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                     {[
                         { id: 'tracking', label: 'Tracking', icon: <Clock size={14} />, sub: ['read', 'write', 'delete', 'bulk'] },
                         { id: 'payouts', label: 'Payouts', icon: <DollarSign size={14} />, sub: ['read', 'write', 'delete'] },
-                        { id: 'salaries', label: 'Salaries', icon: <Wallet size={14} />, sub: ['read', 'write', 'delete'] }
+                        { id: 'salaries', label: 'Salaries', icon: <Wallet size={14} />, sub: ['read', 'write', 'delete'] },
+                        { id: 'salaryCalculator', label: 'Salary Calculator', icon: <Calculator size={14} /> }
                     ].map(tab => {
                         const isActive = typeof mergedPerms.attendance?.[tab.id] === 'object' ? Object.values(mergedPerms.attendance[tab.id]).some(v => v) : !!mergedPerms.attendance?.[tab.id];
                         return (
@@ -191,7 +193,7 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                                         {tab.label}
                                     </button>
                                 </div>
-                                {isActive && (
+                                {isActive && tab.sub && (
                                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingLeft: '2rem' }}>
                                         {tab.sub.map(sub => (
                                             <button

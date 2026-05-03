@@ -137,7 +137,7 @@ const HRSettings = () => {
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <Clock size={16} color="#3b82f6" />
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Standard Daily Hours</label>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Daily Fixed Working Hours</label>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <input
@@ -148,7 +148,7 @@ const HRSettings = () => {
                             />
                             <span style={{ fontWeight: 600 }}>Hrs</span>
                         </div>
-                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Hours before OT kicks in.</p>
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Fixed hours per day. Any work beyond this is calculated as OT.</p>
                     </div>
 
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>

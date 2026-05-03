@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabaseClient';
 import PayslipGenerator from './PayslipGenerator';
+import SalarySimulator from './admin/SalarySimulator';
 
 // Initial helper for global use
 const formatCurrency = (val) => {
@@ -71,9 +72,33 @@ const getSpecialDayType = (dateStr, holidays = []) => {
 
 const isSpecialDay = (dateStr, holidays = []) => getSpecialDayType(dateStr, holidays).type !== 'none';
 
+const getWorkingDaysInMonth = (year, month, holidays = []) => {
+    let count = 0;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (!isSpecialDay(dateStr, holidays)) {
+            count++;
+        }
+    }
+    return count;
+};
+
+const calculateMonthlyHourlyRate = (emp, year, month, config) => {
+    if (!emp || emp.payout_type !== 'Monthly') return parseFloat(emp?.hourly_rate || config.default_hourly_rate);
+    
+    const workingDays = getWorkingDaysInMonth(year, month, config.national_holidays);
+    const totalFixedHours = workingDays * (config.standard_daily_hours || 8);
+    const monthlySalary = parseFloat(emp.monthly_salary || 0);
+    
+    if (totalFixedHours === 0) return 0;
+    return monthlySalary / totalFixedHours;
+};
+
 const TimeAttendance = ({ onBack, hideBack = false }) => {
     const { user, role, logout: authLogout, canAccessPayouts, hasPermission } = useAuth();
     const canViewPayouts = role === 'admin' || hasPermission('attendance.payouts') || hasPermission('attendance.salaries');
+    const canViewCalculator = role === 'admin' || hasPermission('attendance.salaryCalculator');
     const { theme, toggleTheme } = useTheme();
     const [attendanceData, setAttendanceData] = useState([]);
     const [employees, setEmployees] = useState([]);
@@ -100,9 +125,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
     // Initial Load from DB
     useEffect(() => {
-        fetchAttendance();
-        fetchPayments();
-    }, [monthFilter, yearFilter]);
+        if (employees.length > 0) {
+            fetchAttendance();
+            fetchPayments();
+        }
+    }, [monthFilter, yearFilter, employees]);
 
     useEffect(() => {
         fetchEmployees();
@@ -180,7 +207,19 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                 regularHours = isSpecial ? 0 : Math.min(hoursWorked, payrollConfig.standard_daily_hours);
                                 otHours = isSpecial ? hoursWorked : Math.max(0, hoursWorked - payrollConfig.standard_daily_hours);
                                 const r = parseFloat(item.rate || payrollConfig.default_hourly_rate);
-                                dailyWage = (regularHours * r) + (otHours * r * payrollConfig.ot_multiplier);
+                                
+                                // Look up payout type - Cutoff: Only apply Monthly logic from May 2026 onwards
+                                const emp = employees.find(e => e.emp_id === item.emp_id);
+                                const isBeforeMay2026 = new Date(item.date) < new Date('2026-05-01');
+                                const payoutType = isBeforeMay2026 ? 'Hourly' : (emp?.payout_type || 'Hourly');
+
+                                if (payoutType === 'Monthly') {
+                                    const dateObj = new Date(item.date);
+                                    const dynamicRate = calculateMonthlyHourlyRate(emp, dateObj.getFullYear(), dateObj.getMonth() + 1, payrollConfig);
+                                    dailyWage = (otHours * dynamicRate * payrollConfig.ot_multiplier);
+                                } else {
+                                    dailyWage = (regularHours * r) + (otHours * r * payrollConfig.ot_multiplier);
+                                }
                             }
                         }
                     } else if (hoursWorked > 0) {
@@ -191,6 +230,17 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             otHours = hoursWorked;
                             const r = parseFloat(item.rate || payrollConfig.default_hourly_rate);
                             dailyWage = (otHours * r * payrollConfig.ot_multiplier);
+                        } else {
+                            // Even if not a special day, check if we need to adjust for Monthly payout
+                            const emp = employees.find(e => e.emp_id === item.emp_id);
+                            const isBeforeMay2026 = new Date(item.date) < new Date('2026-05-01');
+                            const payoutType = isBeforeMay2026 ? 'Hourly' : (emp?.payout_type || 'Hourly');
+                            
+                            if (payoutType === 'Monthly') {
+                                const dateObj = new Date(item.date);
+                                const dynamicRate = calculateMonthlyHourlyRate(emp, dateObj.getFullYear(), dateObj.getMonth() + 1, payrollConfig);
+                                dailyWage = (otHours * dynamicRate * payrollConfig.ot_multiplier);
+                            }
                         }
                     }
 
@@ -341,7 +391,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     if (id) {
                         employeeMaster[id] = {
                             name: row['Emp Name'] || row['Name'],
-                            rate: parseFloat(row['Hourly Rate'] || row['Rate'] || payrollConfig.default_hourly_rate)
+                            rate: parseFloat(row['Hourly Rate'] || row['Rate'] || payrollConfig.default_hourly_rate),
+                            payout_type: row['Payout Type'] || row['Type'] || 'Hourly',
+                            monthly_salary: parseFloat(row['Monthly Salary'] || 0)
                         };
                     }
                 });
@@ -446,7 +498,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const regularHours = isSpecial ? 0 : Math.min(totalWorkHours, payrollConfig.standard_daily_hours);
             const otHours = isSpecial ? totalWorkHours : Math.max(0, totalWorkHours - payrollConfig.standard_daily_hours);
             const rate = masterInfo.rate || payrollConfig.default_hourly_rate;
-            const dailyWage = (regularHours * rate) + (otHours * rate * payrollConfig.ot_multiplier);
+            const isBeforeMay2026 = new Date(dateStr) < new Date('2026-05-01');
+            const payoutType = isBeforeMay2026 ? 'Hourly' : (masterInfo.payout_type || 'Hourly');
+            
+            let dailyWage = 0;
+            if (payoutType === 'Monthly') {
+                dailyWage = (otHours * rate * payrollConfig.ot_multiplier);
+            } else {
+                dailyWage = (regularHours * rate) + (otHours * rate * payrollConfig.ot_multiplier);
+            }
             const deductions = parseFloat(row[deductionIdx] || 0) || 0;
             const deductionReason = row[deductionReasonIdx] || '';
 
@@ -477,6 +537,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
         setAttendanceData(parsed);
         if (parsed.length > 0) {
+            // Delay slightly to ensure employees state is available if this was called immediately
             autoSyncToDatabase(parsed);
         }
     };
@@ -495,6 +556,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 break_hours: row.breakHours,
                 daily_wage: row.dailyWage,
                 rate: row.rate,
+                payout_type: employees.find(e => e.emp_id === row.empId)?.payout_type || 'Hourly',
                 deductions: row.deductions || 0,
                 deduction_reason: row.deductionReason || ''
             }));
@@ -588,6 +650,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             }
         });
 
+        // 3. Add Monthly Salaries for Salaried Employees - Only for May 2026 onwards
+        const isSelectedMonthBeforeMay2026 = yearFilter < 2026 || (yearFilter === 2026 && monthFilter < 5);
+        if (!isSelectedMonthBeforeMay2026) {
+            employees.forEach(emp => {
+                if (emp.payout_type === 'Monthly' && emp.is_active) {
+                    const matchesSearch = emp.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        emp.name.toLowerCase().includes(searchTerm.toLowerCase());
+                    if (matchesSearch) {
+                        stats.totalEarned += parseFloat(emp.monthly_salary || 0);
+                    }
+                }
+            });
+        }
+
         // [LOGIC UPDATE]: Total Entitlement now includes ALL bonuses.
         // Deductible bonuses reduce the pending balance (debt) because they are not paid as cash outflows.
         const totalEntitled = stats.totalEarned + stats.nonDeductibleBonuses + stats.deductibleBonuses;
@@ -612,6 +688,17 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const deductions = parseFloat(row.deductions || 0);
             balances[row.empId].earned += (dailyWage + bonus - deductions);
         });
+
+        // Add Monthly Salaries - Only for May 2026 onwards
+        const isSelectedMonthBeforeMay2026 = yearFilter < 2026 || (yearFilter === 2026 && monthFilter < 5);
+        if (!isSelectedMonthBeforeMay2026) {
+            employees.forEach(emp => {
+                if (emp.payout_type === 'Monthly' && emp.is_active) {
+                    if (!balances[emp.emp_id]) balances[emp.emp_id] = { earned: 0, paid: 0 };
+                    balances[emp.emp_id].earned += parseFloat(emp.monthly_salary || 0);
+                }
+            });
+        }
 
         // Accumulate payments
         paymentData.forEach(p => {
@@ -712,6 +799,23 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 permTotalBonus += bonus;
             }
         });
+
+        // Add Monthly Salaries to Cost Metrics - Only for May 2026 onwards
+        const isSelectedMonthBeforeMay2026 = yearFilter < 2026 || (yearFilter === 2026 && monthFilter < 5);
+        
+        if (!isSelectedMonthBeforeMay2026) {
+            employees.forEach(emp => {
+                if (emp.payout_type === 'Monthly' && emp.is_active) {
+                    const salary = parseFloat(emp.monthly_salary || 0);
+                    totalCost += salary;
+                    if (emp.staff_type === 'Temporary') {
+                        tempTotalCost += salary;
+                    } else {
+                        permTotalCost += salary;
+                    }
+                }
+            });
+        }
 
         // [LOGICAL FIX] Include standalone Bonus Payouts from employee_payments
         filteredPayments.forEach(p => {
@@ -1189,6 +1293,23 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         Salaries & Advances
                     </button>
                 )}
+                {canViewCalculator && (
+                    <button
+                        onClick={() => setActiveTab('simulator')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: activeTab === 'simulator' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'simulator' ? '2px solid #3b82f6' : 'none',
+                            color: activeTab === 'simulator' ? '#3b82f6' : 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Salary Calculator
+                    </button>
+                )}
             </div>
 
             {(activeTab === 'attendance' || activeTab === 'payouts') && (
@@ -1486,10 +1607,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Employee</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 1</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 2</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Shift 3</th>
-                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Shift 4</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Shift Details</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: '#f59e0b' }}>Total Hours</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
@@ -1538,10 +1656,25 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                                     border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
                                                                 }}>{row.attendance_status || 'Present'}</div>
                                                             </td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime}</div></td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime2}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime2}</div></td>
-                                                            <td style={{ padding: '1rem' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime3}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime3}</div></td>
-                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}><div style={{ fontSize: '0.8rem', color: '#10b981' }}>{row.inTime4}</div><div style={{ fontSize: '0.8rem', color: '#ef4444' }}>{row.outTime4}</div></td>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                                {emp?.payout_type === 'Monthly' ? (
+                                                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Salaried (Fixed)</span>
+                                                                ) : (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                        {row.shifts?.slice(0, 2).map((s, idx) => (
+                                                                            <div key={idx} style={{ fontSize: '0.75rem' }}>
+                                                                                <span style={{ color: '#10b981' }}>{s.in}</span> - <span style={{ color: '#ef4444' }}>{s.out}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                        {row.shifts?.length > 2 && <span style={{ fontSize: '0.65rem', color: '#3b82f6' }}>+{row.shifts.length - 2} more</span>}
+                                                                        {(!row.shifts || row.shifts.length === 0) && (
+                                                                            <div style={{ fontSize: '0.75rem' }}>
+                                                                                <span style={{ color: '#10b981' }}>{row.inTime}</span> - <span style={{ color: '#ef4444' }}>{row.outTime}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </td>
                                                             <td style={{ padding: '1rem' }}>{Math.round(row.breakHours * 60)}m</td>
                                                             <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.03)' }}>{formatDuration(row.hoursWorked)}</td>
                                                             <td style={{ padding: '1rem' }}>
@@ -1762,6 +1895,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         </div>
                     </div>
                 </>
+            )}
+
+            {activeTab === 'simulator' && canViewCalculator && (
+                <div className="animate-slide-up">
+                    <SalarySimulator />
+                </div>
             )}
 
             {activeTab === 'payments' && (role === 'admin' || hasPermission('attendance.salaries')) && (
@@ -2053,6 +2192,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
         shifts: initialData?.shifts?.length > 0
             ? [...initialData.shifts, ...Array.from({ length: Math.max(0, 4 - initialData.shifts.length) }, () => ({ in: '', out: '' }))].slice(0, 4)
             : Array.from({ length: 4 }, () => ({ in: '', out: '' })),
+        totalHours: initialData?.total_hours || initialData?.hoursWorked || config.standard_daily_hours || 8,
         breakMins: initialData?.break_hours ? initialData.break_hours * 60 : 0,
         rate: initialData?.rate || config.default_hourly_rate,
         bonus: initialData?.bonus || 0,
@@ -2165,23 +2305,38 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
             let wage = 0;
             let rate = parseFloat(formData.rate);
 
-            if (isPresent) {
-                formData.shifts.forEach(s => {
-                    const inD = getDecimalHours(s.in);
-                    const outD = getDecimalHours(s.out);
-                    if (inD !== null && outD !== null) {
-                        let diff = outD - inD;
-                        if (diff < 0) diff += 24;
-                        totalH += diff;
-                    }
-                });
+            const currentEmp = employees.find(e => 
+                e.emp_id.replace(/-/g, '').toUpperCase() === formData.empId.replace(/-/g, '').toUpperCase()
+            );
+            const payoutType = currentEmp?.payout_type || 'Hourly';
 
-                totalH = Math.max(0, totalH - (formData.breakMins / 60));
+            if (isPresent) {
+                if (payoutType === 'Monthly') {
+                    totalH = parseFloat(formData.totalHours);
+                } else {
+                    formData.shifts.forEach(s => {
+                        const inD = getDecimalHours(s.in);
+                        const outD = getDecimalHours(s.out);
+                        if (inD !== null && outD !== null) {
+                            let diff = outD - inD;
+                            if (diff < 0) diff += 24;
+                            totalH += diff;
+                        }
+                    });
+                    totalH = Math.max(0, totalH - (formData.breakMins / 60));
+                }
 
                 const isSpecial = isSpecialDay(formData.date, config.national_holidays);
                 regH = isSpecial ? 0 : Math.min(totalH, config.standard_daily_hours);
                 otH = isSpecial ? totalH : Math.max(0, totalH - config.standard_daily_hours);
-                wage = (regH * rate) + (otH * rate * config.ot_multiplier);
+
+                const dateObj = new Date(formData.date);
+                if (payoutType === 'Monthly') {
+                    const dynamicRate = calculateMonthlyHourlyRate(currentEmp, dateObj.getFullYear(), dateObj.getMonth() + 1, config);
+                    wage = (otH * dynamicRate * config.ot_multiplier);
+                } else {
+                    wage = (regH * rate) + (otH * rate * config.ot_multiplier);
+                }
             }
 
             const record = {
@@ -2278,12 +2433,12 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Name</label>
                             <input type="text" required value={formData.empName} onChange={e => setFormData({ ...formData, empName: e.target.value })} placeholder="Full Name" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                         </div>
-                        {!isPaymentTab && (
+                        {!isPaymentTab && (employees.find(e => e.emp_id.replace(/-/g, '').toUpperCase() === formData.empId.replace(/-/g, '').toUpperCase())?.payout_type !== 'Monthly' && (
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Hourly Rate (₹)</label>
                                 <input type="number" required value={formData.rate} onChange={e => setFormData({ ...formData, rate: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                             </div>
-                        )}
+                        ))}
                     </div>
 
                     {isPaymentTab ? (
@@ -2404,40 +2559,77 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
 
                     {!isPaymentTab && (formData.attendance_status === 'Present' ? (
                         <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <h4 style={{ margin: 0, fontSize: '0.9rem' }}>Work Shifts</h4>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Break (min):</label>
-                                    <input type="number" value={formData.breakMins} onChange={e => setFormData({ ...formData, breakMins: e.target.value })} style={{ width: '60px', padding: '0.3rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', textAlign: 'center' }} />
-                                </div>
-                            </div>
+                            {(() => {
+                                const currentEmp = employees.find(e => 
+                                    e.emp_id.replace(/-/g, '').toUpperCase() === formData.empId.replace(/-/g, '').toUpperCase()
+                                );
+                                const payoutType = currentEmp?.payout_type || 'Hourly';
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                {formData.shifts.map((shift, i) => (
-                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span>Shift {i + 1}</span>
-                                            <Clock size={12} />
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <input type="time" title="In Time" value={shift.in} onChange={e => {
-                                                    const news = [...formData.shifts];
-                                                    news[i].in = e.target.value;
-                                                    setFormData({ ...formData, shifts: news });
-                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                if (payoutType === 'Monthly') {
+                                    return (
+                                        <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <h4 style={{ margin: '0 0 0.25rem 0', color: '#10b981' }}>Monthly Salaried Payout</h4>
+                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Shift entries are disabled for salaried staff. OT is calculated for work beyond {config.standard_daily_hours} hours.</p>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Total Hours Worked</label>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <input
+                                                            type="number"
+                                                            step="0.5"
+                                                            value={formData.totalHours}
+                                                            onChange={e => setFormData({ ...formData, totalHours: e.target.value })}
+                                                            style={{ width: '80px', padding: '0.5rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', textAlign: 'center', fontSize: '1rem', fontWeight: 'bold' }}
+                                                        />
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>hrs</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style={{ flex: 1 }}>
-                                                <input type="time" title="Out Time" value={shift.out} onChange={e => {
-                                                    const news = [...formData.shifts];
-                                                    news[i].out = e.target.value;
-                                                    setFormData({ ...formData, shifts: news });
-                                                }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                            <h4 style={{ margin: 0, fontSize: '0.9rem' }}>Work Shifts</h4>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Break (min):</label>
+                                                <input type="number" value={formData.breakMins} onChange={e => setFormData({ ...formData, breakMins: e.target.value })} style={{ width: '60px', padding: '0.3rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', textAlign: 'center' }} />
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            {formData.shifts.map((shift, i) => (
+                                                <div key={i} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span>Shift {i + 1}</span>
+                                                        <Clock size={12} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <input type="time" title="In Time" value={shift.in} onChange={e => {
+                                                                const news = [...formData.shifts];
+                                                                news[i].in = e.target.value;
+                                                                setFormData({ ...formData, shifts: news });
+                                                            }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <input type="time" title="Out Time" value={shift.out} onChange={e => {
+                                                                const news = [...formData.shifts];
+                                                                news[i].out = e.target.value;
+                                                                setFormData({ ...formData, shifts: news });
+                                                            }} style={{ width: '100%', padding: '0.4rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.3rem', fontSize: '0.85rem' }} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     ) : (
                         <div style={{ marginBottom: '1.5rem' }}>

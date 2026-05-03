@@ -10,6 +10,27 @@ const formatCurrency = (amount) => {
     }).format(amount);
 };
 
+const isSpecialDay = (dateStr, holidays = []) => {
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    const day = date.getDay();
+    const isSunday = day === 0;
+    const holidayEntry = Array.isArray(holidays) ? holidays.find(h => (typeof h === 'string' ? h : (h?.date || '')) === dateStr) : null;
+    return !!holidayEntry || isSunday;
+};
+
+const getWorkingDaysInMonth = (year, month, holidays = []) => {
+    let count = 0;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (!isSpecialDay(dateStr, holidays)) {
+            count++;
+        }
+    }
+    return count;
+};
+
 const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentData, payrollConfig }) => {
     const [selectedEmp, setSelectedEmp] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
@@ -48,6 +69,18 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
         let totalBonusPoints = 0;
         let daysPresent = 0;
 
+        const isSelectedMonthBeforeMay2026 = parseInt(selectedYear) < 2026 || (parseInt(selectedYear) === 2026 && parseInt(selectedMonth) < 5);
+        const isMonthly = employee.payout_type === 'Monthly' && !isSelectedMonthBeforeMay2026;
+        
+        let dynamicRate = parseFloat(employee.hourly_rate || payrollConfig?.default_hourly_rate || 23);
+        if (isMonthly) {
+            const workingDays = getWorkingDaysInMonth(selectedYear, selectedMonth, payrollConfig?.national_holidays || []);
+            const totalFixedHours = workingDays * (payrollConfig?.standard_daily_hours || 8);
+            if (totalFixedHours > 0) {
+                dynamicRate = parseFloat(employee.monthly_salary || 0) / totalFixedHours;
+            }
+        }
+
         monthAttendance.forEach(att => {
             if (att.attendance_status === 'Present' || (att.attendance_status || '').toLowerCase().includes('present')) {
                 daysPresent += 1;
@@ -61,7 +94,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                 totalBonusPoints += parseFloat(att.bonus || 0);
                 totalDeductions += parseFloat(att.deductions || 0);
 
-                const rate = parseFloat(employee.hourly_rate || payrollConfig?.default_hourly_rate || 23);
+                const rate = dynamicRate;
                 const otMultiplier = parseFloat(payrollConfig?.ot_multiplier || 1.5);
                 const otRate = rate * otMultiplier;
                 
@@ -75,6 +108,11 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
         });
 
         let grossEarned = totalBaseWage + totalOTPay;
+        const monthlySalary = parseFloat(employee.monthly_salary || 0);
+
+        if (isMonthly) {
+            grossEarned += monthlySalary;
+        }
 
         let totalAdvancesStr = 0;
         let totalSalariesPaidStr = 0;
@@ -139,6 +177,8 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             totalAdvancesTaken: totalAdvancesStr,
             totalSalariesDisbursed: totalDisbursed,
             finalBalanceForMonth: currentStandingBalance,
+            isMonthly,
+            monthlySalary,
             generatedDate: new Date().toLocaleDateString('en-IN')
         };
 
@@ -316,9 +356,17 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '1rem' }}>
                                         <tbody>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>Base Wages (Reg. Hours)</td>
+                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>
+                                                    {payslipData.isMonthly ? 'Base Wages (Overtime Only)' : 'Base Wages (Reg. Hours)'}
+                                                </td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalBaseWage)}</td>
                                             </tr>
+                                            {payslipData.isMonthly && (
+                                                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.4rem 0', color: '#475569' }}>Monthly Fixed Salary</td>
+                                                    <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.monthlySalary)}</td>
+                                                </tr>
+                                            )}
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '0.4rem 0', color: '#475569' }}>Overtime Pay</td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalOTPay)}</td>

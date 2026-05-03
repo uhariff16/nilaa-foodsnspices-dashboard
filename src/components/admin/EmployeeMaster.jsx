@@ -27,6 +27,8 @@ const EmployeeMaster = () => {
         account_no: '',
         ifsc_code: '',
         hourly_rate: '',
+        payout_type: 'Hourly',
+        monthly_salary: '',
         staff_type: 'Permanent',
         is_active: true
     });
@@ -90,6 +92,8 @@ const EmployeeMaster = () => {
                 account_no: emp.account_no || '',
                 ifsc_code: emp.ifsc_code || '',
                 hourly_rate: emp.hourly_rate,
+                payout_type: emp.payout_type || 'Hourly',
+                monthly_salary: emp.monthly_salary || '',
                 staff_type: emp.staff_type || 'Permanent',
                 is_active: emp.is_active ?? true
             });
@@ -110,6 +114,8 @@ const EmployeeMaster = () => {
                 account_no: '',
                 ifsc_code: '',
                 hourly_rate: '',
+                payout_type: 'Hourly',
+                monthly_salary: '',
                 staff_type: 'Permanent',
                 is_active: true
             });
@@ -134,6 +140,8 @@ const EmployeeMaster = () => {
                 account_no: formData.account_no,
                 ifsc_code: formData.ifsc_code,
                 hourly_rate: parseFloat(formData.hourly_rate),
+                payout_type: formData.payout_type,
+                monthly_salary: formData.payout_type === 'Monthly' ? parseFloat(formData.monthly_salary || 0) : 0,
                 staff_type: formData.staff_type,
                 is_active: formData.is_active
             };
@@ -232,7 +240,7 @@ const EmployeeMaster = () => {
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Contact info</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Hourly Rate</th>
-                            <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Type</th>
+                            <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>Type / Payout</th>
                             <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 600 }}>Actions</th>
                         </tr>
                     </thead>
@@ -278,17 +286,33 @@ const EmployeeMaster = () => {
                                     </div>
                                 </td>
                                 <td style={{ padding: '1rem' }}>
-                                    <span style={{
-                                        padding: '0.2rem 0.6rem',
-                                        borderRadius: '0.5rem',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 600,
-                                        background: emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(168, 85, 247, 0.1)',
-                                        color: emp.staff_type === 'Temporary' ? '#f59e0b' : '#a855f7',
-                                        border: `1px solid ${emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(168, 85, 247, 0.2)'}`
-                                    }}>
-                                        {emp.staff_type || 'Permanent'}
-                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        <span style={{
+                                            padding: '0.2rem 0.6rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            background: emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(168, 85, 247, 0.1)',
+                                            color: emp.staff_type === 'Temporary' ? '#f59e0b' : '#a855f7',
+                                            border: `1px solid ${emp.staff_type === 'Temporary' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(168, 85, 247, 0.2)'}`,
+                                            width: 'fit-content'
+                                        }}>
+                                            {emp.staff_type || 'Permanent'}
+                                        </span>
+                                        <span style={{
+                                            padding: '0.2rem 0.6rem',
+                                            borderRadius: '0.5rem',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            background: emp.payout_type === 'Monthly' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+                                            color: emp.payout_type === 'Monthly' ? '#10b981' : '#3b82f6',
+                                            border: `1px solid ${emp.payout_type === 'Monthly' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`,
+                                            width: 'fit-content'
+                                        }}>
+                                            {emp.payout_type || 'Hourly'}
+                                            {emp.payout_type === 'Monthly' && ` (₹${emp.monthly_salary})`}
+                                        </span>
+                                    </div>
                                 </td>
                                 <td style={{ padding: '1rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -462,13 +486,17 @@ const EmployeeMaster = () => {
                                                 <IndianRupee size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
                                                 <input
                                                     type="number"
-                                                    required
-                                                    value={formData.hourly_rate}
+                                                    required={formData.payout_type !== 'Monthly'}
+                                                    disabled={formData.payout_type === 'Monthly'}
+                                                    value={formData.payout_type === 'Monthly' ? '' : formData.hourly_rate}
                                                     onChange={e => setFormData({ ...formData, hourly_rate: e.target.value })}
-                                                    placeholder="100"
-                                                    style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                                    placeholder={formData.payout_type === 'Monthly' ? "Auto-calculated" : "100"}
+                                                    style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)', opacity: formData.payout_type === 'Monthly' ? 0.7 : 1 }}
                                                 />
                                             </div>
+                                            {formData.payout_type === 'Monthly' && (
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.65rem', color: '#10b981' }}>Derived from monthly salary & working days.</p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -504,6 +532,41 @@ const EmployeeMaster = () => {
                                                 style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
                                             />
                                         </div>
+                                    </div>
+
+                                    <h4 style={{ margin: '1.5rem 0 1rem 0', fontSize: '0.875rem', color: '#8b5cf6', borderBottom: '1px solid rgba(139, 92, 246, 0.2)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <RefreshCw size={16} /> Payout Configuration
+                                    </h4>
+
+                                    <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Payout Type</label>
+                                            <select
+                                                required
+                                                value={formData.payout_type}
+                                                onChange={e => setFormData({ ...formData, payout_type: e.target.value })}
+                                                style={{ width: '100%', padding: '0.75rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                            >
+                                                <option value="Hourly" style={{ background: 'var(--bg-secondary)' }}>Hourly (Shift Basis)</option>
+                                                <option value="Monthly" style={{ background: 'var(--bg-secondary)' }}>Monthly (Fixed Salary)</option>
+                                            </select>
+                                        </div>
+                                        {formData.payout_type === 'Monthly' && (
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Monthly Fixed Salary (₹)</label>
+                                                <div style={{ position: 'relative' }}>
+                                                    <IndianRupee size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                                                    <input
+                                                        type="number"
+                                                        required={formData.payout_type === 'Monthly'}
+                                                        value={formData.monthly_salary}
+                                                        onChange={e => setFormData({ ...formData, monthly_salary: e.target.value })}
+                                                        placeholder="25000"
+                                                        style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.25rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1rem' }}>

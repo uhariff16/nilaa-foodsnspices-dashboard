@@ -19,7 +19,8 @@ const defaultPermissions = {
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },
         payouts: { read: false, write: false, delete: false },
-        salaries: { read: false, write: false, delete: false }
+        salaries: { read: false, write: false, delete: false },
+        salaryCalculator: false
     },
     payouts: false
 };
@@ -42,6 +43,8 @@ const mergePermissions = (fetched) => {
         ...fetched,
         dashboard: { ...defaultPermissions.dashboard, ...(fetched.dashboard || {}) },
         attendance: {
+            ...defaultPermissions.attendance,
+            ...(fetched.attendance || {}),
             tracking: { ...defaultPermissions.attendance.tracking, ...expandSection(fetched.attendance?.tracking, defaultPermissions.attendance.tracking) },
             payouts: { ...defaultPermissions.attendance.payouts, ...expandSection(fetched.attendance?.payouts, defaultPermissions.attendance.payouts) },
             salaries: { ...defaultPermissions.attendance.salaries, ...expandSection(fetched.attendance?.salaries, defaultPermissions.attendance.salaries) }

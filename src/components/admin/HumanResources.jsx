@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Clock, TrendingUp, DollarSign, UserCheck, Settings } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
 import HRSettings from './HRSettings';
 import EmployeeMaster from './EmployeeMaster';
 import TimeAttendance from '../TimeAttendance';
+import SalarySimulator from './SalarySimulator';
+import { Users, Clock, TrendingUp, DollarSign, UserCheck, Settings, Calculator } from 'lucide-react';
 
 const HumanResources = () => {
-    const [activeSubTab, setActiveSubTab] = useState('master'); // 'master' | 'attendance' | 'settings'
+    const { hasPermission, isAdmin } = useAuth();
+    const canViewCalculator = isAdmin || hasPermission('attendance.salaryCalculator');
+    
+    const [activeSubTab, setActiveSubTab] = useState('master');
     const [stats, setStats] = useState({
         total: 0,
         active: 0,
@@ -59,6 +64,16 @@ const HumanResources = () => {
                             <Clock size={16} />
                             Attendance Tracking
                         </button>
+                        {canViewCalculator && (
+                            <button
+                                onClick={() => setActiveSubTab('simulator')}
+                                className={`btn-toggle ${activeSubTab === 'simulator' ? 'active blue' : ''}`}
+                                style={{ '--accent-color': '#3b82f6' }}
+                            >
+                                <Calculator size={16} />
+                                Salary Calculator
+                            </button>
+                        )}
                         <button
                             onClick={() => setActiveSubTab('settings')}
                             className={`btn-toggle ${activeSubTab === 'settings' ? 'active indigo' : ''}`}
@@ -109,6 +124,10 @@ const HumanResources = () => {
             ) : activeSubTab === 'attendance' ? (
                 <div className="glass-panel animate-slide-up" style={{ padding: '0', background: 'transparent', border: 'none' }}>
                     <TimeAttendance hideBack={true} />
+                </div>
+            ) : activeSubTab === 'simulator' ? (
+                <div className="animate-slide-up">
+                    <SalarySimulator />
                 </div>
             ) : (
                 <div className="animate-slide-up">

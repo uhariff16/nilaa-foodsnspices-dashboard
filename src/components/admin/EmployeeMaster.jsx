@@ -281,8 +281,17 @@ const EmployeeMaster = () => {
                                 </td>
                                 <td style={{ padding: '1rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.2rem' }}>
-                                        <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>₹{emp.hourly_rate}</span>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>/ hr</span>
+                                        {emp.payout_type === 'Monthly' ? (
+                                            <>
+                                                <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>₹{emp.monthly_salary}</span>
+                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>/ mo</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>₹{emp.hourly_rate}</span>
+                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>/ hr</span>
+                                            </>
+                                        )}
                                     </div>
                                 </td>
                                 <td style={{ padding: '1rem' }}>

@@ -72,7 +72,36 @@ const SalarySimulator = () => {
     };
 
     const results = useMemo(() => {
-        const workingDays = getWorkingDaysInMonth(year, month, config.national_holidays);
+        const holidayList = [];
+        let workingDays = 0;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateObj = new Date(dateStr);
+            const dayName = dateObj.toLocaleString('default', { weekday: 'short' });
+            
+            // Sunday check
+            const isSunday = dateObj.getDay() === 0;
+            
+            // Holiday check
+            const holidayEntry = Array.isArray(config.national_holidays) 
+                ? config.national_holidays.find(h => (typeof h === 'string' ? h : h?.date) === dateStr) 
+                : null;
+            
+            if (isSunday || holidayEntry) {
+                holidayList.push({
+                    date: dateStr,
+                    day: d,
+                    dayName,
+                    type: isSunday ? 'Sunday' : 'Holiday',
+                    reason: typeof holidayEntry === 'object' ? holidayEntry.reason : (isSunday ? 'Weekly Off' : 'Public Holiday')
+                });
+            } else {
+                workingDays++;
+            }
+        }
+
         const totalFixedHours = workingDays * dailyHours;
         const hourlyRate = totalFixedHours > 0 ? monthlySalary / totalFixedHours : 0;
         const otRate = hourlyRate * otMultiplier;
@@ -86,6 +115,7 @@ const SalarySimulator = () => {
             otRate,
             otPay,
             totalPayout,
+            holidayList,
             monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' })
         };
     }, [monthlySalary, month, year, projectedOT, dailyHours, otMultiplier, config]);
@@ -213,6 +243,59 @@ const SalarySimulator = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Holidays & Off-days List */}
+                    <div className="glass-panel" style={{ marginTop: '1rem', padding: '1.5rem' }}>
+                        <h4 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                            <Calendar size={16} />
+                            Holidays & Sundays ({results.monthName})
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                            {results.holidayList.length > 0 ? (
+                                results.holidayList.map((h, i) => (
+                                    <div key={i} style={{ 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center', 
+                                        padding: '0.6rem 0.8rem', 
+                                        background: h.type === 'Sunday' ? 'rgba(99, 102, 241, 0.05)' : 'rgba(239, 68, 68, 0.05)', 
+                                        borderRadius: '0.5rem',
+                                        border: `1px solid ${h.type === 'Sunday' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(239, 68, 68, 0.1)'}`
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <div style={{ 
+                                                fontSize: '0.85rem', 
+                                                fontWeight: 700, 
+                                                color: h.type === 'Sunday' ? '#6366f1' : '#ef4444',
+                                                minWidth: '2.5rem'
+                                            }}>
+                                                {h.day} {h.dayName}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: 500 }}>{h.reason}</div>
+                                        </div>
+                                        <div style={{ 
+                                            fontSize: '0.65rem', 
+                                            padding: '0.2rem 0.5rem', 
+                                            borderRadius: '1rem', 
+                                            background: h.type === 'Sunday' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                            color: h.type === 'Sunday' ? '#6366f1' : '#ef4444',
+                                            fontWeight: 700,
+                                            textTransform: 'uppercase'
+                                        }}>
+                                            {h.type}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                    No holidays or Sundays in this month.
+                                </div>
+                            )}
+                        </div>
+                        <p style={{ margin: '1rem 0 0 0', fontSize: '0.65rem', color: 'var(--text-secondary)', textAlign: 'center', fontStyle: 'italic' }}>
+                            These days are excluded from the "Working Days" count for hourly rate calculation.
+                        </p>
                     </div>
                 </div>
 

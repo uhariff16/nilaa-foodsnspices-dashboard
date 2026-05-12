@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Package, Truck, IndianRupee, Layers } from 'lucide-react';
 import gingerIcon from '../assets/ginger.png';
@@ -83,6 +83,14 @@ const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, custo
 );
 
 const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], selectedMonth, selectedYear }) => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     console.log("ProcurementDashboard Render. SummaryData:", summaryData?.length, "Selected:", selectedMonth, selectedYear);
 
     // Helper: Filter by Month/Year
@@ -310,7 +318,12 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             {/* Top Stats Grid - Compact Cards */}
             {/* 1. FINANCIALS ROW: Material Costs + Total Spend */}
             <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>FINANCIAL OVERVIEW</h4>
-            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(250px, 1fr))', 
+                gap: isMobile ? '0.75rem' : '1.5rem',
+                marginBottom: '1.5rem' 
+            }}>
                 {materialGroups.map((group, index) => {
                     const { cost, count } = materialStats[group.name] || { cost: 0, count: 0 };
                     const cardColor = getColorForMaterial(group.name, index);
@@ -354,7 +367,12 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
             {/* 2. QUANTITY ROW: Material Quantities + Total Quantity (Last) */}
             <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>QUANTITY BREAKDOWN</h4>
-            <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+            <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(250px, 1fr))', 
+                gap: isMobile ? '0.75rem' : '1.5rem',
+                marginBottom: '1.5rem' 
+            }}>
                 {materialGroups.map((group, index) => {
                     const { count } = materialStats[group.name] || { count: 0 };
                     return (
@@ -397,10 +415,10 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                 <div style={{
                     background: 'var(--glass-highlight)',
                     borderRadius: '1rem',
-                    padding: '1.5rem',
+                    padding: isMobile ? '1rem' : '1.5rem',
                     border: '1px solid var(--glass-border)',
                     marginBottom: '1.5rem',
-                    height: '350px'
+                    height: isMobile ? '280px' : '350px'
                 }}>
                     <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '1rem' }}>Monthly Procurement Trend (kg)</h4>
                     <ResponsiveContainer width="100%" height="100%">
@@ -422,17 +440,25 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             )}
 
             {/* Side-by-Side Grid: Payments & Ledger */}
-            <div className="responsive-grid-2" style={{ gap: '1rem', marginBottom: '1.5rem', alignItems: 'stretch' }}>
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: '1.5rem', 
+                marginBottom: '1.5rem', 
+                alignItems: 'stretch' 
+            }}>
 
                 {/* 1. Supplier Payments */}
                 <div style={{
+                    flex: isMobile ? 'none' : '1',
                     background: 'var(--glass-highlight)',
                     borderRadius: '1rem',
                     padding: '0',
                     border: '1px solid var(--glass-border)',
                     display: 'flex', flexDirection: 'column',
                     overflow: 'hidden',
-                    height: '450px' // Match Ledger Height
+                    height: isMobile ? 'auto' : '450px',
+                    maxHeight: isMobile ? '400px' : '450px'
                 }}>
                     <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8' }}>
                         Supplier Payments
@@ -455,6 +481,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
                 {/* 2. Financial Ledger */}
                 <div style={{
+                    flex: isMobile ? 'none' : '2',
                     background: 'var(--glass-highlight)',
                     border: '1px solid var(--glass-border)',
                     borderRadius: '1rem',
@@ -473,45 +500,52 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                             </span>
                         </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                        <div>Date</div>
-                        <div>Bill No</div>
-                        <div>Item Name</div>
-                        <div>Supplier</div>
-                        <div style={{ textAlign: 'right' }}>Qty</div>
-                        <div style={{ textAlign: 'right' }}>Unit Price</div>
-                        <div style={{ textAlign: 'right' }}>Amount</div>
-                    </div>
-                    <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
-                        {sortedPurchases.map((item, i) => {
-                            const qty = item.quantity || item.parsedQty || 0;
-                            const amount = item.parsedAmount || item.amount || 0;
-                            const unitPrice = qty > 0 ? (amount / qty) : 0;
-                            const supplierName = item.customerName || item.supplier || '-';
-                            const itemName = item.originalDesc || item.item_name || 'Item';
+                    <div style={{ overflowX: 'auto' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '80px 70px 150px 120px 60px 80px 100px' : '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', minWidth: isMobile ? '640px' : 'auto' }}>
+                            <div>Date</div>
+                            <div>Bill No</div>
+                            <div>Item Name</div>
+                            <div>Supplier</div>
+                            <div style={{ textAlign: 'right' }}>Qty</div>
+                            <div style={{ textAlign: 'right' }}>Unit Price</div>
+                            <div style={{ textAlign: 'right' }}>Amount</div>
+                        </div>
+                        <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1, maxHeight: '350px' }}>
+                            {sortedPurchases.map((item, i) => {
+                                const qty = item.quantity || item.parsedQty || 0;
+                                const amount = item.parsedAmount || item.amount || 0;
+                                const unitPrice = qty > 0 ? (amount / qty) : 0;
+                                const supplierName = item.customerName || item.supplier || '-';
+                                const itemName = item.originalDesc || item.item_name || 'Item';
 
-                            return (
-                                <div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.95rem', alignItems: 'center' }}>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{formatDate(item.parsedDate || item.date)}</div>
-                                    <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: 500 }}>{item.invoice_no || item.invoiceNo || '-'}</div>
-                                    <div style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '0.5rem' }}>{itemName}</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '0.5rem', minWidth: 0 }}>
-                                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplierName}</span>
-                                        {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>{item.remarks}</span>}
+                                return (
+                                    <div key={i} style={{ display: 'grid', gridTemplateColumns: isMobile ? '80px 70px 150px 120px 60px 80px 100px' : '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.5rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: isMobile ? '0.8rem' : '0.95rem', alignItems: 'center', minWidth: isMobile ? '640px' : 'auto' }}>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{formatDate(item.parsedDate || item.date)}</div>
+                                        <div style={{ color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 500 }}>{item.invoice_no || item.invoiceNo || '-'}</div>
+                                        <div style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '0.5rem' }}>{itemName}</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '0.5rem', minWidth: 0 }}>
+                                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplierName}</span>
+                                            {item.remarks && <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>{item.remarks}</span>}
+                                        </div>
+                                        <div style={{ textAlign: 'right', color: '#e0f2fe', fontSize: '0.85rem' }}>{qty > 0 ? qty.toLocaleString() : '-'}</div>
+                                        <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{qty > 0 ? `₹${unitPrice.toFixed(0)}` : '-'}</div>
+                                        <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600, fontSize: '0.85rem' }}>₹{amount.toLocaleString('en-IN')}</div>
                                     </div>
-                                    <div style={{ textAlign: 'right', color: '#e0f2fe', fontSize: '0.9rem' }}>{qty > 0 ? qty.toLocaleString() : '-'}</div>
-                                    <div style={{ textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{qty > 0 ? `₹${unitPrice.toFixed(0)}` : '-'}</div>
-                                    <div style={{ textAlign: 'right', color: '#f43f5e', fontWeight: 600, fontSize: '0.95rem' }}>₹{amount.toLocaleString('en-IN')}</div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Variety Analysis Section (New) */}
             {summaryData && summaryData.length > 0 && (
-                <div className="responsive-grid-2" style={{ marginTop: '1.5rem', gap: '1.5rem' }}>
+                <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                    marginTop: '1.5rem', 
+                    gap: '1.5rem' 
+                }}>
                     {['Ginger', 'Garlic'].map(mat => {
                         // Filter summary data for this material
                         const matVarieties = summaryData.filter(d => {

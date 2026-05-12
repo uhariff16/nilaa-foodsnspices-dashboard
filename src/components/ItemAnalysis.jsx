@@ -3,6 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Package } from 'lucide-react';
 
 const ItemAnalysis = ({ data }) => {
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+    React.useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
     const sortedByProfit = useMemo(() => {
         return [...data].sort((a, b) => b.profit - a.profit).slice(0, 10);
     }, [data]);
@@ -32,9 +38,9 @@ const ItemAnalysis = ({ data }) => {
                 <Package /> Item Performance Analysis
             </h2>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
                 {/* Top Profit Generators */}
-                <div className="glass-panel" style={{ padding: '1.5rem', height: '450px' }}>
+                <div className="glass-panel" style={{ padding: '1.5rem', height: isMobile ? '350px' : '450px' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Top 10 Most Profitable Items</h3>
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByProfit} layout="vertical" margin={{ left: 20 }}>
@@ -51,7 +57,7 @@ const ItemAnalysis = ({ data }) => {
                 </div>
 
                 {/* Top Revenue Generators */}
-                <div className="glass-panel" style={{ padding: '1.5rem', height: '450px' }}>
+                <div className="glass-panel" style={{ padding: '1.5rem', height: isMobile ? '350px' : '450px' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Top 10 Revenue Generators</h3>
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={sortedByRevenue} layout="vertical" margin={{ left: 20 }}>

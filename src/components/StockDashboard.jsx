@@ -60,6 +60,14 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
 );
 
 const StockDashboard = ({ productionData, salesData, procurementData, selectedMonth, selectedYear }) => {
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
+
+    React.useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const [searchTerm, setSearchTerm] = React.useState('');
     const [activeCategory, setActiveCategory] = React.useState('All'); // All, Raw, Processed
 
@@ -99,7 +107,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
-                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Item Name & Status</th>
+                                <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600, minWidth: '150px' }}>Item Name & Status</th>
                                 <th style={{ padding: '1rem 0.5rem', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Opening</th>
                                 <th style={{ padding: '1rem 0.5rem', color: '#10b981', fontWeight: 600, textAlign: 'right' }}>Stock In</th>
                                 <th style={{ padding: '1rem 0.5rem', color: '#ef4444', fontWeight: 600, textAlign: 'right' }}>Stock Out</th>
@@ -398,8 +406,23 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
     return (
         <div className="animate-fade-in">
             {/* Search & Filter Bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--glass-highlight)', padding: '0.4rem', borderRadius: '0.75rem' }}>
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-between', 
+                alignItems: isMobile ? 'stretch' : 'center', 
+                marginBottom: '2rem', 
+                gap: '1rem' 
+            }}>
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '0.4rem', 
+                    background: 'var(--glass-highlight)', 
+                    padding: '0.4rem', 
+                    borderRadius: '0.75rem',
+                    overflowX: 'auto',
+                    scrollbarWidth: 'none'
+                }}>
                     {['All', 'Raw', 'Processed'].map(cat => (
                         <button
                             key={cat}
@@ -413,7 +436,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                 fontWeight: 600,
                                 cursor: 'pointer',
                                 transition: 'all 0.2s ease',
-                                fontSize: '0.9rem'
+                                fontSize: isMobile ? '0.8rem' : '0.9rem',
+                                whiteSpace: 'nowrap'
                             }}
                         >
                             {cat}
@@ -421,8 +445,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                     ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    gap: isMobile ? '1rem' : '1.5rem', 
+                    alignItems: isMobile ? 'stretch' : 'center' 
+                }}>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', justifyContent: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
                             {globalStats.total} Total
@@ -430,7 +459,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         {globalStats.low > 0 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
                                 <AlertCircle size={14} />
-                                {globalStats.low} Low Stock
+                                {globalStats.low} Low
                             </div>
                         )}
                         {globalStats.errors > 0 && (
@@ -454,7 +483,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                 color: 'var(--text-primary)',
                                 padding: '0.6rem 1rem 0.6rem 2.8rem',
                                 borderRadius: '0.75rem',
-                                width: '250px',
+                                width: isMobile ? '100%' : '250px',
                                 fontSize: '0.9rem'
                             }}
                         />
@@ -464,7 +493,12 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
             {/* Quick Summary row - Only shown in All mode to avoid redundancy */}
             {activeCategory === 'All' && !searchTerm && (
-                <div className="responsive-grid-2" style={{ marginBottom: '2.5rem' }}>
+                <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+                    marginBottom: '2.5rem',
+                    gap: '1.5rem' 
+                }}>
                     <StockSummaryCard
                         title="Ginger Stock"
                         icon={gingerIcon}

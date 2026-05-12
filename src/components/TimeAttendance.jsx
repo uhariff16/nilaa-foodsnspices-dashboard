@@ -96,6 +96,12 @@ const calculateMonthlyHourlyRate = (emp, year, month, config) => {
 };
 
 const TimeAttendance = ({ onBack, hideBack = false }) => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
     const { user, role, logout: authLogout, canAccessPayouts, hasPermission } = useAuth();
     const canViewPayouts = role === 'admin' || hasPermission('attendance.payouts') || hasPermission('attendance.salaries');
     const canViewCalculator = role === 'admin' || hasPermission('attendance.salaryCalculator');
@@ -1320,7 +1326,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Users size={16} /> Workforce Overview
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                                 <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
                                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Employees</div>
                                     <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{stats.totalEmployees}</div>
@@ -1909,7 +1915,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     <div style={{ marginBottom: '1rem', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <DollarSign size={16} /> Financial Overview (Filtered)
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Salary Paid</div>
                             <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary)}</div>
@@ -2379,7 +2385,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                     {isPaymentTab ? (initialData ? 'Edit Payment' : 'Register Payment') : (initialData ? 'Edit Attendance Log' : 'Manual Attendance Entry')}
                 </h2>
                 <form onSubmit={handleSubmit}>
-                    <div style={{ display: 'grid', gridTemplateColumns: isPaymentTab ? '1fr 1fr' : '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (isPaymentTab ? '1fr 1fr' : '1fr 1fr 1fr'), gap: '1rem', marginBottom: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Date</label>
                             <input type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
@@ -2428,7 +2434,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                         )}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: isPaymentTab ? '1fr' : '2fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (isPaymentTab ? '1fr' : '2fr 1fr'), gap: '1rem', marginBottom: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Employee Name</label>
                             <input type="text" required value={formData.empName} onChange={e => setFormData({ ...formData, empName: e.target.value })} placeholder="Full Name" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
@@ -2442,7 +2448,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                     </div>
 
                     {isPaymentTab ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Payment Type</label>
                                 <select
@@ -2484,7 +2490,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                         </div>
                     ) : (
                         <>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Deductions / Advance (₹)</label>
                                     <input type="number" value={formData.deductions} onChange={e => setFormData({ ...formData, deductions: e.target.value })} placeholder="0" style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
@@ -2601,7 +2607,7 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                             </div>
                                         </div>
 
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                                             {formData.shifts.map((shift, i) => (
                                                 <div key={i} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>

@@ -233,6 +233,15 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
 };
 
 const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }) => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+
     const [showSettings, setShowSettings] = useState(false);
     const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
     const [adjustments, setAdjustments] = useState([]);
@@ -845,7 +854,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                         This will reduce the "Available" stock by increasing the calculated usage.
                     </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Ginger Wastage (%)</label>
                             <input
@@ -878,7 +887,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
             {/* KPIs Grid */}
             <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'
+                display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem'
             }}>
                 <MetricCard
                     title="Ginger Stock"
@@ -998,7 +1007,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                 {stats.label && <span style={{ opacity: 0.7, fontWeight: 400 }}>({stats.label})</span>}
                                 {stats.dateRangeLabel && <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: '0.25rem' }}>{stats.dateRangeLabel}</span>}
                             </h5>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
                                 <MetricCard
                                     title="Input"
                                     value={renderBreakdownValue(stats.inputBreakdown, stats.input, color)}
@@ -1131,7 +1140,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                                     <TrendingUp size={18} /> Overall Performance
                                     {overallRange && <span style={{ opacity: 0.7, fontWeight: 400, marginLeft: '0.25rem' }}>{overallRange}</span>}
                                 </h5>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
                                     <MetricCard
                                         title="Production Input"
                                         value={renderBreakdownValue(inputBreakdown, totalPreProd, '#a78bfa')}
@@ -1174,7 +1183,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
             {/* Data Tables - 3 Column Layout */}
             <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', height: '600px'
+                display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', height: isMobile ? 'auto' : '600px'
             }}>
                 <DataTable title="Stock In Log" count={sortedStockIn.length} color="#60a5fa" items={sortedStockIn} />
                 <DataTable title="Production Input" count={sortedPreProd.length} color="#fbbf24" items={sortedPreProd} />

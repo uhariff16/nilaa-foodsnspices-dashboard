@@ -57,6 +57,13 @@ const CustomTooltip = ({ active, payload, label }) => {
 // Reusable Chart Component with Type Switching
 const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPrefix = '₹' }) => {
   const [type, setType] = useState(defaultType); // 'area', 'bar', 'line'
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const renderChart = () => {
     const commonProps = {
@@ -184,7 +191,7 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
   };
 
   return (
-    <div className="glass-panel" style={{ padding: '1.5rem', height: '400px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div className="glass-panel" style={{ padding: '1.5rem', height: isMobile ? '350px' : '400px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
         <div style={{ display: 'flex', background: 'var(--glass-highlight)', padding: '0.25rem', borderRadius: '0.5rem', gap: '0.25rem' }}>
@@ -231,6 +238,12 @@ const CustomizableChart = ({ title, data, defaultType = 'area', series, yAxisPre
 };
 
 const Charts = ({ transactions, data: propData, selectedMonth }) => {
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 1024);
+    React.useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
   // Allow passing either 'transactions' or 'data' prop
   const data = propData || transactions || [];
   const chartData = useMemo(() => {
@@ -360,7 +373,7 @@ const Charts = ({ transactions, data: propData, selectedMonth }) => {
   const displayData = selectedMonth === 'Overall' ? monthlyChartData : chartData;
 
   return (
-    <div className="grid-cols-2" style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
+    <div className="grid-cols-2" style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1.5rem' }}>
 
       <CustomizableChart
         title="Revenue Overview"

@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -23,6 +23,7 @@ import MobileDashboard from './mobile/MobileDashboard';
 import { supabase } from '../lib/supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import CustomerInsights from './CustomerInsights';
+import InvestmentsDashboard from './InvestmentsDashboard';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -67,11 +68,11 @@ const Dashboard = (props) => {
     const { theme, toggleTheme } = useTheme();
 
     // Mobile State
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     const [mobileLayoutEnabled, setMobileLayoutEnabled] = useState(true);
 
     useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
         window.addEventListener('resize', handleResize);
 
         // Fetch Mobile Setting
@@ -1461,13 +1462,13 @@ const Dashboard = (props) => {
             </div >
 
             {/* Navigation Tabs */}
-            <div className="custom-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+            <div className="custom-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '1rem' : '2rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
                 {hasPermission('dashboard.overview') && (
                     <button
                         onClick={() => setActiveTab('overview')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
-                            color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
+                            color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             borderBottom: activeTab === 'overview' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'overview' ? 600 : 400
                         }}
@@ -1480,7 +1481,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('sales')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'sales' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'sales' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'sales' ? 600 : 400
@@ -1494,7 +1495,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('expenses')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'expenses' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'expenses' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'expenses' ? 600 : 400
@@ -1508,7 +1509,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('procurement')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'procurement' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'procurement' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'procurement' ? 600 : 400
@@ -1524,7 +1525,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('stock')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'stock' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'stock' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'stock' ? 600 : 400
@@ -1538,7 +1539,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('production')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'production' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'production' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'production' ? 600 : 400
@@ -1552,7 +1553,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('insights')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'insights' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'insights' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'insights' ? 600 : 400
@@ -1584,7 +1585,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('ytd')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'ytd' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'ytd' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'ytd' ? 600 : 400
@@ -1598,7 +1599,7 @@ const Dashboard = (props) => {
                     <button
                         onClick={() => setActiveTab('profitHub')}
                         style={{
-                            background: 'none', border: 'none', padding: '0.5rem 0',
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                             color: activeTab === 'profitHub' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'profitHub' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'profitHub' ? 600 : 400
@@ -1606,6 +1607,20 @@ const Dashboard = (props) => {
                     >
                         <Target size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
                         Profit Hub
+                    </button>
+                )}
+                {isAdmin && (
+                    <button
+                        onClick={() => setActiveTab('investments')}
+                        style={{
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
+                            color: activeTab === 'investments' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'investments' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'investments' ? 600 : 400
+                        }}
+                    >
+                        <Briefcase size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Investments
                     </button>
                 )}
             </div >
@@ -2386,7 +2401,12 @@ const Dashboard = (props) => {
                             </div>
 
                             {/* Total Outflow & Distribution Chart [MOVED UP] */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                            <div style={{ 
+                                display: 'flex', 
+                                flexDirection: isMobile ? 'column' : 'row',
+                                gap: '1.5rem', 
+                                marginBottom: '1.5rem' 
+                            }}>
                                 {/* Left: Total Summary */}
                                 <div style={{
                                     flex: '1 1 300px',
@@ -2406,7 +2426,7 @@ const Dashboard = (props) => {
                                             <IndianRupee size={24} color="#ef4444" />
                                         </div>
                                     </div>
-                                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--danger)', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
+                                    <div style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: 'bold', color: 'var(--danger)', lineHeight: 1 }}>{formatCurrency(grandTotalExpenses)}</div>
                                     <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                                         {expenseChartData.length} Categories Tracked
                                     </div>
@@ -2415,7 +2435,7 @@ const Dashboard = (props) => {
                                         display: 'grid',
                                         gridTemplateColumns: '1fr 1fr',
                                         width: '100%',
-                                        gap: '1rem',
+                                        gap: isMobile ? '0.75rem' : '1rem',
                                         borderTop: '1px solid rgba(239, 68, 68, 0.2)',
                                         paddingTop: '1.25rem'
                                     }}>
@@ -2918,8 +2938,10 @@ const Dashboard = (props) => {
 
                                                 return (
                                                     <div key={i} style={{
-                                                        display: 'grid', gridTemplateColumns: '120px minmax(200px, 2fr) 120px', padding: '0.75rem',
-                                                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                                        display: 'grid', 
+                                                        gridTemplateColumns: isMobile ? '80px 1fr 100px' : '120px minmax(200px, 2fr) 120px', 
+                                                        padding: '0.75rem',
+                                                        borderBottom: '1px solid var(--glass-border)', fontSize: isMobile ? '0.75rem' : '0.875rem', alignItems: 'center',
                                                         background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
                                                     }}>
                                                         <div style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
@@ -2960,8 +2982,10 @@ const Dashboard = (props) => {
                                             if (expenseListView === 'compact') {
                                                 return (
                                                     <div key={i} style={{
-                                                        display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 100px 120px', padding: '0.75rem',
-                                                        borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
+                                                        display: 'grid', 
+                                                        gridTemplateColumns: isMobile ? '1fr 60px 90px' : 'minmax(250px, 2fr) 100px 120px', 
+                                                        padding: '0.75rem',
+                                                        borderBottom: '1px solid var(--glass-border)', fontSize: isMobile ? '0.75rem' : '0.875rem', alignItems: 'center',
                                                         background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
                                                     }}>
                                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -2986,9 +3010,12 @@ const Dashboard = (props) => {
 
                                             return (
                                                 <div key={i} style={{
-                                                    display: 'grid', gridTemplateColumns: 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)', padding: '1rem',
+                                                    display: 'grid', 
+                                                    gridTemplateColumns: isMobile ? '1fr 90px' : 'minmax(200px, 1.5fr) minmax(130px, 1fr) 100px minmax(140px, 1fr)', 
+                                                    padding: '1rem',
                                                     borderBottom: '1px solid var(--glass-border)', fontSize: '0.875rem', alignItems: 'center',
-                                                    background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)'
+                                                    background: i % 2 === 0 ? 'transparent' : 'var(--glass-highlight)',
+                                                    gap: isMobile ? '0.5rem' : '0'
                                                 }}>
                                                     {/* Item & Category */}
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -3103,6 +3130,13 @@ const Dashboard = (props) => {
                         invoiceDiscounts={invoiceDiscounts}
                         forceTab="profitHub"
                     />
+                )
+            }
+
+            {/* [NEW] Investments Dashboard */}
+            {
+                activeTab === 'investments' && isAdmin && (
+                    <InvestmentsDashboard isAdmin={isAdmin} />
                 )
             }
 

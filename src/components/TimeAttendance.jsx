@@ -8,12 +8,15 @@ import { supabase } from '../lib/supabaseClient';
 import PayslipGenerator from './PayslipGenerator';
 import SalarySimulator from './admin/SalarySimulator';
 
+const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 // Initial helper for global use
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
-        maximumFractionDigits: 0
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     }).format(val || 0);
 };
 
@@ -271,7 +274,8 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         deductionReason: item.deduction_reason || '',
                         empId: item.emp_id,
                         name: item.emp_name,
-                        attendance_status: item.attendance_status || 'Present',
+                        attendance_status: (item.attendance_status || 'Present').replace(' (Half)', ''),
+                        shift_type: (item.attendance_status || '').includes('(Half)') ? 'Half Day' : 'Full Day',
                         leave_reason: item.leave_reason || ''
                     };
                 });
@@ -564,7 +568,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 rate: row.rate,
                 payout_type: employees.find(e => e.emp_id === row.empId)?.payout_type || 'Hourly',
                 deductions: row.deductions || 0,
-                deduction_reason: row.deductionReason || ''
+                deduction_reason: row.deductionReason || '',
+                attendance_status: (['Present', 'Casual Leave', 'Medical Leave'].includes(row.attendance_status) && row.shift_type === 'Half Day') 
+                    ? `${row.attendance_status} (Half)` 
+                    : (row.attendance_status || 'Present')
             }));
 
             const { error } = await supabase
@@ -616,6 +623,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             totalWages: 0,
             totalBonus: 0,
             totalEarned: 0,
+            totalFixedSalary: 0,
             nonDeductibleBonuses: 0,
             deductibleBonuses: 0
         };
@@ -623,8 +631,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         // 1. Calculate Payments from filteredPayments
         filteredPayments.forEach(p => {
             const amt = parseFloat(p.amount) || 0;
-            if (p.type === 'Salary') stats.totalSalary += amt;
-            else if (p.type === 'Advance') stats.totalAdvance += amt;
+            if (p.type === 'Salary' || p.type === 'Advance') stats.totalAdvance += amt; // Treat both as payouts against entitlement
             else if (p.type === 'Wages') stats.totalWages += amt;
             else if (p.type === 'Bonus') {
                 stats.totalBonus += amt;
@@ -647,7 +654,6 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 const matchesYear = !yearFilter || parseInt(y) === yearFilter;
                 matchesDate = matchesMonth && matchesYear;
             }
-
             if (matchesSearch && matchesDate) {
                 const dailyWage = parseFloat(row.daily_wage || row.dailyWage || 0);
                 const bonus = parseFloat(row.bonus || 0);
@@ -664,7 +670,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     const matchesSearch = emp.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         emp.name.toLowerCase().includes(searchTerm.toLowerCase());
                     if (matchesSearch) {
-                        stats.totalEarned += parseFloat(emp.monthly_salary || 0);
+                        stats.totalFixedSalary += parseFloat(emp.monthly_salary || 0);
+                        // [FIX]: We NO LONGER add the flat salary to totalEarned here
+                        // because we now use pro-rated daily logs to calculate earned-so-far.
                     }
                 }
             });
@@ -719,29 +727,71 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const stats = useMemo(() => {
         // Context Date: Today (Local)
         const contextDate = new Date().toISOString().split('T')[0];
-
-        // Precise Workforce Overview from master list
         const totalEmployees = employees.length;
 
         // Count attendance for the specific Context Date
         const dailyLogs = attendanceData.filter(r => r.date === contextDate);
         const todayPresentCount = dailyLogs.filter(r => (r.attendance_status || 'Present') === 'Present').length;
-        const todayLeaveCount = dailyLogs.filter(r => ['Casual Leave', 'Medical Leave'].includes(r.attendance_status)).length;
-
-        // Staff type specific counts for Today
+        const todayLeaveCount = dailyLogs.reduce((acc, r) => {
+            if (['Casual Leave', 'Medical Leave'].includes(r.attendance_status)) {
+                return acc + (r.shift_type === 'Half Day' ? 0.5 : 1);
+            }
+            return acc;
+        }, 0);
         const todayTempPresentCount = dailyLogs.filter(r => {
             const emp = employees.find(e => e.emp_id === r.empId);
             return (r.attendance_status || 'Present') === 'Present' && emp?.staff_type === 'Temporary';
         }).length;
+        const todayAbsentCount = Math.max(0, totalEmployees - (
+            dailyLogs.reduce((acc, r) => {
+                if (r.attendance_status === 'Present' || ['Casual Leave', 'Medical Leave'].includes(r.attendance_status)) {
+                    return acc + (r.shift_type === 'Half Day' ? 0.5 : 1);
+                }
+                return acc;
+            }, 0)
+        ));
 
-        // Absent count logic for Today
-        const todayAbsentCount = Math.max(0, totalEmployees - (todayPresentCount + todayLeaveCount));
+        // Determine if we show Daily Stats or Cumulative Search Stats
+        const isSearchActive = searchTerm.trim().length > 0;
+        const displayTotalEmployees = isSearchActive 
+            ? employees.filter(e => e.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) || e.name.toLowerCase().includes(searchTerm.toLowerCase())).length
+            : totalEmployees;
+
+        let displayPresentCount = todayPresentCount;
+        let displayAbsentCount = todayAbsentCount;
+        let displayLeaveCount = todayLeaveCount;
+        let displayTempPresentCount = todayTempPresentCount;
+        let labelSuffix = `(${contextDate})`;
+
+        if (isSearchActive) {
+            displayPresentCount = 0;
+            displayAbsentCount = 0;
+            displayLeaveCount = 0;
+            displayTempPresentCount = 0;
+            labelSuffix = `(${monthNames[monthFilter - 1]} Summary)`;
+
+            filteredAttendance.forEach(r => {
+                const emp = employees.find(e => e.emp_id === r.empId);
+                const status = r.attendance_status || 'Present';
+                const units = (r.shift_type === 'Half Day' ? 0.5 : 1);
+
+                if (status === 'Present') {
+                    displayPresentCount += units;
+                    if (emp?.staff_type === 'Temporary') displayTempPresentCount += units;
+                } else if (status === 'Absent') {
+                    displayAbsentCount += 1;
+                } else if (['Casual Leave', 'Medical Leave'].includes(status)) {
+                    displayLeaveCount += units;
+                }
+            });
+        }
 
         // staff type metrics for current view
         let totalHours = 0;
         let totalOTHours = 0;
         let totalOTPay = 0;
-        let totalCost = 0;
+        let totalCost = 0; // This will now represent 'Earned So Far' from logs
+        let totalFixedSalary = 0; // The total committed monthly salary
         let totalDeductions = 0;
         let totalBonus = 0;
 
@@ -776,7 +826,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             const hours = parseFloat(d.total_hours || 0);
             const otPay = ot * otRate;
 
-            if (d.attendance_status === 'Present') presentCount++;
+            const isPresent = d.attendance_status === 'Present';
+            const units = isPresent ? (d.shift_type === 'Half Day' ? 0.5 : 1) : 0;
+
+            if (isPresent) {
+                presentCount += units;
+            }
             else if (d.attendance_status === 'Absent') absentCount++;
             else if (d.attendance_status?.toLowerCase().includes('leave')) leaveCount++;
 
@@ -788,7 +843,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
             totalCost += cost;
 
             if (emp?.staff_type === 'Temporary') {
-                tempPresentCount++;
+                if (isPresent) tempPresentCount += units;
                 tempTotalHours += hours;
                 tempTotalOTHours += ot;
                 tempTotalOTPay += otPay;
@@ -796,7 +851,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                 tempTotalDeductions += deductions;
                 tempTotalBonus += bonus;
             } else {
-                permPresentCount++;
+                if (isPresent) permPresentCount += units;
                 permTotalHours += hours;
                 permTotalOTHours += ot;
                 permTotalOTPay += otPay;
@@ -812,12 +867,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         if (!isSelectedMonthBeforeMay2026) {
             employees.forEach(emp => {
                 if (emp.payout_type === 'Monthly' && emp.is_active) {
-                    const salary = parseFloat(emp.monthly_salary || 0);
-                    totalCost += salary;
-                    if (emp.staff_type === 'Temporary') {
-                        tempTotalCost += salary;
-                    } else {
-                        permTotalCost += salary;
+                    const matchesSearch = emp.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        emp.name.toLowerCase().includes(searchTerm.toLowerCase());
+                    if (matchesSearch) {
+                        const salary = parseFloat(emp.monthly_salary || 0);
+                        totalFixedSalary += salary;
                     }
                 }
             });
@@ -845,14 +899,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         const tempNetPayout = tempGrossPay + tempTotalBonus - tempTotalDeductions;
 
         const s = {
-            totalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, grossPay,
+            totalEmployees: displayTotalEmployees, totalHours, totalOTHours, totalOTPay, totalCost, netPayout, grossPay,
+            totalFixedSalary,
             totalRegHours: totalHours - totalOTHours,
             totalRegPay: grossPay - totalOTPay,
-            presentCount: todayPresentCount,
-            leaveCount: todayLeaveCount,
-            absentCount: todayAbsentCount,
-            contextDate, totalDeductions, totalBonus,
-            tempPresentCount: todayTempPresentCount,
+            presentCount: displayPresentCount,
+            leaveCount: displayLeaveCount,
+            absentCount: displayAbsentCount,
+            contextDate: labelSuffix, totalDeductions, totalBonus,
+            tempPresentCount: displayTempPresentCount,
             tempTotalHours, tempTotalOTHours, tempTotalOTPay, tempTotalCost, tempTotalDeductions, tempTotalBonus, tempNetPayout, tempGrossPay,
             tempTotalRegHours: tempTotalHours - tempTotalOTHours,
             tempTotalRegPay: tempGrossPay - tempTotalOTPay,
@@ -1402,9 +1457,15 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                     <div style={{ color: '#a855f7', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Total Bonus</div>
                                     <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(stats.totalBonus)}</div>
                                 </div>
-                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    <div style={{ color: '#3b82f6', fontSize: '0.7rem', marginBottom: '0.3rem' }}>Net Payout</div>
-                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                                <div className="glass-panel" style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderLeft: '3px solid #3b82f6', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <div style={{ borderBottom: '1px solid rgba(59, 130, 246, 0.2)', paddingBottom: '0.4rem' }}>
+                                        <div style={{ color: '#3b82f6', fontSize: '0.65rem', fontWeight: 700 }}>EARNED (WORKINGS)</div>
+                                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{formatCurrency(stats.netPayout)}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.65rem', fontWeight: 700 }}>FIXED SALARY PAYOUT</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(stats.totalFixedSalary)}</div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1613,6 +1674,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Employee</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Status</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Day Type</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Shift Details</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Break</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: '#f59e0b' }}>Total Hours</th>
@@ -1657,10 +1719,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem' }}>
                                                                 <div style={{
                                                                     padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
-                                                                    background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                                    color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                                    border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                    background: (row.attendance_status === 'Present') ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status === 'Present') ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status === 'Present') ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
                                                                 }}>{row.attendance_status || 'Present'}</div>
+                                                            </td>
+                                                            <td style={{ padding: '1rem' }}>
+                                                                {(row.attendance_status === 'Present' || row.attendance_status === 'Casual Leave' || row.attendance_status === 'Medical Leave') && (
+                                                                    <div style={{
+                                                                        padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
+                                                                        background: row.shift_type === 'Half Day' ? 'rgba(6, 182, 212, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                                        color: row.shift_type === 'Half Day' ? '#06b6d4' : '#10b981',
+                                                                        border: row.shift_type === 'Half Day' ? '1px solid rgba(6, 182, 212, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                                                    }}>{row.shift_type || 'Full Day'}</div>
+                                                                )}
                                                             </td>
                                                             <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 {emp?.payout_type === 'Monthly' ? (
@@ -1733,6 +1805,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Emp ID</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Employee</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Status</th>
+                                                    <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>Day Type</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', color: '#f59e0b' }}>Total Hours</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>Non OT Hrs</th>
                                                     <th style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)', borderRight: '1px solid var(--glass-border)' }}>OT Hrs</th>
@@ -1780,10 +1853,20 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 <div style={{
                                                                     padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
-                                                                    background: (row.attendance_status || 'Present') === 'Present' ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                                    color: (row.attendance_status || 'Present') === 'Present' ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                                    border: (row.attendance_status || 'Present') === 'Present' ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                    background: (row.attendance_status === 'Present') ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status === 'Present') ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status === 'Present') ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
                                                                 }}>{row.attendance_status || 'Present'}</div>
+                                                            </td>
+                                                            <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
+                                                                {(row.attendance_status === 'Present' || row.attendance_status === 'Casual Leave' || row.attendance_status === 'Medical Leave') && (
+                                                                    <div style={{
+                                                                        padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
+                                                                        background: row.shift_type === 'Half Day' ? 'rgba(6, 182, 212, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                                        color: row.shift_type === 'Half Day' ? '#06b6d4' : '#10b981',
+                                                                        border: row.shift_type === 'Half Day' ? '1px solid rgba(6, 182, 212, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                                                    }}>{row.shift_type || 'Full Day'}</div>
+                                                                )}
                                                             </td>
                                                             <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.03)' }}>
                                                                 {formatDuration(parseFloat(row.hoursWorked) || 0)}
@@ -1811,36 +1894,16 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             </td>
                                                             <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
                                                                 {(() => {
-                                                                    const total = parseFloat(row.hoursWorked) || 0;
-                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
-                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
-                                                                    const totalBackend = parseFloat(row.daily_wage || row.dailyWage) || 0;
-
-                                                                    let nonOtBase = 0;
-                                                                    if (totalBackend > 0 && !isSpecial) {
-                                                                        // If backend already calculated total cost, extract base by subtracting OT
-                                                                        nonOtBase = Math.max(0, totalBackend - otPay);
-                                                                    } else if (!isSpecial) {
-                                                                        // If backend is missing data (e.g. live ongoing shift), calculate base normally
-                                                                        const regH = Math.min((parseFloat(row.hoursWorked) || 0), parseFloat(payrollConfig.standard_daily_hours || 8));
-                                                                        nonOtBase = regH * rate;
-                                                                    } else {
-                                                                        // Special Day - Base is 0
-                                                                        nonOtBase = 0;
-                                                                    }
-
-                                                                    return formatCurrency(nonOtBase);
+                                                                    const regH = parseFloat(row.regular_hours || row.regularHours) || 0;
+                                                                    return formatCurrency(regH * rate);
                                                                 })()}
                                                             </td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(() => {
-                                                                    const total = parseFloat(row.hoursWorked) || 0;
-                                                                    const isSpecial = isSpecialDay(row.date, payrollConfig.national_holidays);
-                                                                    const displayOT = isSpecial ? total : (parseFloat(row.otHours) || Math.max(0, total - parseFloat(payrollConfig.standard_daily_hours || 8)));
                                                                     const rate = parseFloat(row.rate) || parseFloat(payrollConfig.default_hourly_rate || 100);
-                                                                    const otPay = displayOT * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
+                                                                    const otH = parseFloat(row.ot_hours || row.otHours) || 0;
+                                                                    const otPay = otH * rate * parseFloat(payrollConfig.ot_multiplier || 1.5);
                                                                     return otPay > 0 ? <span style={{ color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(otPay)}</span> : '-';
                                                                 })()}
                                                             </td>
@@ -2190,6 +2253,12 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 };
 
 const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, activeTab = 'attendance' }) => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
     const isPaymentTab = activeTab === 'payments';
     const [formData, setFormData] = useState({
         date: initialData?.date || new Date().toISOString().split('T')[0],
@@ -2206,13 +2275,16 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
         deductions: initialData?.deductions || 0,
         deductionReason: initialData?.deduction_reason || '',
         attendance_status: initialData?.attendance_status || 'Present',
+        shift_type: initialData?.shift_type || 'Full Day',
         leave_reason: initialData?.leave_reason || '',
         isNewTemp: false,
         // Payment specific
         paymentType: initialData?.type || 'Advance',
         paymentAmount: initialData?.amount || 0,
         paymentRemarks: initialData?.remarks?.includes('[DEDUCTIBLE]') ? initialData.remarks.replace(/\[DEDUCTIBLE\]\s*/, '') : (initialData?.remarks || ''),
-        isDeductible: initialData?.remarks?.includes('[DEDUCTIBLE]') || false
+        isDeductible: initialData?.remarks?.includes('[DEDUCTIBLE]') || false,
+        useManualOt: false,
+        manualOt: initialData?.ot_hours || '0'
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -2281,7 +2353,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 return;
             }
 
-            const isPresent = formData.attendance_status === 'Present';
+            const isPresentOrLeave = (formData.attendance_status === 'Present' || formData.attendance_status === 'Casual Leave' || formData.attendance_status === 'Medical Leave');
+            const isActuallyPresent = formData.attendance_status === 'Present';
 
             const existingEmp = (employees || []).find(e => e.emp_id === formData.empId);
 
@@ -2315,9 +2388,16 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 e.emp_id.replace(/-/g, '').toUpperCase() === formData.empId.replace(/-/g, '').toUpperCase()
             );
             const payoutType = currentEmp?.payout_type || 'Hourly';
+            const isHalfDay = formData.shift_type === 'Half Day';
 
-            if (isPresent) {
-                if (payoutType === 'Monthly') {
+            if (isPresentOrLeave) {
+                if (isHalfDay) {
+                    // Half Day logic: 50% of standard daily hours
+                    totalH = (config.standard_daily_hours || 8) / 2;
+                } else if (formData.attendance_status === 'Casual Leave' || formData.attendance_status === 'Medical Leave') {
+                    // Full Day Leave logic
+                    totalH = (config.standard_daily_hours || 8);
+                } else if (payoutType === 'Monthly') {
                     totalH = parseFloat(formData.totalHours);
                 } else {
                     formData.shifts.forEach(s => {
@@ -2334,12 +2414,34 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
 
                 const isSpecial = isSpecialDay(formData.date, config.national_holidays);
                 regH = isSpecial ? 0 : Math.min(totalH, config.standard_daily_hours);
-                otH = isSpecial ? totalH : Math.max(0, totalH - config.standard_daily_hours);
+                
+                if (isSpecial) {
+                    // For Holidays and Weekends (Sundays), whole working hours are calculated as OT
+                    otH = totalH;
+                } else if (payoutType === 'Monthly') {
+                    // During normal days, Monthly staff OT must be recorded manually only
+                    otH = 0;
+                } else {
+                    // Hourly staff on normal days
+                    otH = Math.max(0, totalH - config.standard_daily_hours);
+                }
+
+                if (formData.useManualOt && !isHalfDay) {
+                    const extra = parseFloat(formData.manualOt || 0);
+                    otH += extra;
+                    totalH += extra;
+                }
+
+                // Strictly no OT for Half Day shifts
+                if (isHalfDay) {
+                    otH = 0;
+                }
 
                 const dateObj = new Date(formData.date);
                 if (payoutType === 'Monthly') {
                     const dynamicRate = calculateMonthlyHourlyRate(currentEmp, dateObj.getFullYear(), dateObj.getMonth() + 1, config);
-                    wage = (otH * dynamicRate * config.ot_multiplier);
+                    rate = dynamicRate; 
+                    wage = (regH * dynamicRate) + (otH * dynamicRate * config.ot_multiplier);
                 } else {
                     wage = (regH * rate) + (otH * rate * config.ot_multiplier);
                 }
@@ -2349,18 +2451,20 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                 date: formData.date,
                 emp_id: formData.empId,
                 emp_name: formData.empName,
-                shifts: isPresent ? formData.shifts.filter(s => s.in && s.out) : [],
+                shifts: isActuallyPresent ? formData.shifts.filter(s => s.in && s.out) : [],
                 total_hours: (isNaN(totalH) || totalH === null) ? 0 : totalH,
                 regular_hours: regH,
                 ot_hours: otH,
-                break_hours: isPresent ? formData.breakMins / 60 : 0,
+                break_hours: isActuallyPresent ? formData.breakMins / 60 : 0,
                 daily_wage: wage,
                 rate: rate,
                 bonus: parseFloat(formData.bonus || 0),
                 bonus_reason: formData.bonusReason,
                 deductions: parseFloat(formData.deductions || 0),
                 deduction_reason: formData.deductionReason,
-                attendance_status: formData.attendance_status,
+                attendance_status: (['Present', 'Casual Leave', 'Medical Leave'].includes(formData.attendance_status) && formData.shift_type === 'Half Day') 
+                    ? `${formData.attendance_status} (Half)` 
+                    : formData.attendance_status,
                 leave_reason: formData.leave_reason
             };
 
@@ -2377,6 +2481,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
             setIsSaving(false);
         }
     };
+
+    const isHalfDay = formData.shift_type === 'Half Day';
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
@@ -2432,6 +2538,19 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                 </select>
                             </div>
                         )}
+                        {!isPaymentTab && (formData.attendance_status === 'Present' || formData.attendance_status === 'Casual Leave' || formData.attendance_status === 'Medical Leave') && (
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Day Type</label>
+                                <select
+                                    value={formData.shift_type}
+                                    onChange={e => setFormData({ ...formData, shift_type: e.target.value })}
+                                    style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem', outline: 'none' }}
+                                >
+                                    <option value="Full Day" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Full Day</option>
+                                    <option value="Half Day" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Half Day</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (isPaymentTab ? '1fr' : '2fr 1fr'), gap: '1rem', marginBottom: '1.5rem' }}>
@@ -2445,6 +2564,17 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                                 <input type="number" required value={formData.rate} onChange={e => setFormData({ ...formData, rate: e.target.value })} style={{ width: '100%', padding: '0.6rem', background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
                             </div>
                         ))}
+                        {!isPaymentTab && formData.attendance_status === 'Present' && !isHalfDay && (
+                            <div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={formData.useManualOt} onChange={e => setFormData({ ...formData, useManualOt: e.target.checked })} />
+                                    Extra OT Hours (Additional)
+                                </label>
+                                {formData.useManualOt && (
+                                    <input type="number" step="0.5" value={formData.manualOt} onChange={e => setFormData({ ...formData, manualOt: e.target.value })} placeholder="Enter OT" style={{ width: '100%', padding: '0.6rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: 'var(--text-primary)', borderRadius: '0.4rem' }} />
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {isPaymentTab ? (

@@ -1627,6 +1627,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 let totalPaid = 0;
                                 let totalPending = 0;
 
+                                // Track per-stakeholder stats for the ledger
+                                const stakeholderStats = profitStakeholders.map(s => ({
+                                    ...s,
+                                    paid: 0,
+                                    pending: 0,
+                                    total: 0
+                                }));
+
                                 yearlyData.filter(m => m.isActive).forEach(month => {
                                     const mProfit = month.netProfit || 0;
                                     totalProfit += mProfit;
@@ -1635,120 +1643,143 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     const activeReservePct = mOverride ? parseFloat(mOverride.reserve_percentage) : profitReservePct;
                                     totalReserve += (mProfit * activeReservePct) / 100;
 
-                                    profitStakeholders.forEach(s => {
+                                    profitStakeholders.forEach((s, idx) => {
                                         const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);
                                         const status = p?.status || 'pending';
                                         const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
 
+                                        stakeholderStats[idx].total += share;
                                         if (status === 'paid') {
+                                            stakeholderStats[idx].paid += share;
                                             totalPaid += share;
                                         } else {
+                                            stakeholderStats[idx].pending += share;
                                             totalPending += share;
                                         }
                                     });
                                 });
 
                                 return (
-                                    <div style={{ 
-                                        display: 'grid', 
-                                        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', 
-                                        gap: isMobile ? '0.75rem' : '1rem', 
-                                        marginBottom: '2rem' 
-                                    }}>
-                                        <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #10b981' }}>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Profit Pool</span>
-                                            <h3 style={{ margin: '0.25rem 0 0 0', color: '#10b981', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalProfit)}</h3>
+                                    <>
+                                        <div style={{ 
+                                            display: 'grid', 
+                                            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', 
+                                            gap: isMobile ? '0.75rem' : '1rem', 
+                                            marginBottom: '2rem' 
+                                        }}>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #10b981' }}>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Profit Pool</span>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#10b981', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalProfit)}</h3>
+                                            </div>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Distributed</span>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#3b82f6', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPaid)}</h3>
+                                            </div>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #ef4444' }}>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Pending Payouts</span>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#ef4444', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPending)}</h3>
+                                            </div>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #f59e0b' }}>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Reserved</span>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#f59e0b', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalReserve)}</h3>
+                                            </div>
                                         </div>
-                                        <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #3b82f6' }}>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Distributed</span>
-                                            <h3 style={{ margin: '0.25rem 0 0 0', color: '#3b82f6', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPaid)}</h3>
-                                        </div>
-                                        <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #ef4444' }}>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Pending Payouts</span>
-                                            <h3 style={{ margin: '0.25rem 0 0 0', color: '#ef4444', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPending)}</h3>
-                                        </div>
-                                        <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #f59e0b' }}>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Reserved</span>
-                                            <h3 style={{ margin: '0.25rem 0 0 0', color: '#f59e0b', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalReserve)}</h3>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
 
-                            <div style={{ 
-                                display: 'grid', 
-                                gridTemplateColumns: isMobile ? '1fr' : '1fr 350px', 
-                                gap: '1.5rem' 
-                            }}>
-                                <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: isMobile ? '600px' : 'auto' }}>
-                                            <thead>
-                                                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
-                                                    <th style={{ padding: isMobile ? '0.75rem' : '1.25rem 1rem', fontSize: '0.75rem' }}>PERIOD</th>
-                                                    <th style={{ padding: isMobile ? '0.75rem' : '1.25rem 1rem', fontSize: '0.75rem' }}>NET PROFIT</th>
-                                                    {profitStakeholders.map(s => <th key={s.id} style={{ padding: isMobile ? '0.75rem' : '1rem', fontSize: '0.75rem' }}>{s.name}</th>)}
-                                                    <th style={{ padding: isMobile ? '0.75rem' : '1rem', fontSize: '0.75rem', color: '#f59e0b' }}>RESERVE</th>
-                                                </tr>
-                                            </thead>
-                                        <tbody>
-                                            {yearlyData.filter(m => m.isActive).map(month => {
-                                                const mProfit = month.netProfit || 0;
-                                                const mOverride = profitMonthlySettings.find(s => s.month_year === `${month.name} ${selectedYear}`);
-                                                const activeReservePct = mOverride ? parseFloat(mOverride.reserve_percentage) : profitReservePct;
-                                                const reserved = (mProfit * activeReservePct) / 100;
-                                                return (
-                                                    <tr key={month.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                        <td style={{ padding: '1.25rem 1rem', fontWeight: 700 }}>{month.name}</td>
-                                                        <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(mProfit)}</td>
-                                                        {profitStakeholders.map(s => {
-                                                            const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);
-                                                            const status = p?.status || 'pending';
-                                                            const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
+                                        <div style={{ 
+                                            display: 'grid', 
+                                            gridTemplateColumns: isMobile ? '1fr' : '1fr 350px', 
+                                            gap: '1.5rem' 
+                                        }}>
+                                            <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+                                                <div style={{ overflowX: 'auto' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: isMobile ? '600px' : 'auto' }}>
+                                                        <thead>
+                                                            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
+                                                                <th style={{ padding: isMobile ? '0.75rem' : '1.25rem 1rem', fontSize: '0.75rem' }}>PERIOD</th>
+                                                                <th style={{ padding: isMobile ? '0.75rem' : '1.25rem 1rem', fontSize: '0.75rem' }}>NET PROFIT</th>
+                                                                {profitStakeholders.map(s => <th key={s.id} style={{ padding: isMobile ? '0.75rem' : '1rem', fontSize: '0.75rem' }}>{s.name}</th>)}
+                                                                <th style={{ padding: isMobile ? '0.75rem' : '1rem', fontSize: '0.75rem', color: '#f59e0b' }}>RESERVE</th>
+                                                            </tr>
+                                                        </thead>
+                                                    <tbody>
+                                                        {yearlyData.filter(m => m.isActive).map(month => {
+                                                            const mProfit = month.netProfit || 0;
+                                                            const mOverride = profitMonthlySettings.find(s => s.month_year === `${month.name} ${selectedYear}`);
+                                                            const activeReservePct = mOverride ? parseFloat(mOverride.reserve_percentage) : profitReservePct;
+                                                            const reserved = (mProfit * activeReservePct) / 100;
                                                             return (
-                                                                <td key={s.id} style={{ padding: '1rem' }}>
-                                                                    <div style={{ color: status === 'paid' ? '#10b981' : '#3b82f6', fontWeight: 700 }}>{formatCurrency(share)}</div>
-                                                                    <select
-                                                                        value={status}
-                                                                        onChange={async (e) => {
-                                                                            const newVal = e.target.value;
-                                                                            if (p) await supabase.from('profit_payouts').update({ status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null }).eq('id', p.id);
-                                                                            else await supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: share, status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null });
-                                                                            await logProfitHubAction('Status Change', { month: `${month.name} ${selectedYear}`, stakeholder: s.name, status: newVal });
-                                                                            await fetchProfitHubData();
-                                                                        }}
-                                                                        style={{ fontSize: '0.65rem', padding: '0.2rem', borderRadius: '4px', border: '1px solid var(--glass-border)', background: 'transparent', color: status === 'paid' ? '#10b981' : '#3b82f6' }}
-                                                                    >
-                                                                        <option value="pending">Wait</option>
-                                                                        <option value="paid">Paid</option>
-                                                                    </select>
-                                                                </td>
+                                                                <tr key={month.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 700 }}>{month.name}</td>
+                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(mProfit)}</td>
+                                                                    {profitStakeholders.map(s => {
+                                                                        const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);
+                                                                        const status = p?.status || 'pending';
+                                                                        const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
+                                                                        return (
+                                                                            <td key={s.id} style={{ padding: '1rem' }}>
+                                                                                <div style={{ color: status === 'paid' ? '#10b981' : '#3b82f6', fontWeight: 700 }}>{formatCurrency(share)}</div>
+                                                                                <select
+                                                                                    value={status}
+                                                                                    onChange={async (e) => {
+                                                                                        const newVal = e.target.value;
+                                                                                        if (p) await supabase.from('profit_payouts').update({ status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null }).eq('id', p.id);
+                                                                                        else await supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: share, status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null });
+                                                                                        await logProfitHubAction('Status Change', { month: `${month.name} ${selectedYear}`, stakeholder: s.name, status: newVal });
+                                                                                        await fetchProfitHubData();
+                                                                                    }}
+                                                                                    style={{ fontSize: '0.65rem', padding: '0.2rem', borderRadius: '4px', border: '1px solid var(--glass-border)', background: 'transparent', color: status === 'paid' ? '#10b981' : '#3b82f6' }}
+                                                                                >
+                                                                                    <option value="pending">Wait</option>
+                                                                                    <option value="paid">Paid</option>
+                                                                                </select>
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                    <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(reserved)}</td>
+                                                                </tr>
                                                             );
                                                         })}
-                                                        <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(reserved)}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                    </div>
-                                </div>
-                                <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                                    <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800 }}>Default Settings</h3>
-                                    <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <div style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                                            <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 700 }}>SYSTEM RESERVE</div>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{profitReservePct.toFixed(1)}%</div>
-                                        </div>
-                                        {profitStakeholders.map(s => (
-                                            <div key={s.id} style={{ padding: '1rem', background: 'var(--glass-highlight)', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                                <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{s.name}</div>
-                                                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#3b82f6' }}>{s.default_percent}%</div>
+                                                    </tbody>
+                                                </table>
+                                                </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                                            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                                <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <Users size={18} color="#3b82f6" /> Stakeholder Ledger
+                                                </h3>
+                                                <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                    <div style={{ padding: '1rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 700 }}>SYSTEM RESERVE</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{profitReservePct.toFixed(1)}%</div>
+                                                    </div>
+                                                    {stakeholderStats.map(s => (
+                                                        <div key={s.id} style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1rem', border: '1px solid var(--glass-border)' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                                                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.name}</div>
+                                                                <div style={{ padding: '0.25rem 0.6rem', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 800 }}>{s.default_percent}%</div>
+                                                            </div>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                                <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                                                                    <p style={{ margin: 0, fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Paid</p>
+                                                                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(s.paid)}</p>
+                                                                </div>
+                                                                <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                                                                    <p style={{ margin: 0, fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Balance</p>
+                                                                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#ef4444' }}>{formatCurrency(s.pending)}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6 }}>
+                                                                <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>Total Entitlement</span>
+                                                                <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{formatCurrency(s.total)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     )}
                 </>

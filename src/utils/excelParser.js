@@ -513,14 +513,16 @@ export const parseExcelFile = (files) => {
                                 const amount = parseFloat(String(row[amountIdx] || 0).replace(/,/g, ''));
                                 if (!isNaN(amount) && amount > 0) {
                                     const eDate = normalizeDate(row[dateIdx]);
-                                    const desc = (row[typeIdx] || '') + (row[paidToIdx] ? ` - ${row[paidToIdx]}` : '');
-                                    mergedData.transactions.push({
-                                        id: `exp-${eDate}-${amount}-${desc}-${index}`, // Unique ID
-                                        parsedDate: eDate,
-                                        parsedAmount: amount,
-                                        parsedType: 'Expense',
-                                        originalDesc: desc
-                                    });
+                                    if (eDate) {
+                                        const desc = (row[typeIdx] || '') + (row[paidToIdx] ? ` - ${row[paidToIdx]}` : '');
+                                        mergedData.transactions.push({
+                                            id: `exp-${eDate}-${amount}-${desc}-${index}`, // Unique ID
+                                            parsedDate: eDate,
+                                            parsedAmount: amount,
+                                            parsedType: 'Expense',
+                                            originalDesc: desc
+                                        });
+                                    }
                                 }
                             });
                         }

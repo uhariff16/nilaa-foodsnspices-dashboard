@@ -40,6 +40,84 @@ const AdminDataIngestion = () => {
         return saved ? new Set(JSON.parse(saved)) : new Set();
     });
 
+    const [googleSyncEnabled, setGoogleSyncEnabled] = useState(() => {
+        const saved = localStorage.getItem('googleSyncEnabled');
+        return saved ? JSON.parse(saved) : false; // Default to false
+    });
+
+    useEffect(() => {
+        localStorage.setItem('googleSyncEnabled', JSON.stringify(googleSyncEnabled));
+    }, [googleSyncEnabled]);
+
+    const DEFAULT_KEYWORDS = [
+        'sale_summary', 'sales summary', 'invoicewise',
+        'customerwise', 'profit',
+        'expenses', 'receivable',
+        'purchase', 'billwise',
+        'stock in', 'pre prod', 'pre production', 'post prod', 'post production', 'usage', 'production',
+        'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'summary'
+    ];
+
+    const [whitelistKeywords, setWhitelistKeywords] = useState(() => {
+        const saved = localStorage.getItem('ingestionKeywords');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Auto-merge default keywords that might be missing
+            return Array.from(new Set([...parsed, ...DEFAULT_KEYWORDS]));
+        }
+        return DEFAULT_KEYWORDS;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('ingestionKeywords', JSON.stringify(whitelistKeywords));
+    }, [whitelistKeywords]);
+
+    const [showKeywordMgr, setShowKeywordMgr] = useState(false);
+    const [newKeyword, setNewKeyword] = useState('');
+
+    const [processedFileHashes, setProcessedFileHashes] = useState(() => {
+        const saved = localStorage.getItem('processedFileHashes');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [previewData, setPreviewData] = useState(null);
+
+    useEffect(() => {
+        localStorage.setItem('processedFileHashes', JSON.stringify(processedFileHashes));
+    }, [processedFileHashes]);
+
+    const computeFileHash = async (file) => {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (e) {
+            console.error("Hash calculation failed", e);
+            return null;
+        }
+    };
+
+    const [syncProgress, setSyncProgress] = useState(null);
+    const [syncLogs, setSyncLogs] = useState(() => {
+        const saved = localStorage.getItem('driveSyncLogs');
+        return saved ? JSON.parse(saved) : [];
+    });
+
+    const addSyncLog = useCallback((logEntry) => {
+        setSyncLogs(prev => {
+            const updated = [
+                {
+                    id: Math.random().toString(36).substr(2, 9),
+                    timestamp: new Date().toISOString(),
+                    ...logEntry
+                },
+                ...prev
+            ].slice(0, 100);
+            localStorage.setItem('driveSyncLogs', JSON.stringify(updated));
+            return updated;
+        });
+    }, []);
+
     // Refs for Auto-Sync (Fix Stale Closure)
     const watchConfigRef = useRef(watchConfig);
     const processedIdsRef = useRef(processedFileIds);
@@ -196,8 +274,13 @@ const AdminDataIngestion = () => {
         const performSync = async (accessToken) => {
             try {
                 setLoading(true);
-                // Only show status if we actually find files or on error, to reduce noise?
-                // Or just show idle.
+                setSyncProgress({
+                    totalFiles: 0,
+                    currentFileIndex: 0,
+                    currentFileName: 'Connecting...',
+                    fileStatus: 'Listing files in folder...',
+                    percent: 0
+                });
                 setStatus({ type: 'idle', message: 'Syncing with Drive...' });
 
                 const { listDriveFiles } = await import('../../utils/driveUtils');
@@ -223,16 +306,47 @@ const AdminDataIngestion = () => {
                 if (filesToProcess.length === 0) {
                     setWatchConfig(prev => ({ ...prev, lastSync: new Date().toISOString() }));
                     setStatus({ type: 'success', message: 'Sync Complete: No new or updated files found.' });
+                    setSyncProgress(null);
                     setLoading(false);
+                    
+                    addSyncLog({
+                        fileName: 'N/A',
+                        fileId: 'N/A',
+                        status: 'success',
+                        message: 'Sync completed: No new or modified files found in folder.'
+                    });
                     return;
                 }
 
                 setStatus({ type: 'idle', message: `Found ${filesToProcess.length} files to sync...` });
+                setSyncProgress({
+                    totalFiles: filesToProcess.length,
+                    currentFileIndex: 0,
+                    currentFileName: '',
+                    fileStatus: 'Found new files. Preparing processing queue...',
+                    percent: 0
+                });
+
                 let successCount = 0;
+                let fileIdx = 0;
 
                 for (const fileMeta of filesToProcess) {
+                    fileIdx++;
+                    setSyncProgress({
+                        totalFiles: filesToProcess.length,
+                        currentFileIndex: fileIdx,
+                        currentFileName: fileMeta.name,
+                        fileStatus: 'Downloading...',
+                        percent: Math.round(((fileIdx - 1) / filesToProcess.length) * 100)
+                    });
+
+                    // Wait 500ms between operations to allow UI updates and make sync progress visual
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
                     try {
                         const blob = await downloadDriveFile(fileMeta.id, accessToken);
+                        setSyncProgress(prev => ({ ...prev, fileStatus: 'Parsing & Processing...' }));
+                        
                         const file = new File([blob], fileMeta.name, { type: fileMeta.mimeType });
 
                         let result = { success: false };
@@ -244,7 +358,6 @@ const AdminDataIngestion = () => {
 
                         // If not sales, Try Production
                         if (!result.success) {
-                            // Reset file stream? JS File object is readable multiple times usually
                             try {
                                 result = await processProductionData(file);
                             } catch (e) {
@@ -254,27 +367,61 @@ const AdminDataIngestion = () => {
 
                         if (result.success || (result.message && !result.message.includes('No valid'))) {
                             successCount++;
-                            // Mark as processed (add to Set)
-                            // We add to set, but for updates it's already there. That's fine.
                             setProcessedFileIds(prev => {
                                 const next = new Set(prev);
                                 next.add(fileMeta.id);
                                 return next;
                             });
+                            
+                            addSyncLog({
+                                fileName: fileMeta.name,
+                                fileId: fileMeta.id,
+                                status: 'success',
+                                message: result.message || 'Successfully parsed and imported.'
+                            });
+                        } else {
+                            addSyncLog({
+                                fileName: fileMeta.name,
+                                fileId: fileMeta.id,
+                                status: 'warning',
+                                message: result.message || 'No valid transactions or logs matched in this file.'
+                            });
                         }
 
                     } catch (err) {
                         console.error(`Sync Error for ${fileMeta.name}:`, err);
+                        addSyncLog({
+                            fileName: fileMeta.name,
+                            fileId: fileMeta.id,
+                            status: 'failed',
+                            message: err.message || 'Sync worker encountered parsing error.'
+                        });
                     }
                 }
 
                 setWatchConfig(prev => ({ ...prev, lastSync: new Date().toISOString() }));
                 setStatus({ type: 'success', message: `Auto-Sync: Processed ${successCount}/${filesToProcess.length} files.` });
+                
+                addSyncLog({
+                    fileName: `${filesToProcess.length} files batch`,
+                    fileId: 'Batch',
+                    status: 'success',
+                    message: `Completed sync batch. Successfully processed ${successCount} of ${filesToProcess.length} files.`
+                });
+
+                setSyncProgress(null);
                 checkDbStatus(true);
 
             } catch (err) {
                 console.error("Auto Sync Error", err);
                 setStatus({ type: 'error', message: "Auto-Sync Failed: " + err.message });
+                addSyncLog({
+                    fileName: 'All Files',
+                    fileId: 'Batch Error',
+                    status: 'failed',
+                    message: 'Sync execution stopped: ' + err.message
+                });
+                setSyncProgress(null);
             } finally {
                 setLoading(false);
             }
@@ -291,6 +438,12 @@ const AdminDataIngestion = () => {
                     setStatus({
                         type: 'error',
                         message: "Auto-Sync Paused: Session Expired. Please click 'Enable Auto-Sync' to sign in again."
+                    });
+                    addSyncLog({
+                        fileName: 'Google Auth',
+                        fileId: 'Auth Error',
+                        status: 'failed',
+                        message: 'Authentication failed. Auto-sync has been paused.'
                     });
                     return;
                 }
@@ -319,7 +472,7 @@ const AdminDataIngestion = () => {
                 tokenClient.requestAccessToken({ prompt: '' });
             }
         }
-    }, [tokenClient]); // minimal deps
+    }, [tokenClient, addSyncLog]); // minimal deps
 
     // Effect for Interval
     useEffect(() => {
@@ -466,6 +619,9 @@ const AdminDataIngestion = () => {
         let uniqueTransactions = [];
         let updates = [];
         let addedRec = 0;
+        let newTxCount = 0;
+        let updateTxCount = 0;
+        let skippedTxns = 0;
 
         // 1. Transactions
         if (hasTransactions) {
@@ -494,7 +650,8 @@ const AdminDataIngestion = () => {
                     const a = Number(t.amount || 0).toFixed(2);
                     const i = String(t.item_name || '').trim().toLowerCase();
                     const inv = String(t.invoice_no || '').trim().toLowerCase();
-                    return `${d}|${a}|${i}|${inv}`;
+                    const cleanInv = (inv === 'null' || inv === 'undefined' || inv.startsWith('inv-missing-')) ? '' : inv;
+                    return `${d}|${a}|${i}|${cleanInv}`;
                 };
 
                 const existingTxMap = new Map();
@@ -513,6 +670,10 @@ const AdminDataIngestion = () => {
                         updates.push({ ...t, id: existing.id });
                     }
                 });
+
+                newTxCount = uniqueTransactions.length;
+                updateTxCount = updates.length;
+                skippedTxns = formattedData.length - newTxCount - updateTxCount;
 
                 if (uniqueTransactions.length > 0) await supabase.from('transactions').insert(uniqueTransactions);
                 if (updates.length > 0) await supabase.from('transactions').upsert(updates);
@@ -557,11 +718,11 @@ const AdminDataIngestion = () => {
 
         return {
             success: true,
-            newTxns: uniqueTransactions.length,
-            updatedTxns: updates.length,
+            newTxns: newTxCount,
+            updatedTxns: updateTxCount,
             receivables: addedRec,
             custStats: addedCustStats,
-            message: `Processed: ${uniqueTransactions.length} txns, ${addedRec} latest receivables (replaced existing), ${addedCustStats} profit records.`
+            message: `Imported: ${newTxCount} new txns, ${updateTxCount} updated, ${skippedTxns} skipped. ${addedRec} latest receivables replaced.`
         };
     };
 
@@ -587,55 +748,446 @@ const AdminDataIngestion = () => {
             ...formatRows(data.postProduction, 'production')
         ];
 
+        let newCount = 0;
+        let updateCount = 0;
+        let skipCount = 0;
+
         if (allRows.length > 0) {
-            const { error } = await supabase.from('production_logs').upsert(allRows);
-            if (error) throw error;
+            const ids = allRows.map(r => r.id);
+            const { data: existingLogs, error: fetchErr } = await supabase
+                .from('production_logs')
+                .select('id, date, type, material, weight, remarks, source_file')
+                .in('id', ids);
+
+            if (!fetchErr && existingLogs) {
+                const existingMap = new Map(existingLogs.map(l => [l.id, l]));
+                const rowsToInsert = [];
+                const rowsToUpdate = [];
+
+                allRows.forEach(row => {
+                    const existing = existingMap.get(row.id);
+                    if (!existing) {
+                        newCount++;
+                        rowsToInsert.push(row);
+                    } else {
+                        const isDifferent =
+                            existing.date !== row.date ||
+                            existing.type !== row.type ||
+                            existing.material !== row.material ||
+                            Number(existing.weight) !== Number(row.weight) ||
+                            existing.remarks !== row.remarks ||
+                            existing.source_file !== row.source_file;
+
+                        if (isDifferent) {
+                            updateCount++;
+                            rowsToUpdate.push(row);
+                        } else {
+                            skipCount++;
+                        }
+                    }
+                });
+
+                if (rowsToInsert.length > 0) {
+                    const { error } = await supabase.from('production_logs').insert(rowsToInsert);
+                    if (error) throw error;
+                }
+                if (rowsToUpdate.length > 0) {
+                    const { error } = await supabase.from('production_logs').upsert(rowsToUpdate);
+                    if (error) throw error;
+                }
+            } else {
+                const { error } = await supabase.from('production_logs').upsert(allRows);
+                if (error) throw error;
+                newCount = allRows.length;
+            }
         }
 
         return {
             success: true,
-            totalNew: allRows.length,
+            totalNew: newCount + updateCount,
             details: `Stock-In: ${data.stockIn.length}, Usage: ${data.preProduction.length}, Production: ${data.postProduction.length}`,
-            message: `Added ${allRows.length} records.`
+            message: `Imported: ${newCount} new logs, ${updateCount} updated, ${skipCount} skipped.`
         };
     };
 
-    const executeUpload = async (type) => {
-        const file = type === 'sales' ? salesFile : productionFile;
-        if (!file) return;
-
-        setLoading(true);
-        setStatus({ type: 'idle', message: `Processing ${file.name}...` });
+    const validateSingleFile = async (file, type) => {
+        const hash = await computeFileHash(file);
 
         try {
-            if (type === 'sales') {
-                const result = await processSalesData(file);
-                if (!result.success) {
-                    throw new Error(result.message);
-                }
-                setStatus({ type: 'success', message: result.message });
-                setSalesFile(null);
-            } else if (type === 'production') {
-                const result = await processProductionData(file);
-                if (!result.success && !result.totalNew) { // Allow success with 0 new if just deduped
-                    if (result.message.includes('No valid')) throw new Error(result.message);
-                    setStatus({ type: 'success', message: "All records already exist." });
-                } else {
-                    setStatus({ type: 'success', message: result.message });
-                }
-                setProductionFile(null);
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array', bookSheets: true });
+            const sheetNames = workbook.SheetNames || [];
+
+            const isGenuine = sheetNames.some(name => {
+                const lowerName = name.toLowerCase();
+                return whitelistKeywords.some(kw => lowerName.includes(kw.toLowerCase().trim()));
+            });
+
+            if (!isGenuine) {
+                return {
+                    fileName: file.name,
+                    file,
+                    hash,
+                    isDuplicateFile: false,
+                    newCount: 0,
+                    updateCount: 0,
+                    skipCount: 0,
+                    errors: [`Error: File rejected. Sheet names do not contain any whitelisted keywords. Current Whitelist: ${whitelistKeywords.join(', ')}`],
+                    dataRows: []
+                };
+            }
+        } catch (e) {
+            console.error("Lightweight layout verification failed", e);
+        }
+
+        if (hash && processedFileHashes.includes(hash)) {
+            return {
+                fileName: file.name,
+                file,
+                hash,
+                isDuplicateFile: true,
+                newCount: 0,
+                updateCount: 0,
+                skipCount: 0,
+                errors: ["Warning: This exact file (matching SHA-256 hash) has already been successfully processed and imported before. Re-importing is unnecessary."],
+                dataRows: []
+            };
+        }
+
+        const errors = [];
+        let newCount = 0;
+        let updateCount = 0;
+        let skipCount = 0;
+        let dataRows = [];
+
+        if (type === 'sales') {
+            const result = await parseExcelFile([file]);
+            const data = result.transactions || [];
+            const customerStatsData = result.customers || [];
+            const receivablesData = result.receivables || [];
+
+            if (data.length === 0 && customerStatsData.length === 0 && receivablesData.length === 0) {
+                errors.push("Error: No valid transaction, customer, or receivable records found in the spreadsheet.");
             }
 
-            checkDbStatus();
+            // Validate transaction rows
+            const formattedData = data.map((record, idx) => {
+                const rowNum = idx + 2; // Approximate row number
+                const date = record.parsedDate;
+                const amount = record.parsedAmount;
+                const itemName = record.originalDesc;
 
+                if (!date) {
+                    errors.push(`Row ${rowNum}: Missing or invalid transaction Date.`);
+                }
+                if (amount === undefined || isNaN(amount)) {
+                    errors.push(`Row ${rowNum}: Amount '${record.parsedAmount}' is not a valid number.`);
+                }
+                if (!itemName) {
+                    errors.push(`Row ${rowNum}: Particulars / Description is missing.`);
+                }
+
+                return {
+                    date,
+                    amount: Math.abs(amount || 0),
+                    payment_mode: record.parsedType || 'Sales',
+                    item_name: itemName,
+                    customer_name: record.customerName,
+                    invoice_no: record.invoiceNo || null,
+                    quantity: record.parsedQty || 1,
+                    profit: record.parsedProfit || 0
+                };
+            }).filter(r => r.date && !isNaN(r.amount) && r.item_name);
+
+            if (formattedData.length > 0) {
+                const allDates = formattedData.map(d => d.date).sort();
+                const minDate = allDates[0];
+                const maxDate = allDates[allDates.length - 1];
+
+                const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
+
+                const createTxSig = (t) => {
+                    let d = String(t.date || '').trim();
+                    if (d.includes('T')) d = d.split('T')[0];
+                    const a = Number(t.amount || 0).toFixed(2);
+                    const i = String(t.item_name || '').trim().toLowerCase();
+                    const inv = String(t.invoice_no || '').trim().toLowerCase();
+                    const cleanInv = (inv === 'null' || inv === 'undefined' || inv.startsWith('inv-missing-')) ? '' : inv;
+                    return `${d}|${a}|${i}|${cleanInv}`;
+                };
+
+                const existingTxMap = new Map();
+                existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
+
+                formattedData.forEach(t => {
+                    const sig = createTxSig(t);
+                    const existing = existingTxMap.get(sig);
+
+                    if (!existing) {
+                        newCount++;
+                    } else if (
+                        existing.payment_mode !== t.payment_mode ||
+                        (t.customer_name && existing.customer_name !== t.customer_name)
+                    ) {
+                        updateCount++;
+                    } else {
+                        skipCount++;
+                    }
+                });
+
+                dataRows = formattedData.slice(0, 5); // Take first 5 rows for UI preview
+            }
+
+        } else if (type === 'production') {
+            const data = await parseProductionFile([file]);
+            if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
+                errors.push("Error: No valid production logs found in file.");
+            }
+
+            const formatRows = (items, rowType) => items.map((item, idx) => {
+                const rowNum = idx + 2;
+                if (!item.date) {
+                    errors.push(`Row ${rowNum}: Missing or invalid log Date.`);
+                }
+                if (item.weight === undefined || isNaN(item.weight)) {
+                    errors.push(`Row ${rowNum}: Weight '${item.weight}' is not a valid number.`);
+                }
+                if (!item.material) {
+                    errors.push(`Row ${rowNum}: Material name is missing.`);
+                }
+
+                return {
+                    id: item.id,
+                    date: item.date,
+                    type: rowType,
+                    material: item.material,
+                    weight: item.weight || 0,
+                    remarks: `Sheet: ${item.source_sheet || 'N/A'}`,
+                    source_file: item.source_file || file.name
+                };
+            }).filter(row => row.date && row.weight);
+
+            const allRows = [
+                ...formatRows(data.stockIn, 'stock_in'),
+                ...formatRows(data.preProduction, 'usage'),
+                ...formatRows(data.postProduction, 'production')
+            ];
+
+            if (allRows.length > 0) {
+                const ids = allRows.map(r => r.id);
+                const { data: existingLogs, error: fetchErr } = await supabase
+                    .from('production_logs')
+                    .select('id, date, type, material, weight, remarks, source_file')
+                    .in('id', ids);
+
+                if (!fetchErr && existingLogs) {
+                    const existingMap = new Map(existingLogs.map(l => [l.id, l]));
+
+                    allRows.forEach(row => {
+                        const existing = existingMap.get(row.id);
+                        if (!existing) {
+                            newCount++;
+                        } else {
+                            const isDifferent =
+                                existing.date !== row.date ||
+                                existing.type !== row.type ||
+                                existing.material !== row.material ||
+                                Number(existing.weight) !== Number(row.weight) ||
+                                existing.remarks !== row.remarks ||
+                                existing.source_file !== row.source_file;
+
+                            if (isDifferent) {
+                                updateCount++;
+                            } else {
+                                skipCount++;
+                            }
+                        }
+                    });
+                } else {
+                    newCount = allRows.length;
+                }
+
+                dataRows = allRows.slice(0, 5); // Take first 5 rows for UI preview
+            }
+        }
+
+        return {
+            fileName: file.name,
+            file,
+            hash,
+            isDuplicateFile: false,
+            newCount,
+            updateCount,
+            skipCount,
+            errors,
+            dataRows
+        };
+    };
+
+    const runDryRunValidation = async (file, type) => {
+        setLoading(true);
+        setStatus({ type: 'idle', message: `Running dry-run validation for ${file.name}...` });
+
+        try {
+            const preview = await validateSingleFile(file, type);
+            setPreviewData({
+                isFolder: false,
+                type,
+                ...preview
+            });
+
+            if (preview.isDuplicateFile) {
+                setStatus({ type: 'error', message: 'Dry-run blocked: Duplicate file detected.' });
+            } else {
+                setStatus({ type: 'success', message: 'Dry-run validation complete. Please review the details below.' });
+            }
+        } catch (err) {
+            console.error("Dry run validation failed", err);
+            setStatus({ type: 'error', message: 'Dry-run failed: ' + err.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const confirmIngestion = async () => {
+        if (!previewData) return;
+
+        setLoading(true);
+        try {
+            if (previewData.isFolder) {
+                const { files, type } = previewData;
+                setStatus({ type: 'idle', message: `Committing folder ingestion (0/${files.length} files)...` });
+
+                let successCount = 0;
+                let skipCount = 0;
+                let failCount = 0;
+                let newRecordsCount = 0;
+                const hashesToCache = [];
+
+                for (let i = 0; i < files.length; i++) {
+                    const fileMeta = files[i];
+                    if (!fileMeta.selected) {
+                        continue;
+                    }
+                    setStatus({ type: 'idle', message: `Committing file ${i+1}/${files.length}: ${fileMeta.fileName}...` });
+
+                    if (fileMeta.isDuplicateFile) {
+                        skipCount++;
+                        continue;
+                    }
+
+                    try {
+                        let result;
+                        if (type === 'sales') {
+                            result = await processSalesData(fileMeta.file);
+                            if (!result.success) throw new Error(result.message);
+                            newRecordsCount += result.newTxns + result.updatedTxns;
+                        } else if (type === 'production') {
+                            result = await processProductionData(fileMeta.file);
+                            if (!result.success && !result.totalNew) {
+                                if (result.message.includes('No valid')) throw new Error(result.message);
+                            } else {
+                                newRecordsCount += result.totalNew || 0;
+                            }
+                        }
+
+                        successCount++;
+                        if (fileMeta.hash) {
+                            hashesToCache.push(fileMeta.hash);
+                        }
+
+                        addSyncLog({
+                            fileName: fileMeta.fileName,
+                            fileId: `Folder Import (${type === 'sales' ? 'Sales' : 'Prod'})`,
+                            status: 'success',
+                            message: result?.message || 'Successfully parsed and imported.'
+                        });
+
+                    } catch (fileErr) {
+                        console.error(`Error writing ${fileMeta.fileName} to DB:`, fileErr);
+                        failCount++;
+                        addSyncLog({
+                            fileName: fileMeta.fileName,
+                            fileId: `Folder Import (${type === 'sales' ? 'Sales' : 'Prod'})`,
+                            status: 'failed',
+                            message: fileErr.message || 'Failed during DB write.'
+                        });
+                    }
+                }
+
+                if (hashesToCache.length > 0) {
+                    setProcessedFileHashes(prev => [...prev, ...hashesToCache]);
+                }
+
+                setPreviewData(null);
+                await checkDbStatus(true);
+
+                const finalMsg = `Imported: ${successCount} files successfully, ${skipCount} duplicates skipped, ${failCount} failed. Total new/updated records: ${newRecordsCount}`;
+                if (failCount > 0) {
+                    setStatus({ type: 'error', message: `Completed with errors. ${finalMsg}` });
+                } else {
+                    setStatus({ type: 'success', message: finalMsg });
+                }
+            } else {
+                const { file, type, hash } = previewData;
+                setStatus({ type: 'idle', message: `Committing data from ${file.name} to database...` });
+
+                let result;
+                if (type === 'sales') {
+                    result = await processSalesData(file);
+                    if (!result.success) throw new Error(result.message);
+
+                    addSyncLog({
+                        fileName: file.name,
+                        fileId: 'Manual Upload (Sales)',
+                        status: 'success',
+                        message: result.message || 'Successfully parsed and imported.'
+                    });
+                    setSalesFile(null);
+                } else if (type === 'production') {
+                    result = await processProductionData(file);
+                    if (!result.success && !result.totalNew) {
+                        if (result.message.includes('No valid')) throw new Error(result.message);
+                        setStatus({ type: 'success', message: "All records already exist." });
+                        addSyncLog({
+                            fileName: file.name,
+                            fileId: 'Manual Upload (Prod)',
+                            status: 'warning',
+                            message: 'All records already exist in database (no new inserts).'
+                        });
+                    } else {
+                        setStatus({ type: 'success', message: result.message });
+                        addSyncLog({
+                            fileName: file.name,
+                            fileId: 'Manual Upload (Prod)',
+                            status: 'success',
+                            message: result.message || 'Successfully parsed and imported.'
+                        });
+                    }
+                    setProductionFile(null);
+                }
+
+                if (hash) {
+                    setProcessedFileHashes(prev => [...prev, hash]);
+                }
+
+                setPreviewData(null);
+                checkDbStatus();
+                setStatus({ type: 'success', message: result.message || 'Import successful!' });
+            }
         } catch (error) {
-            console.error("Upload Error:", error);
+            console.error("Ingestion Write Error:", error);
             setStatus({ type: 'error', message: error.message });
         } finally {
             setLoading(false);
         }
     };
 
+    const executeUpload = async (type) => {
+        const file = type === 'sales' ? salesFile : productionFile;
+        if (!file) return;
+        await runDryRunValidation(file, type);
+    };
 
     const handleFolderUpload = async (e, type) => {
         const files = Array.from(e.target.files);
@@ -650,141 +1202,81 @@ const AdminDataIngestion = () => {
             return;
         }
 
-        let processedCount = 0;
-        let successCount = 0;
-        let skipCount = 0;
-        let failCount = 0;
-        let newRecordsCount = 0;
-        let receivablesCleared = false; // [NEW] Track if we've cleared old data for this batch
-        const errorLogs = [];
-
-        // Helper to update status during loop
-        const updateProgress = () => {
-            const pct = Math.round((processedCount / excelFiles.length) * 100);
-            setStatus({ type: 'idle', message: `Processing ${processedCount}/${excelFiles.length} (${pct}%)...` });
-        };
+        const previewFiles = [];
+        let totals = { newCount: 0, updateCount: 0, skipCount: 0, errorCount: 0 };
 
         try {
             for (let i = 0; i < excelFiles.length; i++) {
                 const file = excelFiles[i];
-                processedCount++;
-                updateProgress();
+                setStatus({ type: 'idle', message: `Dry-run validating folder files: ${i+1}/${excelFiles.length}...` });
 
-                try {
-                    if (type === 'production') {
-                        const result = await processProductionData(file);
+                const preview = await validateSingleFile(file, type);
+                previewFiles.push({
+                    ...preview,
+                    selected: true
+                });
 
-                        if (result.success && result.totalNew > 0) {
-                            newRecordsCount += result.totalNew;
-                            successCount++;
-                        } else if (!result.success && result.message === "No valid production logs found.") {
-                            skipCount++;
-                        } else {
-                            // Already exists or 0 rows
-                            skipCount++;
-                        }
-                    } else if (type === 'sales') {
-                        const result = await parseExcelFile([file]);
-                        const data = result.transactions || [];
-
-                        if (data.length === 0) {
-                            skipCount++;
-                            continue;
-                        }
-
-                        let fileAddedCount = 0;
-
-                        // 1. Transactions
-                        if (data.length > 0) {
-                            const formattedData = data.map(record => ({
-                                date: record.parsedDate,
-                                amount: record.parsedAmount,
-                                payment_mode: record.parsedType,
-                                item_name: record.originalDesc,
-                                invoice_no: record.invoiceNo,
-                                quantity: record.parsedQty || 1,
-                                customer_name: record.customerName
-                            })).filter(r => r.date && r.amount && r.item_name);
-
-                            if (formattedData.length > 0) {
-                                const allDates = formattedData.map(d => d.date).sort();
-                                const minDate = allDates[0];
-                                const maxDate = allDates[allDates.length - 1];
-
-                                const existingTxns = await fetchAllRecords('transactions', 'id, date, amount, item_name, invoice_no, payment_mode, customer_name', minDate, maxDate);
-
-                                const createTxSig = (t) => `${String(t.date).split('T')[0]}|${Number(t.amount).toFixed(2)}|${String(t.item_name).trim().toLowerCase()}|${String(t.invoice_no).trim().toLowerCase()}`;
-                                const existingTxMap = new Map();
-                                existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
-
-                                const uniqueTransactions = [];
-                                const updates = [];
-
-                                formattedData.forEach(t => {
-                                    const sig = createTxSig(t);
-                                    const existing = existingTxMap.get(sig);
-
-                                    if (!existing) {
-                                        uniqueTransactions.push(t);
-                                    } else if (
-                                        existing.payment_mode !== t.payment_mode ||
-                                        (t.customer_name && existing.customer_name !== t.customer_name)
-                                    ) {
-                                        updates.push({ ...t, id: existing.id });
-                                    }
-                                });
-
-                                if (uniqueTransactions.length > 0) {
-                                    const { error } = await supabase.from('transactions').insert(uniqueTransactions);
-                                    if (error) throw error;
-                                    fileAddedCount += uniqueTransactions.length;
-                                }
-                                if (updates.length > 0) {
-                                    const { error } = await supabase.from('transactions').upsert(updates);
-                                    if (error) throw error;
-                                    fileAddedCount += updates.length;
-                                }
-                            }
-                        }
-
-                        if (fileAddedCount > 0) {
-                            newRecordsCount += fileAddedCount;
-                            successCount++;
-                        } else {
-                            skipCount++;
-                        }
-                    }
-                } catch (fileErr) {
-                    console.error(`Error processing ${file.name}:`, fileErr);
-                    failCount++;
-                    errorLogs.push(`${file.name}: ${fileErr.message}`);
-                }
+                totals.newCount += preview.newCount;
+                totals.updateCount += preview.updateCount;
+                totals.skipCount += preview.skipCount;
+                totals.errorCount += preview.errors.length;
             }
 
-            // Update Global Stats
-            await checkDbStatus(true);
-            if (prodFolderRef.current) prodFolderRef.current.value = "";
+            setPreviewData({
+                isFolder: true,
+                type,
+                totals,
+                files: previewFiles
+            });
 
-            // Final Status Message
-            if (failCount === 0) {
-                setStatus({
-                    type: 'success',
-                    message: `Batch Complete. Processed ${successCount} files, Skipped ${skipCount}. Added ${newRecordsCount} records.`
-                });
-            } else {
-                setStatus({
-                    type: 'error',
-                    message: `Completed with Errors. Success: ${successCount}, Failed: ${failCount}. Added ${newRecordsCount} records. Check console for details.`
-                });
-                alert(`Batch Upload Completed with ${failCount} errors.\n\nFailed Files:\n${errorLogs.slice(0, 5).join('\n')}\n${errorLogs.length > 5 ? '...' : ''}`);
-            }
-
+            setStatus({ type: 'success', message: `Dry-run completed for ${excelFiles.length} files. Review breakdown below.` });
         } catch (err) {
-            console.error("Critical Batch Error:", err);
-            setStatus({ type: 'error', message: "Critical Batch Failure: " + err.message });
+            console.error("Folder dry run validation failed", err);
+            setStatus({ type: 'error', message: 'Folder dry-run failed: ' + err.message });
         } finally {
             setLoading(false);
+            if (prodFolderRef.current) prodFolderRef.current.value = "";
         }
+    };
+
+    const toggleFileSelection = (index) => {
+        setPreviewData(prev => {
+            if (!prev || !prev.isFolder) return prev;
+            const newFiles = prev.files.map((f, idx) => idx === index ? { ...f, selected: !f.selected } : f);
+
+            // Recalculate totals for selected files
+            const totals = { newCount: 0, updateCount: 0, skipCount: 0, errorCount: 0 };
+            newFiles.forEach(f => {
+                if (f.selected) {
+                    totals.newCount += f.newCount;
+                    totals.updateCount += f.updateCount;
+                    totals.skipCount += f.skipCount;
+                    totals.errorCount += f.errors.length;
+                }
+            });
+
+            return { ...prev, files: newFiles, totals };
+        });
+    };
+
+    const toggleSelectAll = (checked) => {
+        setPreviewData(prev => {
+            if (!prev || !prev.isFolder) return prev;
+            const newFiles = prev.files.map(f => ({ ...f, selected: checked }));
+
+            // Recalculate totals
+            const totals = { newCount: 0, updateCount: 0, skipCount: 0, errorCount: 0 };
+            if (checked) {
+                newFiles.forEach(f => {
+                    totals.newCount += f.newCount;
+                    totals.updateCount += f.updateCount;
+                    totals.skipCount += f.skipCount;
+                    totals.errorCount += f.errors.length;
+                });
+            }
+
+            return { ...prev, files: newFiles, totals };
+        });
     };
 
     const startWatcher = async () => {
@@ -851,7 +1343,7 @@ const AdminDataIngestion = () => {
                 <p className="admin-subtitle">Upload sales records and production logs to populate your dashboard.</p>
 
                 {/* Global Controls */}
-                <div className="flex-center" style={{ marginTop: '1.5rem' }}>
+                <div className="flex-center" style={{ marginTop: '1.5rem', flexDirection: 'column', gap: '1rem' }}>
                     <div className="btn-toggle-group">
                         <button onClick={() => setUploadMode('file')} disabled={isWatching} className={`btn-toggle ${uploadMode === 'file' ? 'active blue' : ''}`}>
                             <FileIcon size={16} /> Single File
@@ -860,6 +1352,16 @@ const AdminDataIngestion = () => {
                             <FolderInput size={16} /> Folder Mode
                         </button>
                     </div>
+                    
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', cursor: 'pointer', marginTop: '0.5rem' }}>
+                        <input
+                            type="checkbox"
+                            checked={googleSyncEnabled}
+                            onChange={(e) => setGoogleSyncEnabled(e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                        />
+                        Enable Google Drive Integration
+                    </label>
                 </div>
             </div>
 
@@ -888,10 +1390,217 @@ const AdminDataIngestion = () => {
                 </div>
             )}
 
+            {/* Ingestion Preview Mode Panel (Requirement 2 & 3) */}
+            {previewData && (
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--accent-primary)', background: 'rgba(30, 41, 59, 0.7)' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: '#60a5fa' }}>
+                        <Database size={24} /> Dry-Run Ingestion Preview: {previewData.isFolder ? `Folder Batch (${previewData.files.length} files)` : previewData.fileName}
+                    </h3>
+                    
+                    {!previewData.isFolder && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginBottom: '1.5rem' }}>
+                            File SHA-256 Hash: <span style={{ color: 'var(--text-primary)' }}>{previewData.hash || 'Calculating...'}</span>
+                        </p>
+                    )}
+
+                    {!previewData.isFolder && previewData.isDuplicateFile && (
+                        <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1.5rem', color: '#f87171', fontSize: '0.875rem' }}>
+                            {previewData.errors[0]}
+                        </div>
+                    )}
+
+                    {(!previewData.isFolder ? !previewData.isDuplicateFile : true) && (
+                        <>
+                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>New Records</span>
+                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>
+                                        {previewData.isFolder ? previewData.totals.newCount : previewData.newCount}
+                                    </span>
+                                </div>
+                                <div style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Updates Detected</span>
+                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                                        {previewData.isFolder ? previewData.totals.updateCount : previewData.updateCount}
+                                    </span>
+                                </div>
+                                <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Duplicate / Skip</span>
+                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fbbf24' }}>
+                                        {previewData.isFolder ? previewData.totals.skipCount : previewData.skipCount}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {previewData.isFolder && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <h4 style={{ color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                        Folder Files Breakdown ({previewData.files.length} files)
+                                    </h4>
+                                    <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', background: 'rgba(0,0,0,0.15)' }} className="custom-scrollbar">
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                                            <thead>
+                                                <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
+                                                    <th style={{ padding: '0.5rem 0.75rem', width: '40px', textAlign: 'center' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={previewData.files.length > 0 && previewData.files.every(f => f.selected)}
+                                                            onChange={(e) => toggleSelectAll(e.target.checked)}
+                                                            style={{ cursor: 'pointer' }}
+                                                        />
+                                                    </th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>File Name</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Status</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>New</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Updates</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Duplicates</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Errors</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {previewData.files.map((fileMeta, i) => (
+                                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', opacity: fileMeta.selected ? 1 : 0.5 }}>
+                                                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!fileMeta.selected}
+                                                                onChange={() => toggleFileSelection(i)}
+                                                                style={{ cursor: 'pointer' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>{fileMeta.fileName}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem' }}>
+                                                            {fileMeta.isDuplicateFile ? (
+                                                                <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Duplicate (Skip)</span>
+                                                            ) : fileMeta.errors.length > 0 ? (
+                                                                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Validation Errors</span>
+                                                            ) : (
+                                                                <span style={{ color: '#34d399', fontWeight: 'bold' }}>Ready</span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: '#34d399' }}>{fileMeta.newCount}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: '#60a5fa' }}>{fileMeta.updateCount}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: '#fbbf24' }}>{fileMeta.skipCount}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: '#f87171' }}>{fileMeta.errors.length}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {previewData.isFolder ? (
+                                previewData.totals.errorCount > 0 && (
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <h4 style={{ color: '#f87171', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                            ⚠️ Validation Errors ({previewData.totals.errorCount})
+                                        </h4>
+                                        <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1rem', borderRadius: '0.5rem', fontFamily: 'monospace', fontSize: '0.75rem', color: '#fca5a5' }} className="custom-scrollbar">
+                                            {previewData.files.filter(f => f.errors.length > 0).map((fileMeta, idx) => (
+                                                <div key={idx} style={{ marginBottom: '0.75rem' }}>
+                                                    <div style={{ fontWeight: 'bold', color: '#f87171', borderBottom: '1px solid rgba(239, 68, 68, 0.2)', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>
+                                                        File: {fileMeta.fileName}
+                                                    </div>
+                                                    {fileMeta.errors.map((err, i) => (
+                                                        <div key={i} style={{ paddingLeft: '0.5rem', marginBottom: '0.15rem' }}>{err}</div>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            ) : (
+                                previewData.errors.length > 0 && (
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <h4 style={{ color: '#f87171', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                            ⚠️ Validation Errors ({previewData.errors.length})
+                                        </h4>
+                                        <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '1rem', borderRadius: '0.5rem', fontFamily: 'monospace', fontSize: '0.75rem', color: '#fca5a5' }} className="custom-scrollbar">
+                                            {previewData.errors.map((err, i) => (
+                                                <div key={i} style={{ borderBottom: '1px solid rgba(239,68,68,0.1)', paddingBottom: '0.25rem', marginBottom: '0.25rem' }}>{err}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            )}
+
+                            {((previewData.isFolder ? previewData.totals.errorCount === 0 : previewData.errors.length === 0) && (!previewData.isFolder ? !previewData.isDuplicateFile : true)) && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1.5rem', color: '#34d399', fontSize: '0.875rem' }}>
+                                    <CheckCircle size={18} /> Schema validation passed successfully. No anomalies found.
+                                </div>
+                            )}
+
+                            {((!previewData.isFolder && previewData.dataRows.length > 0) || (previewData.isFolder && previewData.files.some(f => f.dataRows.length > 0))) && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <h4 style={{ color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                        Preview Sample Rows {previewData.isFolder ? `(from ${previewData.files.find(f => f.dataRows.length > 0)?.fileName})` : '(First 5)'}
+                                    </h4>
+                                    <div style={{ overflowX: 'auto', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.15)' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                                            <thead>
+                                                <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Date</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>Particulars/Material</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{previewData.type === 'sales' ? 'Amount' : 'Weight'}</th>
+                                                    <th style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{previewData.type === 'sales' ? 'Type' : 'Log Type'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(previewData.isFolder ? (previewData.files.find(f => f.dataRows.length > 0)?.dataRows || []) : previewData.dataRows).map((row, i) => (
+                                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-primary)' }}>{row.date || 'N/A'}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>{row.item_name || row.material}</td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-primary)' }}>
+                                                            {previewData.type === 'sales' ? `₹${Number(row.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `${row.weight} kg`}
+                                                        </td>
+                                                        <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-secondary)' }}>{row.payment_mode || row.type}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                        <button
+                            onClick={() => {
+                                setPreviewData(null);
+                                setSalesFile(null);
+                                setProductionFile(null);
+                                setStatus({ type: 'idle', message: '' });
+                            }}
+                            className="btn-secondary"
+                            style={{ height: '42px', padding: '0 1.5rem' }}
+                        >
+                            Cancel & Discard
+                        </button>
+                        <button
+                            onClick={confirmIngestion}
+                            disabled={loading || (previewData.isFolder ? (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0) : (previewData.isDuplicateFile || (previewData.errors.length > 0 && previewData.newCount === 0 && previewData.updateCount === 0)))}
+                            className="btn-primary"
+                            style={{
+                                height: '42px',
+                                padding: '0 2rem',
+                                background: (previewData.isFolder ? false : previewData.isDuplicateFile) ? 'rgba(255,255,255,0.1)' : '#10b981',
+                                border: 'none',
+                                opacity: (loading || (previewData.isFolder ? (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0) : (previewData.isDuplicateFile || (previewData.errors.length > 0 && previewData.newCount === 0 && previewData.updateCount === 0)))) ? 0.5 : 1
+                            }}
+                        >
+                            {loading ? 'Processing...' : 'Confirm Ingestion Write'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Upload Areas */}
             <div className="admin-grid">
 
                 {/* Google Drive Integration Panel */}
+                {googleSyncEnabled && (
                 <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--accent-primary)', gridColumn: '1 / -1' }}>
                     <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#3b82f6' }}>
                         <CloudLightning size={24} /> Google Drive Auto-Sync
@@ -1025,6 +1734,109 @@ const AdminDataIngestion = () => {
                             </span>
                         </div>
                     )}
+
+                    {/* Progress Tracker (Requirement 5) */}
+                    {syncProgress && (
+                        <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '0.5rem' }} className="animate-fade-in">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontWeight: 'bold', color: '#60a5fa', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <RefreshCw className="spin" size={14} /> Active Google Drive Sync Queue
+                                </span>
+                                <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                    File {syncProgress.currentFileIndex} of {syncProgress.totalFiles}
+                                </span>
+                            </div>
+                            
+                            <div style={{ height: '0.5rem', background: 'rgba(255,255,255,0.1)', borderRadius: '999px', overflow: 'hidden', marginBottom: '0.75rem' }}>
+                                <div style={{ height: '100%', width: `${syncProgress.percent}%`, background: 'linear-gradient(90deg, #3b82f6, #10b981)', transition: 'width 0.3s ease-out' }}></div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    {syncProgress.currentFileName ? `Processing: ${syncProgress.currentFileName}` : 'Starting...'}
+                                </span>
+                                <span>{syncProgress.fileStatus}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                )}
+
+                {/* Sync Audit Trail (Requirement 4) */}
+                <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--glass-border)', gridColumn: '1 / -1' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: '#10b981' }}>
+                            <FileText size={24} /> Sync Log & Audit Trail
+                        </h3>
+                        {syncLogs.length > 0 && (
+                            <button
+                                onClick={() => {
+                                    if(confirm("Are you sure you want to clear the sync history log?")) {
+                                        setSyncLogs([]);
+                                        localStorage.removeItem('driveSyncLogs');
+                                    }
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    fontSize: '0.75rem',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Clear History
+                            </button>
+                        )}
+                    </div>
+
+                    {syncLogs.length === 0 ? (
+                        <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem 0', margin: 0, fontSize: '0.875rem' }}>
+                            No synchronization logs recorded yet. Complete a Google Drive sync to populate the log.
+                        </p>
+                    ) : (
+                        <div style={{ maxHeight: '440px', overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', background: 'rgba(0,0,0,0.15)' }} className="custom-scrollbar">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid var(--glass-border)' }}>
+                                        <th style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Timestamp</th>
+                                        <th style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>File Target</th>
+                                        <th style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Status</th>
+                                        <th style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Details / Messages</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {syncLogs.map((log) => (
+                                        <tr key={log.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                                            <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>
+                                                {new Date(log.timestamp).toLocaleString()}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                {log.fileName}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                                                <span style={{
+                                                    display: 'inline-block',
+                                                    padding: '0.2rem 0.6rem',
+                                                    borderRadius: '9999px',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 'bold',
+                                                    textTransform: 'uppercase',
+                                                    background: log.status === 'success' ? 'rgba(16, 185, 129, 0.15)' : (log.status === 'warning' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)'),
+                                                    color: log.status === 'success' ? '#34d399' : (log.status === 'warning' ? '#fbbf24' : '#f87171')
+                                                }}>
+                                                    {log.status}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
+                                                {log.message}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
 
                 {/* Sales Upload */}
@@ -1152,6 +1964,95 @@ const AdminDataIngestion = () => {
                     <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{status.message}</span>
                 </div>
             )}
+
+            {/* Whitelist Keywords Manager */}
+            <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--glass-border)', width: '100%', maxWidth: '56rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setShowKeywordMgr(!showKeywordMgr)}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: '#60a5fa', fontSize: '1.25rem' }}>
+                        <Database size={24} /> Template Security: Whitelist Keywords ({whitelistKeywords.length})
+                    </h3>
+                    <button className="btn-secondary" style={{ height: '32px', fontSize: '0.75rem', padding: '0 1rem' }}>
+                        {showKeywordMgr ? 'Hide Settings' : 'Manage Keywords'}
+                    </button>
+                </div>
+
+                {showKeywordMgr && (
+                    <div style={{ marginTop: '1.5rem' }} className="animate-fade-in">
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+                            Excel workbooks will be verified before upload. The system will reject files if none of their sheet names contain at least one of the keywords below. You can add new keywords to support new spreadsheet structures in the future.
+                        </p>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem', padding: '1rem', background: 'rgba(0,0,0,0.15)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                            {whitelistKeywords.map((kw, i) => (
+                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#93c5fd', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', fontSize: '0.75rem' }}>
+                                    {kw}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setWhitelistKeywords(prev => prev.filter((_, idx) => idx !== i));
+                                        }}
+                                        style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center' }}
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input
+                                type="text"
+                                placeholder="Add new sheet keyword (e.g. attendance, supplies)..."
+                                value={newKeyword}
+                                onChange={(e) => setNewKeyword(e.target.value)}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--glass-border)',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.5rem',
+                                    color: 'var(--text-primary)',
+                                    flex: 1,
+                                    height: '42px',
+                                    fontSize: '0.875rem'
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const trimmed = newKeyword.trim().toLowerCase();
+                                        if (trimmed && !whitelistKeywords.includes(trimmed)) {
+                                            setWhitelistKeywords(prev => [...prev, trimmed]);
+                                            setNewKeyword('');
+                                        }
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={() => {
+                                    const trimmed = newKeyword.trim().toLowerCase();
+                                    if (trimmed && !whitelistKeywords.includes(trimmed)) {
+                                        setWhitelistKeywords(prev => [...prev, trimmed]);
+                                        setNewKeyword('');
+                                    }
+                                }}
+                                className="btn-primary"
+                                style={{ height: '42px', padding: '0 1.5rem', whiteSpace: 'nowrap' }}
+                            >
+                                Add Keyword
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirm("Reset keywords back to defaults?")) {
+                                        setWhitelistKeywords(DEFAULT_KEYWORDS);
+                                    }
+                                }}
+                                className="btn-secondary"
+                                style={{ height: '42px', padding: '0 1rem', whiteSpace: 'nowrap' }}
+                            >
+                                Reset Defaults
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* DEBUG REPORT UI */}
             {testReport && (

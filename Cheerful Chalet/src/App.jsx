@@ -8,6 +8,7 @@ import AppLayout from './layouts/AppLayout';
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const CottagesRooms = React.lazy(() => import('./pages/CottagesRooms'));
 const Bookings = React.lazy(() => import('./pages/Bookings'));
+const BookingForm = React.lazy(() => import('./pages/BookingForm'));
 const CalendarView = React.lazy(() => import('./pages/CalendarView'));
 const Financials = React.lazy(() => import('./pages/Financials'));
 const Settings = React.lazy(() => import('./pages/Settings'));
@@ -15,11 +16,12 @@ const Reports = React.lazy(() => import('./pages/Reports'));
 const Resorts = React.lazy(() => import('./pages/Resorts'));
 const Subscription = React.lazy(() => import('./pages/Subscription'));
 const SuperAdmin = React.lazy(() => import('./pages/SuperAdmin'));
+const InvestmentAnalysis = React.lazy(() => import('./pages/InvestmentAnalysis'));
 const Staff = React.lazy(() => import('./pages/Staff'));
 const Auth = React.lazy(() => import('./pages/Auth'));
 
 function App() {
-  const { theme, session, profile, setSession, setProfile, setResorts, setActiveResortId } = useSettingsStore();
+  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering } = useSettingsStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -31,7 +33,10 @@ function App() {
       handleAuthChange(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || window.location.hash.includes('type=recovery')) {
+        setIsRecovering(true);
+      }
       handleAuthChange(session);
     });
 
@@ -68,6 +73,7 @@ function App() {
       setProfile(null);
       setResorts([]);
       setActiveResortId(null);
+      setIsRecovering(false);
     }
   };
 
@@ -104,13 +110,18 @@ function App() {
     <BrowserRouter>
       <React.Suspense fallback={<div style={{ padding: '2rem' }}>Loading...</div>}>
         <Routes>
-          <Route path="/auth" element={session ? <Navigate to="/dashboard" replace /> : <Auth />} />
+          <Route 
+            path="/auth" 
+            element={session && !isRecovering && !window.location.hash.includes('type=recovery') ? <Navigate to="/dashboard" replace /> : <Auth />} 
+          />
           
           <Route path="/" element={session ? <AppLayout /> : <Navigate to="/auth" replace />}>
             <Route index element={profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Dashboard />} />
             <Route path="setup" element={<CottagesRooms />} />
             <Route path="bookings" element={<Bookings />} />
+            <Route path="bookings/new" element={<BookingForm />} />
+            <Route path="bookings/edit/:id" element={<BookingForm />} />
             <Route path="calendar" element={<CalendarView />} />
             <Route path="financials" element={<Financials />} />
             <Route path="reports" element={<Reports />} />
@@ -118,6 +129,7 @@ function App() {
             <Route path="staff" element={<Staff />} />
             <Route path="subscription" element={<Subscription />} />
             <Route path="admin" element={<SuperAdmin />} />
+            <Route path="investment-analysis" element={<InvestmentAnalysis />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

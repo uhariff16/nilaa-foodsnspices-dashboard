@@ -1,75 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Plus, Trash2, CalendarCheck, CheckCircle2, AlertTriangle, X } from 'lucide-react';
-import { differenceInDays, eachDayOfInterval, isWeekend } from 'date-fns';
+import { Plus, Trash2, CheckCircle2, AlertTriangle, X, Search, Filter, Phone, Calendar, Home, CreditCard, Edit2, MoreVertical, Send, RotateCcw } from 'lucide-react';
+import { startOfMonth, format } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
+import { useNavigate } from 'react-router-dom';
 
 export default function Bookings() {
-  const { session, activeResortId } = useSettingsStore();
+  const navigate = useNavigate();
+  const { activeResortId, profile } = useSettingsStore();
   const [bookings, setBookings] = useState([]);
   const [cottages, setCottages] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const today = new Date().toISOString().split('T')[0];
 
-  const [bookingForm, setBookingForm] = useState({
-    guest_name: '', phone_number: '', check_in_date: '', check_out_date: '', number_of_guests: 1,
-    booking_type: 'Entire Property', cottage_id: '', room_ids: [],
-    night_count: 0, price_type: 'Calculated', base_amount: 0, extra_guest_charges: 0, addons_cost: 0,
-    total_amount: 0, advance_paid: 0, balance_amount: 0, booking_source: 'Direct', status: 'Confirmed', is_loading_edit: false,
-    reference_number: ''
-  });
-  const [editingBookingId, setEditingBookingId] = useState(null);
+  const [selectedBookings, setSelectedBookings] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: 'check_in_date', direction: 'ascending' });
+  const [searchTerm, setSearchTerm] = useState('');
+
   const [settlingBooking, setSettlingBooking] = useState(null);
   const [settlementData, setSettlementData] = useState({ discount: 0, allSettled: false });
-
-  const loadBookingForEdit = (b) => {
-    setEditingBookingId(b.id);
-    setBookingForm({
-      guest_name: b.guest_name,
-      phone_number: b.phone_number,
-      check_in_date: b.check_in_date.split('T')[0],
-      check_out_date: b.check_out_date.split('T')[0],
-      number_of_guests: b.number_of_guests || 1,
-      booking_type: b.booking_type,
-      cottage_id: b.cottage_id,
-      room_ids: b.room_ids || (b.room_id ? [b.room_id] : []),
-      night_count: b.night_count || 0,
-      base_amount: b.base_amount || 0,
-      extra_guest_charges: b.extra_guest_charges || 0,
-      addons_cost: b.addons_cost || 0,
-      total_amount: b.total_amount || 0,
-      advance_paid: b.advance_paid || 0,
-      balance_amount: b.balance_amount || 0,
-      booking_source: b.booking_source || 'Direct',
-      status: b.status,
-      reference_number: b.reference_number || '',
-      price_type: b.price_type || 'Calculated',
-      is_loading_edit: true
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const generateReference = () => {
-    const datePart = new Date().toISOString().slice(2,10).replace(/-/g, '');
-    const randomPart = Math.floor(1000 + Math.random() * 9000);
-    return `BK-${datePart}-${randomPart}`;
-  };
-
-  useEffect(() => {
-    if (!editingBookingId && !bookingForm.reference_number) {
-      setBookingForm(prev => ({ ...prev, reference_number: generateReference() }));
-    }
-  }, [editingBookingId]);
+  
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
     fetchData();
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [activeResortId]);
 
   const fetchData = async () => {
-    if (!isSupabaseConfigured()) {
-      setError('Supabase is not configured.');
+    if (!activeResortId || !isSupabaseConfigured()) {
       setLoading(false);
       return;
     }
@@ -91,566 +53,537 @@ export default function Bookings() {
     }
   };
 
-  const checkConflict = (checkIn, checkOut, type, cottageId, roomIds, ignoreId = null) => {
-    const inStr = checkIn.split('T')[0];
-    const outStr = checkOut.split('T')[0];
-    let softConflicts = [];
-    
-    for (let b of bookings) {
-      if (b.status === 'Cancelled') continue;
-      if (b.id === (ignoreId || editingBookingId)) continue;
-      
-      const bInStr = b.check_in_date.split('T')[0];
-      const bOutStr = b.check_out_date.split('T')[0];
-      
-      if (inStr < bOutStr && outStr > bInStr) {
-        const isSoft = b.status === 'Pending';
-        
-        if (type === 'Entire Property' && b.cottage_id === cottageId) {
-          if (!isSoft) return { type: 'hard', message: `Conflict: Property is already BOOKED between ${bInStr} and ${bOutStr}` };
-          softConflicts.push(b.id);
-        }
-        
-        if (type === 'Room' && b.cottage_id === cottageId) {
-          if (b.booking_type === 'Entire Property') {
-            if (!isSoft) return { type: 'hard', message: `Conflict: Entire Property is BOOKED between ${bInStr} and ${bOutStr}` };
-            softConflicts.push(b.id);
-          }
-          if (b.booking_type === 'Room') {
-            const bRooms = b.room_ids || (b.room_id ? [b.room_id] : []);
-            const conflictMatch = roomIds.some(id => bRooms.includes(id));
-            if (conflictMatch) {
-              if (!isSoft) return { type: 'hard', message: `Conflict: Selected rooms are BOOKED between ${bInStr} and ${bOutStr}` };
-              softConflicts.push(b.id);
-            }
-          }
-        }
-      }
-    }
-    
-    if (softConflicts.length > 0) {
-      return { type: 'soft', message: 'Contains overlapping PENDING bookings.', conflictIds: softConflicts };
-    }
-    
-    return { type: null };
+  const getStatusCount = (status) => {
+    if (status === 'All') return bookings.length;
+    return bookings.filter(b => b.status === status).length;
   };
 
-  const calculateBasePrice = () => {
-    if (bookingForm.is_loading_edit) {
-      setBookingForm(prev => ({ ...prev, is_loading_edit: false }));
-      return;
-    }
-    const { check_in_date, check_out_date, booking_type, cottage_id, room_ids } = bookingForm;
-    if (!check_in_date || !check_out_date || !cottage_id) return;
+  const statusOptions = [
+    { label: 'All', color: 'var(--text-main)', bg: 'var(--bg-secondary)' },
+    { label: 'Pending', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+    { label: 'Confirmed', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+    { label: 'Checked-in', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
+    { label: 'Pending Payment', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+    { label: 'Completed', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
+    { label: 'Cancelled', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' }
+  ];
 
-    const start = new Date(check_in_date);
-    const end = new Date(check_out_date);
-    if (end <= start) return;
-
-    let itemPricingArray = [];
-    if (booking_type === 'Entire Property') {
-      const c = cottages.find(c => c.id === cottage_id);
-      if (c) itemPricingArray.push(c);
-    } else {
-      if (!room_ids || room_ids.length === 0) return;
-      itemPricingArray = room_ids.map(id => rooms.find(r => r.id === id)).filter(Boolean);
-    }
-    if (itemPricingArray.length === 0) return;
-
-    const days = eachDayOfInterval({ start, end: new Date(end.getTime() - 24*60*60*1000) });
-    const nightCount = days.length;
-    
-    let base = 0;
-    days.forEach(d => {
-      let daily = 0;
-      itemPricingArray.forEach(item => {
-        if (isWeekend(d)) daily += Number(item.weekend_price);
-        else daily += Number(item.weekday_price);
-      });
-      base += daily;
-    });
-
-    setBookingForm(prev => ({
-      ...prev,
-      night_count: nightCount,
-      base_amount: base
-    }));
-  };
-
-  useEffect(() => {
-    calculateBasePrice();
-  }, [bookingForm.check_in_date, bookingForm.check_out_date, bookingForm.booking_type, bookingForm.cottage_id, JSON.stringify(bookingForm.room_ids)]);
-
-  useEffect(() => {
-    const total = Number(bookingForm.base_amount) + Number(bookingForm.addons_cost || 0);
-    const balance = total - Number(bookingForm.advance_paid || 0);
-    setBookingForm(prev => ({
-      ...prev,
-      total_amount: total,
-      balance_amount: balance
-    }));
-  }, [bookingForm.base_amount, bookingForm.addons_cost, bookingForm.advance_paid]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!bookingForm.cottage_id) return alert('Select a Property');
-    if (bookingForm.booking_type === 'Room' && (!bookingForm.room_ids || bookingForm.room_ids.length === 0)) return alert('Select at least one Room');
-    
-    // Past date validation (Only for NEW bookings)
-    const today = new Date().toISOString().split('T')[0];
-    if (bookingForm.check_in_date < today && !editingBookingId) {
-      return alert('Cannot create a booking for a past date.');
-    }
-    
-    const conflictResult = checkConflict(bookingForm.check_in_date, bookingForm.check_out_date, bookingForm.booking_type, bookingForm.cottage_id, bookingForm.room_ids, editingBookingId);
-    
-    if (conflictResult.type === 'hard') return alert(conflictResult.message);
-    
-    if (conflictResult.type === 'soft') {
-      if (bookingForm.status === 'Pending') {
-        return alert("Cannot place a PENDING booking here - there is already another PENDING reservation for these dates.");
-      }
-      
-      const confirmOverride = window.confirm(`There are overlapping PENDING bookings. If you proceed, they will be automatically CANCELLED. Continue?`);
-      if (!confirmOverride) return;
-
-      try {
-        const { error: cancelError } = await supabase
-          .from('bookings')
-          .update({ 
-            status: 'Cancelled',
-            booking_source: 'Overridden Pending' 
-          })
-          .in('id', conflictResult.conflictIds);
-          
-        if (cancelError) throw cancelError;
-        
-        setBookings(prev => prev.map(b => 
-          conflictResult.conflictIds.includes(b.id) 
-            ? { ...b, status: 'Cancelled', booking_source: 'Overridden Pending' } 
-            : b
-        ));
-      } catch (err) {
-        return alert("Failed to cancel overlapping pending bookings: " + err.message);
-      }
-    }
-
-    try {
-      const payload = { ...bookingForm, tenant_id: session.user.id, resort_id: activeResortId };
-      
-      if (payload.booking_type === 'Entire Property') {
-        payload.room_ids = [];
-        delete payload.room_id; // Ensure legacy room_id is not sent as empty string or at all
-      } else {
-        payload.room_id = payload.room_ids.length > 0 ? payload.room_ids[0] : null;
-      }
-
-      if (payload.booking_source === 'Other') {
-        payload.booking_source = payload.custom_booking_source || 'Other';
-      }
-      delete payload.custom_booking_source;
-      delete payload.is_loading_edit;
-
-      if (editingBookingId) {
-        const oldBooking = bookings.find(b => b.id === editingBookingId);
-        const oldAdvance = Number(oldBooking?.advance_paid || 0);
-        const newAdvance = Number(payload.advance_paid || 0);
-
-        const { data, error } = await supabase.from('bookings').update(payload).eq('id', editingBookingId).select();
-        if (error) throw error;
-        
-        if (newAdvance > oldAdvance) {
-          const diff = newAdvance - oldAdvance;
-          await supabase.from('incomes').insert([{
-            date: new Date().toISOString().split('T')[0],
-            source: `Advance Payment (Updated): ${payload.guest_name}`,
-            booking_id: editingBookingId,
-            amount: diff,
-            payment_mode: 'Cash',
-            notes: 'Auto-added from Edit Booking',
-            tenant_id: session.user.id,
-            resort_id: activeResortId
-          }]);
-        }
-
-        setBookings(bookings.map(b => b.id === editingBookingId ? data[0] : b));
-        alert('Booking Updated Successfully!');
-      } else {
-        const { data, error } = await supabase.from('bookings').insert([payload]).select();
-        if (error) throw error;
-        setBookings([data[0], ...bookings]);
-        if (payload.advance_paid > 0) {
-          await supabase.from('incomes').insert([{
-            date: new Date().toISOString().split('T')[0],
-            source: `Advance Payment: ${payload.guest_name}`,
-            booking_id: data[0].id,
-            amount: payload.advance_paid,
-            payment_mode: 'Cash',
-            notes: 'Auto-added from New Booking',
-            tenant_id: session.user.id,
-            resort_id: activeResortId
-          }]);
-        }
-        alert('Booking Confirmed Successfully!');
-      }
-
-      setEditingBookingId(null);
-      setBookingForm({
-        ...bookingForm, guest_name: '', phone_number: '', check_in_date: '', check_out_date: '',
-        night_count: 0, base_amount: 0, extra_guest_charges: 0, addons_cost: 0, total_amount: 0, advance_paid: 0, balance_amount: 0, custom_booking_source: '', is_loading_edit: false,
-        price_type: 'Calculated',
-        reference_number: generateReference()
-      });
-    } catch (e) {
-      alert("Error saving booking: " + e.message);
-    }
-  };
+  const [activeTab, setActiveTab] = useState('All');
 
   const handleCheckIn = async (b) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (b.check_in_date > todayStr) {
-      return alert(`Cannot check-in yet. The scheduled check-in date is ${new Date(b.check_in_date).toLocaleDateString()}.`);
-    }
-    if (!window.confirm(`Check-in guest: ${b.guest_name}?`)) return;
     try {
-      await supabase.from('bookings').update({ status: 'Checked-in' }).eq('id', b.id);
-      setBookings(bookings.map(item => item.id === b.id ? { ...item, status: 'Checked-in' } : item));
-      alert("Guest Checked-in successfully!");
-    } catch(err) {
+      const { error } = await supabase.from('bookings').update({ status: 'Checked-in' }).eq('id', b.id);
+      if (error) throw error;
+      setBookings(prev => prev.map(x => x.id === b.id ? { ...x, status: 'Checked-in' } : x));
+    } catch (err) {
       alert("Error during check-in: " + err.message);
     }
   };
 
-  const handleExtend = async (b) => {
-    const newOutDate = window.prompt(`Currently checking out on ${new Date(b.check_out_date).toLocaleDateString()}.\nEnter NEW Checkout Date (YYYY-MM-DD):`, b.check_out_date.split('T')[0]);
-    if (!newOutDate || newOutDate === b.check_out_date.split('T')[0]) return;
-
-    if (newOutDate <= b.check_in_date.split('T')[0]) return alert("New checkout date must be after check-in date!");
-
-    const extensionFeeRaw = window.prompt(`Enter additional fee for the extended nights (₹):`, "0");
-    if (extensionFeeRaw === null) return;
-    const extensionFee = Number(extensionFeeRaw) || 0;
-
-    const conflictResult = checkConflict(b.check_in_date, newOutDate, b.booking_type, b.cottage_id, b.room_ids, b.id);
-    if (conflictResult.type === 'hard') return alert(conflictResult.message);
-    if (conflictResult.type === 'soft') return alert("Cannot extend: Extended period overlaps with another PENDING booking. Cancel it first.");
-
+  const handleRevertToCheckIn = async (b) => {
+    if (!window.confirm(`Are you sure you want to revert ${b.guest_name} to 'Checked-in'? This will DELETE the settlement record from Financials.`)) return;
+    
     try {
-      const newTotal = Number(b.total_amount) + extensionFee;
-      const newBalance = Number(b.balance_amount) + extensionFee;
-      const newNights = differenceInDays(new Date(newOutDate), new Date(b.check_in_date));
+      // 1. Delete the settlement income record first
+      await supabase
+        .from('incomes')
+        .delete()
+        .eq('booking_id', b.id)
+        .ilike('notes', '%Settlement%');
 
-      const { data, error } = await supabase.from('bookings')
-        .update({ 
-          check_out_date: newOutDate, 
-          total_amount: newTotal, 
-          balance_amount: newBalance,
-          night_count: newNights 
-        })
-        .eq('id', b.id)
-        .select();
+      // 2. Fetch ALL remaining income records for this booking to get the REAL paid amount
+      const { data: allIncomes } = await supabase
+        .from('incomes')
+        .select('amount')
+        .eq('booking_id', b.id);
+
+      const totalRealPaid = (allIncomes || []).reduce((sum, inc) => sum + Number(inc.amount), 0);
+      const restoredBalance = Number(b.total_amount) - totalRealPaid;
+
+      // 3. Update the booking with the true recalculated values
+      const { error: bookingErr } = await supabase.from('bookings').update({ 
+          status: 'Checked-in',
+          advance_paid: totalRealPaid,
+          balance_amount: restoredBalance
+      }).eq('id', b.id);
       
-      if (error) throw error;
-      setBookings(bookings.map(item => item.id === b.id ? data[0] : item));
-      alert(`Booking extended successfully to ${newOutDate}! Added ₹${extensionFee} to total.`);
+      if (bookingErr) throw bookingErr;
+
+      setBookings(prev => prev.map(x => x.id === b.id ? { 
+          ...x, 
+          status: 'Checked-in', 
+          advance_paid: totalRealPaid,
+          balance_amount: restoredBalance 
+      } : x));
+
+      alert("Booking reverted. Financials and Balance have been synchronized.");
     } catch (err) {
-      alert("Error extending booking: " + err.message);
+      alert("Error reverting status: " + err.message);
     }
   };
 
   const settleBooking = (b) => {
     setSettlingBooking(b);
-    setSettlementData({ discount: 0, allSettled: false });
+    setSettlementData({ discount: 0, allSettled: false, pendingOTA: false });
   };
 
-  const confirmSettlement = async () => {
-    if (!settlingBooking) return;
-    const b = settlingBooking;
-    const { discount, allSettled } = settlementData;
+  const handleFinalSettlement = async () => {
+    if (!settlementData.allSettled && !settlementData.pendingOTA) {
+      alert("Please either confirm payment is received or mark it as a Pending OTA Payment.");
+      return;
+    }
 
-    if (!allSettled) return alert("Please confirm that all items are settled.");
-    if (discount > b.balance_amount) return alert("Discount cannot be greater than the balance!");
-    
-    setLoading(true);
     try {
-      const newTotal = Number(b.total_amount) - discount;
-      const amountToCollect = Number(b.balance_amount) - discount;
+      if (settlementData.pendingOTA) {
+        // Mark as Completed but keep the balance for later (UI will show as Pending payment)
+        const { error: bookingErr } = await supabase
+          .from('bookings')
+          .update({ status: 'Completed' })
+          .eq('id', settlingBooking.id);
+        if (bookingErr) throw bookingErr;
 
-      if (amountToCollect > 0) {
+        setBookings(prev => prev.map(x => x.id === settlingBooking.id ? { ...x, status: 'Completed' } : x));
+        setSettlingBooking(null);
+        return;
+      }
+      const finalBalance = settlingBooking.balance_amount - settlementData.discount;
+      
+      const { error: bookingErr } = await supabase
+        .from('bookings')
+        .update({ status: 'Completed', balance_amount: 0 })
+        .eq('id', settlingBooking.id);
+      if (bookingErr) throw bookingErr;
+
+      if (finalBalance > 0) {
         await supabase.from('incomes').insert([{
+          resort_id: activeResortId,
+          tenant_id: profile?.tenant_id,
+          booking_id: settlingBooking.id,
+          amount: finalBalance,
+          source: 'Room Rent',
+          notes: `Settlement: ${settlingBooking.guest_name} (${settlingBooking.reference_number})`,
           date: new Date().toISOString().split('T')[0],
-          source: `Balance Payment: ${b.guest_name}`,
-          booking_id: b.id,
-          amount: amountToCollect,
-          payment_mode: 'Cash',
-          notes: `Settled during Check-out`,
-          tenant_id: session.user.id,
-          resort_id: activeResortId
+          payment_mode: 'UPI'
         }]);
       }
-      
-      const updatePayload = { 
-        status: 'Completed', 
-        total_amount: newTotal, 
-        balance_amount: 0, 
-        advance_paid: newTotal 
-      };
 
-      await supabase.from('bookings').update(updatePayload).eq('id', b.id);
-      setBookings(bookings.map(item => item.id === b.id ? { ...item, ...updatePayload } : item));
+      setBookings(prev => prev.map(x => x.id === settlingBooking.id ? { ...x, status: 'Completed', balance_amount: 0 } : x));
       setSettlingBooking(null);
-      alert(`Check-out successful!`);
-    } catch(err) {
-      alert(`Error during check-out: ` + err.message);
-    } finally {
-      setLoading(false);
+      
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          bookingId: settlingBooking.id,
+          type: 'payment_receipt'
+        })
+      }).catch(err => console.error("Notification Trigger Error:", err));
+
+    } catch (err) {
+      alert("Error during settlement: " + err.message);
     }
   };
 
   const deleteBooking = async (id) => {
-    if (!window.confirm("Cancel this booking?")) return;
-    await supabase.from('bookings').update({ status: 'Cancelled' }).eq('id', id);
-    setBookings(bookings.map(b => b.id === id ? { ...b, status: 'Cancelled' } : b));
+    if (!window.confirm("Are you sure you want to cancel this booking?")) return;
+    try {
+      const { error } = await supabase.from('bookings').update({ status: 'Cancelled' }).eq('id', id);
+      if (error) throw error;
+      setBookings(prev => prev.map(x => x.id === id ? { ...x, status: 'Cancelled' } : x));
+    } catch (err) {
+      alert("Error cancelling booking: " + err.message);
+    }
   };
 
-  const handleRefund = async (b) => {
-    if (!window.confirm(`Refund advance payment of ₹${b.advance_paid} to ${b.guest_name}?`)) return;
-    
+  const bulkDeleteSelected = async () => {
+    const isAdmin = profile?.role === 'tenant_admin' || profile?.role === 'super_admin';
+    if (!isAdmin) return alert("Only admins can perform bulk deletion.");
+    if (selectedBookings.length === 0) return;
+    if (!window.confirm(`⚠️ DANGER: Are you sure you want to PERMANENTLY DELETE ${selectedBookings.length} selected bookings and all their associated payments?`)) return;
+
+    setLoading(true);
     try {
-      setLoading(true);
-      // 1. Create Expense Record
-      const { error: expError } = await supabase.from('expenses').insert([{
-        date: new Date().toISOString().split('T')[0],
-        category: 'Refund',
-        amount: b.advance_paid,
-        vendor_name: `Guest: ${b.guest_name}`,
-        payment_mode: 'Cash',
-        notes: `Refund for Cancelled Booking Ref: ${b.reference_number}`,
-        tenant_id: session.user.id,
-        resort_id: activeResortId
-      }]);
-      
-      if (expError) throw expError;
-
-      // 2. Update Booking
-      const { error: bError } = await supabase.from('bookings').update({
-        advance_paid: 0,
-        balance_amount: b.total_amount
-      }).eq('id', b.id);
-      
-      if (bError) throw bError;
-
-      // 3. Update Local State
-      setBookings(bookings.map(item => item.id === b.id ? { ...item, advance_paid: 0, balance_amount: item.total_amount } : item));
-      alert("Refund recorded successfully as an expense.");
+      await supabase.from('incomes').delete().in('booking_id', selectedBookings);
+      const { error } = await supabase.from('bookings').delete().in('id', selectedBookings);
+      if (error) throw error;
+      setBookings(prev => prev.filter(b => !selectedBookings.includes(b.id)));
+      setSelectedBookings([]);
+      alert(`Successfully deleted ${selectedBookings.length} bookings.`);
     } catch (err) {
-      alert("Error recording refund: " + err.message);
+      alert("Error during bulk delete: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  const sendReminder = async (b) => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ bookingId: b.id, type: 'reminder' })
+      });
+      if (!res.ok) throw new Error("Failed to trigger edge function");
+      alert("Reminder sent successfully!");
+    } catch (err) {
+      alert("Failed to send reminder: " + err.message);
+    }
+  };
 
-  const relevantRooms = rooms.filter(r => r.cottage_id === bookingForm.cottage_id);
+  const toggleSelectAll = (e) => {
+    if (e.target.checked) {
+      const allIds = sortedAndFilteredBookings.map(b => b.id);
+      setSelectedBookings(allIds);
+    } else {
+      setSelectedBookings([]);
+    }
+  };
+
+  const toggleSelectBooking = (id) => {
+    setSelectedBookings(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const sortedAndFilteredBookings = React.useMemo(() => {
+    let items = bookings.filter(b => {
+      const displayStatus = (b.status === 'Completed' && b.balance_amount > 0) ? 'Pending Payment' : b.status;
+      const matchesStatus = activeTab === 'All' || displayStatus === activeTab;
+      const matchesSearch = b.guest_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            (b.reference_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            (b.phone_number || '').includes(searchTerm);
+      return matchesStatus && matchesSearch;
+    });
+
+    if (sortConfig.key === 'check_in_date' && sortConfig.direction === 'ascending') {
+      const getPriority = (b) => {
+        const displayStatus = (b.status === 'Completed' && b.balance_amount > 0) ? 'Pending Payment' : b.status;
+        if (displayStatus === 'Checked-in') return 1;
+        if (displayStatus === 'Pending Payment') return 2;
+        if (displayStatus === 'Confirmed') return 3;
+        if (displayStatus === 'Pending') return 4;
+        if (displayStatus === 'Completed') return 5; // Fully settled
+        if (displayStatus === 'Cancelled') return 6;
+        return 99;
+      };
+      items.sort((a, b) => {
+        const pA = getPriority(a);
+        const pB = getPriority(b);
+        if (pA !== pB) return pA - pB;
+        if (pA === 5 || pA === 2) {
+          // Completed or Pending payment: latest checkout date first
+          return new Date(b.check_out_date) - new Date(a.check_out_date);
+        }
+        return new Date(a.check_in_date) - new Date(b.check_in_date);
+      });
+    } else if (sortConfig !== null) {
+      items.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          valA = valA.toLowerCase(); valB = valB.toLowerCase();
+        }
+        if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
+        return 0;
+      });
+    }
+    return items;
+  }, [bookings, activeTab, sortConfig, searchTerm]);
+
+  const bookingStats = React.useMemo(() => {
+    const visible = sortedAndFilteredBookings;
+    const totalValue = visible.reduce((sum, b) => sum + Number(b.total_amount || 0), 0);
+    const totalBalance = visible.reduce((sum, b) => sum + Number(b.balance_amount || 0), 0);
+    const totalPaid = totalValue - totalBalance;
+    return { totalValue, totalPaid, totalBalance };
+  }, [sortedAndFilteredBookings]);
+
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  if (loading) return <div style={{ padding: '2rem' }}>Loading Bookings...</div>;
 
   return (
-    <>
-      <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
-        {/* Booking Form */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CalendarCheck size={24} /> New Booking</h2>
-          {error && <div style={{ color: 'var(--danger)', marginBottom: '1rem' }}>{error}</div>}
+    <div className="container" style={{ padding: isMobile ? '1rem' : '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '1.5rem' : '2rem' }}>
+        <h1 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '2.25rem', fontWeight: 800 }}>Bookings</h1>
+        <button className="btn btn-primary" onClick={() => navigate('/bookings/new')} style={{ padding: isMobile ? '0.6rem 1rem' : '0.8rem 1.6rem', borderRadius: 'var(--radius-md)', fontWeight: 700 }}>
+          <Plus size={20} /> <span className="desktop-only">New Booking</span>
+        </button>
+      </div>
+
+      {error && <div className="card" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '1rem', border: '1px solid var(--danger)', marginBottom: '1rem' }}>{error}</div>}
+
+      {/* Modern Filter Header */}
+      <div className="card" style={{ padding: isMobile ? '1rem' : '1.5rem', marginBottom: '1.5rem', overflow: 'visible' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '250px' }}>
+            <div className="search-bar" style={{ position: 'relative' }}>
+              <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Search guest, ref #, phone..." 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ padding: '0.7rem 1rem 0.7rem 2.75rem', fontSize: '0.95rem', background: 'var(--bg-color)', border: '1px solid var(--border)' }}
+              />
+            </div>
+          </div>
           
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '1rem' }}>
-              <div className="form-group"><label className="form-label">Guest Name</label><input type="text" required className="form-input" value={bookingForm.guest_name} onChange={e => setBookingForm({...bookingForm, guest_name: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Phone</label><input type="text" required className="form-input" value={bookingForm.phone_number} onChange={e => setBookingForm({...bookingForm, phone_number: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Reference #</label><input type="text" required className="form-input" style={{ fontWeight: 'bold', color: 'var(--primary)' }} value={bookingForm.reference_number} onChange={e => setBookingForm({...bookingForm, reference_number: e.target.value})} /></div>
-            </div>
-            
-            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Check-in</label>
-                <input type="date" required className="form-input" value={bookingForm.check_in_date} onChange={e => setBookingForm({...bookingForm, check_in_date: e.target.value})} />
-                <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Standard Check-in: 1:00 PM</small>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Check-out</label>
-                <input type="date" required className="form-input" value={bookingForm.check_out_date} onChange={e => setBookingForm({...bookingForm, check_out_date: e.target.value})} />
-                <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Check-out till: 11:00 AM (Same-day turnaround supported)</small>
-              </div>
-            </div>
+          {selectedBookings.length > 0 && (profile?.role === 'tenant_admin' || profile?.role === 'super_admin') && (
+            <button className="btn btn-primary" onClick={bulkDeleteSelected} style={{ background: 'var(--danger)', borderColor: 'var(--danger)', padding: '0.6rem 1.2rem' }}>
+              <Trash2 size={16} /> Delete {selectedBookings.length}
+            </button>
+          )}
 
-            <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">Booking Status</label>
-                <select className="form-select" value={bookingForm.status} onChange={e => setBookingForm({...bookingForm, status: e.target.value})}>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Checked-in">Checked-in</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Type</label>
-                <select className="form-select" value={bookingForm.booking_type} onChange={e => setBookingForm({...bookingForm, booking_type: e.target.value})}>
-                  <option value="Entire Property">Entire Property</option>
-                  <option value="Room">Room Only</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Property</label>
-                <select className="form-select" required value={bookingForm.cottage_id} onChange={e => setBookingForm({...bookingForm, cottage_id: e.target.value, room_ids: []})}>
-                  <option value="">Select...</option>
-                  {cottages.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div className="form-group" style={{ gridColumn: 'span 3' }}>
-                <label className="form-label">Rooms</label>
-                {bookingForm.booking_type === 'Entire Property' ? (
-                  <div style={{ color: 'var(--text-muted)', padding: '0.5rem' }}>N/A (Entire Property Selected)</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', background: 'rgba(0,0,0,0.02)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)', maxHeight: '150px', overflowY: 'auto' }}>
-                    {relevantRooms.length === 0 ? <small>No rooms available</small> : relevantRooms.map(r => (
-                      <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={bookingForm.room_ids.includes(r.id)} onChange={e => {
-                          const newIds = e.target.checked ? [...bookingForm.room_ids, r.id] : bookingForm.room_ids.filter(id => id !== r.id);
-                          setBookingForm({...bookingForm, room_ids: newIds});
-                        }} />
-                        {r.name}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              <small style={{ display: 'block', color: 'var(--success)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Paid</small>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>₹{bookingStats.totalPaid.toLocaleString()}</span>
             </div>
-
-            <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-              <h4 style={{ marginBottom: '1rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>Billing Auto-Calc</h4>
-              <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span className="form-label">Nights:</span> <strong>{bookingForm.night_count}</strong>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Base Amount (₹)</label>
-                  <input type="number" className="form-input" value={bookingForm.base_amount} onChange={e => setBookingForm({...bookingForm, base_amount: Number(e.target.value)})} />
-                </div>
-              </div>
-              <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
-                <div className="form-group"><label className="form-label">Add-ons (Food)</label><input type="number" className="form-input" value={bookingForm.addons_cost} onChange={e => setBookingForm({...bookingForm, addons_cost: Number(e.target.value)})} /></div>
-                <div className="form-group"><label className="form-label">Advance Paid</label><input type="number" className="form-input" value={bookingForm.advance_paid} onChange={e => setBookingForm({...bookingForm, advance_paid: Number(e.target.value)})} /></div>
-                <div className="form-group">
-                  <label className="form-label">Referred By</label>
-                  <select className="form-select" value={bookingForm.booking_source} onChange={e => setBookingForm({...bookingForm, booking_source: e.target.value})}>
-                    <option value="Direct">Direct</option><option value="Airbnb">Airbnb</option><option value="Booking.com">Booking.com</option><option value="Agent">Agent</option><option value="Other">Other...</option>
-                  </select>
-                  {bookingForm.booking_source === 'Other' && (
-                    <input type="text" className="form-input" style={{ marginTop: '0.5rem' }} placeholder="Specify source" value={bookingForm.custom_booking_source || ''} onChange={e => setBookingForm({...bookingForm, custom_booking_source: e.target.value})} required/>
-                  )}
-                </div>
-              </div>
-              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="form-label mb-0">Total: <strong style={{ fontSize: '1.25rem', color: 'var(--primary)' }}>₹{bookingForm.total_amount}</strong></span>
-                <span className="form-label mb-0">Balance: <strong style={{ fontSize: '1.25rem', color: 'var(--warning)' }}>₹{bookingForm.balance_amount}</strong></span>
-              </div>
+            <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+              <small style={{ display: 'block', color: 'var(--warning)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Balance</small>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>₹{bookingStats.totalBalance.toLocaleString()}</span>
             </div>
-
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1, fontSize: '1.1rem', padding: '1rem' }}>
-                <CheckCircle2 /> {editingBookingId ? 'Update Booking' : 'Confirm Booking'}
-              </button>
-              {editingBookingId && (
-                <button type="button" className="btn btn-outline" style={{ fontSize: '1.1rem', padding: '1rem' }} onClick={() => {
-                  setEditingBookingId(null);
-                  setBookingForm({ ...bookingForm, guest_name: '', phone_number: '', check_in_date: '', check_out_date: '', night_count: 0, base_amount: 0, addons_cost: 0, advance_paid: 0, total_amount: 0, balance_amount: 0, is_loading_edit: false });
-                }}>Cancel Edit</button>
-              )}
+            <div style={{ background: 'var(--bg-secondary)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Total Value</small>
+              <span style={{ fontWeight: 800, fontSize: '1rem' }}>₹{bookingStats.totalValue.toLocaleString()}</span>
             </div>
-          </form>
+          </div>
         </div>
 
-        {/* Bookings List */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1.5rem' }}>Recent Bookings</h2>
-          <div className="table-container">
-            <table className="table">
-              <thead>
+        {/* Status Tabs */}
+        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '1.25rem', overflowX: 'auto', paddingBottom: '0.25rem', scrollbarWidth: 'none' }}>
+          {statusOptions.map(opt => {
+            const isActive = activeTab === opt.label;
+            const count = getStatusCount(opt.label);
+            return (
+              <button
+                key={opt.label}
+                onClick={() => setActiveTab(opt.label)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  background: isActive ? opt.color : 'var(--bg-color)',
+                  color: isActive ? 'white' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                  border: isActive ? `1px solid ${opt.color}` : '1px solid var(--border)'
+                }}
+              >
+                {opt.label}
+                <span style={{ 
+                  fontSize: '0.7rem', 
+                  background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)', 
+                  padding: '0.1rem 0.4rem', 
+                  borderRadius: '10px'
+                }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* MOBILE CARD LIST VIEW */}
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {sortedAndFilteredBookings.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>No bookings found.</div>
+          ) : sortedAndFilteredBookings.map((b) => {
+            const cname = cottages.find(x => x.id === b.cottage_id)?.name || 'Unknown';
+            const rname = b.booking_type === 'Entire Property' ? 'Entire Property' : (b.room_ids || []).map(id => rooms.find(r => r.id === id)?.name).filter(Boolean).join(', ');
+            const displayStatus = (b.status === 'Completed' && b.balance_amount > 0) ? 'Pending Payment' : b.status;
+            const opt = statusOptions.find(o => o.label === displayStatus) || statusOptions[1];
+            
+            return (
+              <div key={b.id} className="card" style={{ padding: 0, overflow: 'hidden', borderLeft: `6px solid ${opt.color}`, opacity: b.status === 'Cancelled' ? 0.7 : 1 }}>
+                <div style={{ padding: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                    <div>
+                      <small style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.75rem' }}>{b.reference_number}</small>
+                      <h3 style={{ margin: '0.1rem 0 0.25rem 0', fontSize: '1.1rem' }}>{b.guest_name}</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            <Phone size={14} /> {b.phone_number}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                      <span style={{ padding: '0.3rem 0.75rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: opt.bg, color: opt.color, border: `1px solid ${opt.color}44`, width: 'fit-content' }}>
+                        {displayStatus}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', fontWeight: 800, border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                        {b.booking_source || 'Direct'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '0.75rem 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', marginBottom: '0.75rem' }}>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <small style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Stay Dates ({b.night_count} Nights)</small>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <Calendar size={14} className="text-primary" /> 
+                        {formatDateShort(b.check_in_date)} <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span> {formatDateShort(b.check_out_date)}
+                      </div>
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <small style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Unit / Room</small>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <Home size={14} /> {cname} - <span style={{ color: 'var(--primary)' }}>{rname}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-color)', padding: '0.75rem', borderRadius: '12px', marginTop: '0.5rem' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <small style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Paid</small>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--success)' }}>₹{b.total_amount - b.balance_amount}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <small style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Balance</small>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 900, color: b.balance_amount > 0 ? 'var(--warning)' : 'var(--success)' }}>₹{b.balance_amount}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <small style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total</small>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>₹{b.total_amount}</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
+                      {b.status === 'Confirmed' && (
+                        <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Check-in</button>
+                      )}
+                      {b.status === 'Checked-in' && (
+                        <button onClick={() => settleBooking(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: '#6366f1' }}>Checkout</button>
+                      )}
+                      {b.status === 'Completed' && b.balance_amount > 0 && (
+                        <button onClick={() => settleBooking(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: '#f59e0b', borderColor: '#f59e0b' }}>Receive Pay</button>
+                      )}
+                      {b.status === 'Completed' && (
+                        <button onClick={() => handleRevertToCheckIn(b)} className="btn-icon" title="Revert to Check-in" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}><RotateCcw size={18} /></button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+          })}
+        </div>
+      ) : (
+        /* DESKTOP TABLE VIEW */
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-container" style={{ maxHeight: '800px', overflowY: 'auto' }}>
+            <table className="table" style={{ margin: 0 }}>
+              <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zSubstitute: 1, borderBottom: '2px solid var(--border)' }}>
                 <tr>
-                  <th>Guest</th>
-                  <th>Dates</th>
-                  <th>Unit</th>
-                  <th>Status</th>
-                  <th>Balance</th>
-                  <th>Act</th>
+                  <th style={{ width: '50px' }}>
+                    <input 
+                      type="checkbox" 
+                      onChange={toggleSelectAll} 
+                      checked={sortedAndFilteredBookings.length > 0 && selectedBookings.length === sortedAndFilteredBookings.length}
+                    />
+                  </th>
+                  <th onClick={() => requestSort('guest_name')} style={{ cursor: 'pointer' }}>Guest</th>
+                  <th onClick={() => requestSort('check_in_date')} style={{ cursor: 'pointer' }}>Stay Dates</th>
+                  <th onClick={() => requestSort('cottage_id')} style={{ cursor: 'pointer' }}>Unit / Room</th>
+                  <th onClick={() => requestSort('booking_source')} style={{ cursor: 'pointer' }}>Source</th>
+                  <th onClick={() => requestSort('status')} style={{ cursor: 'pointer' }}>Status</th>
+                  <th onClick={() => requestSort('advance_paid')} style={{ cursor: 'pointer', textAlign: 'right' }}>Paid</th>
+                  <th onClick={() => requestSort('balance_amount')} style={{ cursor: 'pointer', textAlign: 'right' }}>Balance</th>
+                  <th onClick={() => requestSort('total_amount')} style={{ cursor: 'pointer', textAlign: 'right' }}>Total</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {bookings.map(b => {
+                {sortedAndFilteredBookings.length === 0 ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>No bookings found.</td></tr>
+                ) : sortedAndFilteredBookings.map((b) => {
                   const cname = cottages.find(x => x.id === b.cottage_id)?.name || 'Unknown';
-                  let rname = '';
-                  if (b.booking_type === 'Entire Property') { rname = 'Entire Property'; }
-                  else {
-                    const arr = b.room_ids || (b.room_id ? [b.room_id] : []);
-                    rname = arr.map(id => rooms.find(r => r.id === id)?.name).filter(Boolean).join(', ');
-                  }
+                  const rname = b.booking_type === 'Entire Property' ? 'Entire Property' : (b.room_ids || []).map(id => rooms.find(r => r.id === id)?.name).filter(Boolean).join(', ');
+                  const displayStatus = (b.status === 'Completed' && b.balance_amount > 0) ? 'Pending Payment' : b.status;
+                  const opt = statusOptions.find(o => o.label === displayStatus) || statusOptions[1];
 
                   return (
-                    <tr key={b.id} style={{ 
-                      opacity: b.status === 'Cancelled' ? 0.5 : 1,
-                      background: b.status === 'Pending' ? 'rgba(245, 158, 11, 0.05)' : 'inherit'
-                    }}>
+                    <tr key={b.id} className="table-row-hover" style={{ opacity: b.status === 'Cancelled' ? 0.6 : 1 }}>
                       <td>
-                        <small style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{b.reference_number || 'No Ref'}</small><br/>
-                        <strong>{b.guest_name}</strong><br/>
-                        <small>{b.phone_number}</small><br/>
-                        <small style={{ 
-                          color: b.booking_source === 'Overridden Pending' ? 'var(--danger)' : 'var(--text-muted)',
-                          fontWeight: b.booking_source === 'Overridden Pending' ? 700 : 400 
-                        }}>
-                          Source: {b.booking_source}
-                        </small>
+                        <input type="checkbox" checked={selectedBookings.includes(b.id)} onChange={() => toggleSelectBooking(b.id)} />
                       </td>
-                      <td>{new Date(b.check_in_date).toLocaleDateString()} <br/>{new Date(b.check_out_date).toLocaleDateString()}</td>
-                      <td>{cname} <br/><small className="badge badge-success">{rname}</small></td>
                       <td>
-                        <span className={`badge ${
-                          b.status === 'Cancelled' ? 'badge-danger' : 
-                          b.status === 'Pending' ? 'badge-warning' : 
-                          b.status === 'Checked-in' ? 'badge-indigo' :
-                          b.status === 'Completed' ? 'badge-success' :
-                          'badge-primary'
-                        }`} style={{
-                          background: b.status === 'Pending' ? '#f59e0b' : b.status === 'Checked-in' ? '#6366f1' : '',
-                          color: (b.status === 'Pending' || b.status === 'Checked-in') ? 'white' : ''
-                        }}>
-                          {b.status}
+                        <small style={{ color: 'var(--primary)', fontWeight: 800 }}>{b.reference_number}</small>
+                        <div style={{ fontWeight: 700, fontSize: '1rem' }}>{b.guest_name}</div>
+                        <small style={{ color: 'var(--text-muted)' }}><Phone size={12} style={{ verticalAlign: 'middle' }} /> {b.phone_number}</small>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                           <Calendar size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                           {new Date(b.check_in_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
+                           <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span> 
+                           {new Date(b.check_out_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        <small style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{b.night_count} nights stay</small>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}><Home size={14} /> {cname}</div>
+                        <small style={{ color: 'var(--primary)' }}>{rname}</small>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.3rem 0.6rem', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>{b.booking_source || 'Direct'}</span>
+                      </td>
+                      <td>
+                        <span style={{ padding: '0.3rem 0.6rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 700, background: opt.bg, color: opt.color, border: `1px solid ${opt.color}44`, display: 'inline-block', whiteSpace: 'nowrap' }}>
+                          {displayStatus}
                         </span>
                       </td>
-                      <td>
-                        <strong style={{ color: b.balance_amount > 0 ? 'var(--warning)' : 'var(--success)' }}>Bal: ₹{b.balance_amount}</strong><br/>
-                        Total: ₹{b.total_amount}<br/>
-                        <span style={{ color: 'var(--success)', fontWeight: 'bold', fontSize: '0.8rem' }}>Advance: ₹{b.advance_paid || 0}</span>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--success)' }}>₹{(b.total_amount - b.balance_amount).toLocaleString()}</div>
                       </td>
-                      <td style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                        {b.status === 'Confirmed' && (
-                          <button className="btn btn-primary" style={{ padding: '0.2rem', fontSize: '0.75rem', background: 'var(--primary)' }} onClick={() => handleCheckIn(b)}>Check-in</button>
-                        )}
-                        {b.status === 'Checked-in' && (
-                          <button className="btn btn-primary" style={{ padding: '0.2rem', fontSize: '0.75rem', background: '#6366f1' }} onClick={() => settleBooking(b)}>Check-out</button>
-                        )}
-                        {(b.status === 'Confirmed' || b.status === 'Checked-in') && (
-                          <button className="btn btn-outline" style={{ padding: '0.2rem', fontSize: '0.75rem', color: 'var(--primary)' }} onClick={() => handleExtend(b)}>Extend Stay</button>
-                        )}
-                        
-                        <button className="btn btn-outline" style={{ padding: '0.2rem', fontSize: '0.75rem', color: 'var(--text-muted)' }} onClick={() => loadBookingForEdit(b)}>Edit Details</button>
-                        {(b.status === 'Pending' || b.status === 'Confirmed') && (
-                          <button className="btn btn-outline" style={{ padding: '0.2rem', fontSize: '0.75rem', color: 'var(--danger)' }} onClick={() => deleteBooking(b.id)}>Cancel</button>
-                        )}
-                        {b.status === 'Cancelled' && (b.advance_paid || 0) > 0 && (
-                          <button className="btn btn-outline" style={{ padding: '0.2rem', fontSize: '0.75rem', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleRefund(b)}>Refund Advance</button>
-                        )}
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 800, color: b.balance_amount > 0 ? 'var(--warning)' : 'var(--success)' }}>₹{b.balance_amount.toLocaleString()}</div>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 700 }}>₹{b.total_amount.toLocaleString()}</div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                          {b.status === 'Confirmed' && (
+                            <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Check-in</button>
+                          )}
+                          {b.status === 'Checked-in' && (
+                            <button onClick={() => settleBooking(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#6366f1' }}>Checkout</button>
+                          )}
+                          {b.status === 'Completed' && b.balance_amount > 0 && (
+                            <button onClick={() => settleBooking(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#f59e0b', borderColor: '#f59e0b' }}>Receive Pay</button>
+                          )}
+                          {b.status === 'Completed' && (
+                            <button onClick={() => handleRevertToCheckIn(b)} className="btn-icon" title="Revert to Check-in" style={{ color: '#6366f1' }}><RotateCcw size={16} /></button>
+                          )}
+                          <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon"><Edit2 size={16} /></button>
+                          {(b.status === 'Pending' || b.status === 'Confirmed') && (
+                            <button onClick={() => deleteBooking(b.id)} className="btn-icon" style={{ color: 'var(--danger)' }}><Trash2 size={16} /></button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -659,66 +592,57 @@ export default function Bookings() {
             </table>
           </div>
         </div>
-      </div>
-        
+      )}
+
       {/* Settlement Modal */}
       {settlingBooking && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.25rem' }}>
                 <CheckCircle2 color="var(--success)" /> Final Settlement
               </h2>
-              <button className="btn-outline" style={{ padding: '0.5rem', borderRadius: '50%' }} onClick={() => setSettlingBooking(null)}>
-                <X size={20} />
-              </button>
+              <button className="btn-icon" onClick={() => setSettlingBooking(null)}><X size={20} /></button>
             </div>
-
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Balance due from <strong>{settlingBooking.guest_name}</strong></p>
-              <div className="balance-due-large pulse-warning">
-                ₹{settlingBooking.balance_amount - settlementData.discount}
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem', padding: '1.5rem', background: 'var(--bg-color)', borderRadius: 'var(--radius-md)' }}>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Balance due from <strong>{settlingBooking.guest_name}</strong></p>
+              <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-main)' }}>₹{settlingBooking.balance_amount - settlementData.discount}</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Discount Amount (₹)</label>
+              <input type="number" className="form-input" value={settlementData.discount} onChange={e => setSettlementData({ ...settlementData, discount: Number(e.target.value) })} />
+            </div>
+            <div style={{ marginTop: '1.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  <input type="radio" name="settlementType" checked={settlementData.allSettled} onChange={() => setSettlementData({ ...settlementData, allSettled: true, pendingOTA: false })} style={{ width: '18px', height: '18px', accentColor: 'var(--success)' }} />
+                  <span style={{ fontWeight: 600 }}>Payment Received Now (Cash/UPI/Card)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  <input type="radio" name="settlementType" checked={settlementData.pendingOTA} onChange={() => setSettlementData({ ...settlementData, allSettled: false, pendingOTA: true })} style={{ width: '18px', height: '18px', accentColor: 'var(--warning)' }} />
+                  <span style={{ fontWeight: 600 }}>Payment Pending from OTA (Agoda/Booking.com)</span>
+                </label>
               </div>
-            </div>
+              
+              {settlementData.pendingOTA && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(245, 158, 11, 0.1)', color: '#b45309', borderRadius: '8px', fontSize: '0.8rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                  This will mark the booking as Pending payment. You can record the payment later once received from the OTA.
+                </div>
+              )}
 
-            <div className="discount-highlight">
-              <h3><AlertTriangle size={20} /> Any discount!</h3>
-              <div className="form-group" style={{ margin: 0 }}>
-                <input 
-                  type="number" 
-                  className="form-input" 
-                  placeholder="Enter discount amount..."
-                  value={settlementData.discount}
-                  onChange={e => setSettlementData({ ...settlementData, discount: Number(e.target.value) })}
-                  style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 'bold' }}
-                />
-              </div>
-            </div>
-
-            <div className="settlement-footer">
-              <label className="checkbox-group">
-                <input 
-                  type="checkbox" 
-                  checked={settlementData.allSettled} 
-                  onChange={e => setSettlementData({ ...settlementData, allSettled: e.target.checked })}
-                />
-                <span style={{ fontWeight: '600' }}>All settled up? (Confirm final payment)</span>
-              </label>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.5rem' }}>
                 <button className="btn btn-outline" onClick={() => setSettlingBooking(null)}>Cancel</button>
-                <button 
-                  className="btn btn-primary" 
-                  disabled={!settlementData.allSettled || loading}
-                  onClick={confirmSettlement}
-                >
-                  {loading ? 'Processing...' : 'Complete Check-out'}
-                </button>
+                <button className="btn btn-primary" onClick={handleFinalSettlement}>Confirm & Close</button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
+}
+
+function formatDateShort(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }

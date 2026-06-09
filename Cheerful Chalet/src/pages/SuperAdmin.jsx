@@ -17,6 +17,51 @@ export default function SuperAdmin() {
   const [tenants, setTenants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const DEFAULT_PLANS = {
+    free: {
+      enabled: true,
+      price: 0,
+      features: [
+        { name: '1 Resort Limit', enabled: true },
+        { name: 'Up to 5 Rooms', enabled: true },
+        { name: 'Basic Reports', enabled: true },
+        { name: 'Community Support', enabled: true }
+      ]
+    },
+    pro: {
+      enabled: true,
+      price: 1999,
+      offerPrice: 1499,
+      offerActive: false,
+      offerStartDate: '',
+      offerEndDate: '',
+      features: [
+        { name: 'Up to 5 Resorts', enabled: true },
+        { name: 'Unlimited Rooms', enabled: true },
+        { name: 'Advanced Analytics', enabled: true },
+        { name: 'Email Automation', enabled: true },
+        { name: 'Priority Support', enabled: true }
+      ]
+    },
+    premium: {
+      enabled: true,
+      price: 5999,
+      offerPrice: 4999,
+      offerActive: false,
+      offerStartDate: '',
+      offerEndDate: '',
+      features: [
+        { name: 'Unlimited Resorts', enabled: true },
+        { name: 'Custom Branding', enabled: true },
+        { name: 'Super Admin Panel', enabled: true },
+        { name: 'WhatsApp Notifications', enabled: true },
+        { name: '24/7 Dedicated Support', enabled: true }
+      ]
+    }
+  };
+
+  const [pricingConfig, setPricingConfig] = useState(DEFAULT_PLANS);
   
   // Modal states
   const [showUserForm, setShowUserForm] = useState(false);
@@ -61,6 +106,16 @@ export default function SuperAdmin() {
         };
       });
 
+      const superAdminProfile = (u || []).find(user => user.id === profile.id);
+      if (superAdminProfile?.global_settings?.pricing) {
+        const loaded = superAdminProfile.global_settings.pricing;
+        setPricingConfig({
+          free: { ...DEFAULT_PLANS.free, ...loaded.free, features: loaded.free?.features || DEFAULT_PLANS.free.features },
+          pro: { ...DEFAULT_PLANS.pro, ...loaded.pro, features: loaded.pro?.features || DEFAULT_PLANS.pro.features },
+          premium: { ...DEFAULT_PLANS.premium, ...loaded.premium, features: loaded.premium?.features || DEFAULT_PLANS.premium.features }
+        });
+      }
+
       setTenants(tenantsWithData.filter(t => t.id !== profile.id));
       
       setStats({
@@ -87,7 +142,8 @@ export default function SuperAdmin() {
         .from('profiles')
         .update({ 
           plan_type: editingUser.plan_type,
-          subscription_status: editingUser.subscription_status
+          subscription_status: editingUser.subscription_status,
+          feature_investment_enabled: editingUser.feature_investment_enabled
         })
         .eq('id', editingUser.id);
         
@@ -162,6 +218,22 @@ export default function SuperAdmin() {
     }
   };
 
+  const handleSavePricing = async () => {
+    try {
+      setIsUpdating(true);
+      const settings = profile.global_settings || {};
+      settings.pricing = pricingConfig;
+      
+      const { error } = await supabase.from('profiles').update({ global_settings: settings }).eq('id', profile.id);
+      if (error) throw error;
+      alert("Global pricing configuration updated successfully!");
+    } catch (err) {
+      alert("Failed to save pricing: " + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (profile?.role !== 'super_admin') {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px' }}>
@@ -228,6 +300,126 @@ export default function SuperAdmin() {
         </div>
       </div>
 
+      {/* Global Pricing & Offers Manager */}
+      <div className="card" style={{ marginBottom: '2.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b' }}>
+          <DollarSign /> Dynamic Pricing & Offers
+        </h3>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+          
+          {['free', 'pro', 'premium'].map((planKey) => {
+            const plan = pricingConfig[planKey];
+            const titleColor = planKey === 'free' ? '#64748b' : planKey === 'pro' ? 'var(--success)' : 'var(--primary)';
+            const titleName = planKey === 'free' ? 'FREE STARTER' : planKey === 'pro' ? 'PRO MANAGER' : 'LUXURY PREMIUM';
+            
+            return (
+              <div key={planKey} style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1', opacity: plan.enabled ? 1 : 0.6, transition: 'all 0.3s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <h4 style={{ color: titleColor, margin: 0 }}>{titleName}</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input 
+                      type="checkbox" 
+                      id={`enable-${planKey}`}
+                      checked={plan.enabled}
+                      onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, enabled: e.target.checked}})}
+                    />
+                    <label htmlFor={`enable-${planKey}`} style={{ fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Enabled</label>
+                  </div>
+                </div>
+
+                {planKey !== 'free' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Base Rate (₹/month)</label>
+                      <input type="number" className="form-input" value={plan.price} onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, price: Number(e.target.value)}})} disabled={!plan.enabled} />
+                    </div>
+                    <div className="form-group" style={{ marginTop: '1rem' }}>
+                      <label className="form-label">Promotional Offer Rate (₹/month)</label>
+                      <input type="number" className="form-input" value={plan.offerPrice} onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, offerPrice: Number(e.target.value)}})} disabled={!plan.enabled} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label">Offer Starts</label>
+                        <input type="date" className="form-input" value={plan.offerStartDate || ''} onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, offerStartDate: e.target.value}})} disabled={!plan.offerActive || !plan.enabled} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Offer Ends</label>
+                        <input type="date" className="form-input" value={plan.offerEndDate || ''} onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, offerEndDate: e.target.value}})} disabled={!plan.offerActive || !plan.enabled} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', background: plan.offerActive ? 'rgba(34, 197, 94, 0.1)' : 'transparent', padding: '0.5rem', borderRadius: '4px' }}>
+                      <input type="checkbox" id={`offer-${planKey}`} checked={plan.offerActive} onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, offerActive: e.target.checked}})} style={{ width: '18px', height: '18px' }} disabled={!plan.enabled} />
+                      <label htmlFor={`offer-${planKey}`} style={{ fontWeight: 'bold', color: plan.offerActive ? 'var(--success)' : 'var(--text-muted)', cursor: 'pointer' }}>Activate Offer</label>
+                    </div>
+                  </>
+                )}
+                
+                <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9' }}>
+                  <h5 style={{ marginBottom: '1rem', color: '#475569', fontSize: '0.85rem', textTransform: 'uppercase' }}>Included Features</h5>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {plan.features.map((feat, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={feat.enabled} 
+                          onChange={(e) => {
+                            const newFeats = [...plan.features];
+                            newFeats[idx] = { ...newFeats[idx], enabled: e.target.checked };
+                            setPricingConfig({...pricingConfig, [planKey]: {...plan, features: newFeats}});
+                          }}
+                          disabled={!plan.enabled}
+                        />
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          value={feat.name}
+                          onChange={(e) => {
+                            const newFeats = [...plan.features];
+                            newFeats[idx] = { ...newFeats[idx], name: e.target.value };
+                            setPricingConfig({...pricingConfig, [planKey]: {...plan, features: newFeats}});
+                          }}
+                          style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                          disabled={!plan.enabled}
+                        />
+                        <button 
+                          className="btn-outline" 
+                          style={{ padding: '0.35rem', color: 'var(--danger)', border: 'none' }}
+                          onClick={() => {
+                            const newFeats = plan.features.filter((_, i) => i !== idx);
+                            setPricingConfig({...pricingConfig, [planKey]: {...plan, features: newFeats}});
+                          }}
+                          disabled={!plan.enabled}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <button 
+                      className="btn btn-outline" 
+                      style={{ marginTop: '0.5rem', fontSize: '0.8rem', padding: '0.5rem' }}
+                      onClick={() => {
+                        const newFeats = [...plan.features, { name: 'New Feature', enabled: true }];
+                        setPricingConfig({...pricingConfig, [planKey]: {...plan, features: newFeats}});
+                      }}
+                      disabled={!plan.enabled}
+                    >
+                      + Add Feature
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+          <button className="btn btn-primary" onClick={handleSavePricing} disabled={isUpdating} style={{ padding: '0.75rem 2rem' }}>
+            {isUpdating ? 'Saving Changes...' : 'Broadcast Prices Globally'}
+          </button>
+        </div>
+      </div>
+
       {/* Account Management Modal */}
       {editingUser && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -265,6 +457,17 @@ export default function SuperAdmin() {
                   <option value="active">Active</option>
                   <option value="suspended">Suspended</option>
                 </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.8rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="feat_inv" 
+                  checked={editingUser.feature_investment_enabled} 
+                  onChange={e => setEditingUser({...editingUser, feature_investment_enabled: e.target.checked})} 
+                  style={{ width: '20px', height: '20px' }}
+                />
+                <label htmlFor="feat_inv" style={{ fontWeight: 600, cursor: 'pointer' }}>Enable Investment Analysis</label>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

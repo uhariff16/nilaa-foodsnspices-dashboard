@@ -1500,7 +1500,7 @@ const Dashboard = (props) => {
                         onClick={() => setActiveTab('overview')}
                         style={{
                             background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
-                            color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
+                            color: activeTab === 'overview' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             borderBottom: activeTab === 'overview' ? '2px solid var(--accent-primary)' : '2px solid transparent',
                             cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'overview' ? 600 : 400
                         }}

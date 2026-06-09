@@ -117,6 +117,8 @@ const ItemMaster = () => {
                 return { background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' };
             case 'Processed Item':
                 return { background: 'rgba(168, 85, 247, 0.1)', color: '#d8b4fe', border: '1px solid rgba(168, 85, 247, 0.2)' };
+            case 'Charges':
+                return { background: 'rgba(236, 72, 153, 0.1)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.2)' };
             default: // Overhead
                 return { background: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.2)' };
         }
@@ -279,7 +281,7 @@ const ItemMaster = () => {
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>CATEGORY</label>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-                                        {['Raw Material', 'Processed Item', 'Overhead'].map(cat => (
+                                        {['Raw Material', 'Processed Item', 'Charges', 'Overhead'].map(cat => (
                                             <button
                                                 key={cat}
                                                 type="button"

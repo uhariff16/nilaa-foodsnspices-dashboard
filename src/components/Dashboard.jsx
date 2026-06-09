@@ -332,8 +332,28 @@ const Dashboard = (props) => {
     // Simply use the granular sales rows. The previous logic of trying to match Totals
     // caused double counting for invoices without explicit numbers (INV-MISSING).
     // The filter for MISSING is now applied upstream to `allSalesTransactions`.
-    const salesTransactions = salesAppearsGranular;
+    const { physicalSalesTransactions, serviceRevenue } = React.useMemo(() => {
+        const physical = [];
+        let sRev = 0;
+        const itemMaster = props.data?.itemMaster || [];
 
+        salesAppearsGranular.forEach(t => {
+            const nameUpper = (t.originalDesc || t.name || '').toUpperCase().trim();
+            const matchedMaster = itemMaster.find(im => {
+                const masterName = String(im.name).toUpperCase().trim();
+                return nameUpper === masterName || nameUpper.includes(masterName);
+            });
+
+            if (matchedMaster && matchedMaster.category === 'Charges') {
+                sRev += parseFloat(t.parsedAmount || 0);
+            } else {
+                physical.push(t);
+            }
+        });
+        return { physicalSalesTransactions: physical, serviceRevenue: sRev };
+    }, [salesAppearsGranular, props.data?.itemMaster]);
+
+    const salesTransactions = salesAppearsGranular;
     // Metric Calculations
     const grossSalesRevenue = salesTransactions.reduce((sum, t) => {
         const amt = parseFloat(t.parsedAmount) || 0;
@@ -805,11 +825,23 @@ const Dashboard = (props) => {
 
         // 3. Sales Qty (from filteredItems which is already filtered by date)
         const salesDetails = [];
+        const itemMasterLookup = props.data?.itemMaster || [];
+
         filteredItems.forEach(item => {
             const qty = parseFloat(item.qty || 0);
             if (qty > 0) {
-                salesQty += qty;
-                salesDetails.push({ name: item.name, weight: qty });
+                const nameUpper = (item.name || '').toUpperCase().trim();
+                const matchedMaster = itemMasterLookup.find(im => {
+                    const masterName = String(im.name).toUpperCase().trim();
+                    return nameUpper === masterName || nameUpper.includes(masterName);
+                });
+
+                if (matchedMaster && matchedMaster.category === 'Charges') {
+                    // Exclude from physical sales volume
+                } else {
+                    salesQty += qty;
+                    salesDetails.push({ name: item.name, weight: qty });
+                }
             }
 
         });
@@ -2025,7 +2057,14 @@ const Dashboard = (props) => {
                                 subtext={new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             />
 
-                            <Card title="Total Sales (Net)" value={salesRevenue} icon={IndianRupee} color="16, 185, 129" type="sales" />
+                            <Card 
+                                title="Total Sales (Net)" 
+                                value={salesRevenue} 
+                                icon={IndianRupee} 
+                                color="16, 185, 129" 
+                                type="sales" 
+                                subtext={serviceRevenue > 0 ? `Includes ${formatCurrency(serviceRevenue)} from Charges` : undefined}
+                            />
 
                             <Card title="Total Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
 
@@ -2103,7 +2142,7 @@ const Dashboard = (props) => {
 
                         {(salesViewMode === 'summary' || salesViewMode === 'item' || salesViewMode === 'daily') && (
                             <SalesSummaryTable
-                                transactions={salesViewMode === 'item' ? salesAppearsGranular : salesTransactions}
+                                transactions={salesViewMode === 'item' ? physicalSalesTransactions : salesTransactions}
                                 groupBy={salesViewMode === 'item' ? 'item' : 'date'}
                             />
                         )}
@@ -2144,38 +2183,54 @@ const Dashboard = (props) => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {salesTransactions.filter(t => {
-                                                    if(!t.invoiceNo) return false;
-                                                    if(!invoiceSearch) return true;
-                                                    const s = invoiceSearch.toLowerCase();
-                                                    return (t.invoiceNo || '').toLowerCase().includes(s) || (t.customerName || '').toLowerCase().includes(s);
-                                                }).sort((a,b) => {
-                                                    if (invoiceSort === 'date_desc') return new Date(b.parsedDate) - new Date(a.parsedDate);
-                                                    if (invoiceSort === 'date_asc') return new Date(a.parsedDate) - new Date(b.parsedDate);
-                                                    if (invoiceSort === 'amount_desc') return b.parsedAmount - a.parsedAmount;
-                                                    if (invoiceSort === 'amount_asc') return a.parsedAmount - b.parsedAmount;
-                                                    return 0;
-                                                }).map((inv, i) => {
-                                                    const originalTxns = (data.transactions || []).filter(t => 
-                                                        String(t.invoiceNo || '').trim().toUpperCase() === String(inv.invoiceNo || '').trim().toUpperCase() &&
-                                                        t.parsedType !== 'Sales Return' &&
-                                                        t.parsedType !== 'Invoice Total'
-                                                    );
-                                                    return (
-                                                        <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{inv.parsedDate}</td>
-                                                            <td 
-                                                                style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
-                                                                onClick={() => setSelectedInvoiceDetails({ invoiceNo: String(inv.invoiceNo).toUpperCase(), amount: inv.parsedAmount, items: originalTxns, isReturn: false })}
-                                                                title="Click to view details"
-                                                            >{String(inv.invoiceNo).toUpperCase()}</td>
-                                                            <td style={{ padding: '1rem', color: 'var(--text-primary)' }}>{inv.customerName ? String(inv.customerName).toUpperCase() : '-'}</td>
-                                                            <td style={{ padding: '1rem', textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>
-                                                                {formatCurrency(inv.parsedAmount)}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
+                                                {(() => {
+                                                    const uniqueInvoices = new Map();
+                                                    salesTransactions.forEach(t => {
+                                                        if(!t.invoiceNo) return;
+                                                        const key = String(t.invoiceNo).trim().toUpperCase();
+                                                        if (!uniqueInvoices.has(key)) {
+                                                            uniqueInvoices.set(key, {
+                                                                invoiceNo: key,
+                                                                parsedDate: t.parsedDate,
+                                                                customerName: t.customerName,
+                                                                parsedAmount: 0
+                                                            });
+                                                        }
+                                                        uniqueInvoices.get(key).parsedAmount += (t.parsedAmount || 0);
+                                                    });
+                                                    
+                                                    return Array.from(uniqueInvoices.values()).filter(inv => {
+                                                        if(!invoiceSearch) return true;
+                                                        const s = invoiceSearch.toLowerCase();
+                                                        return (inv.invoiceNo || '').toLowerCase().includes(s) || (inv.customerName || '').toLowerCase().includes(s);
+                                                    }).sort((a,b) => {
+                                                        if (invoiceSort === 'date_desc') return new Date(b.parsedDate) - new Date(a.parsedDate);
+                                                        if (invoiceSort === 'date_asc') return new Date(a.parsedDate) - new Date(b.parsedDate);
+                                                        if (invoiceSort === 'amount_desc') return b.parsedAmount - a.parsedAmount;
+                                                        if (invoiceSort === 'amount_asc') return a.parsedAmount - b.parsedAmount;
+                                                        return 0;
+                                                    }).map((inv, i) => {
+                                                        const originalTxns = (data.transactions || []).filter(t => 
+                                                            String(t.invoiceNo || '').trim().toUpperCase() === inv.invoiceNo &&
+                                                            t.parsedType !== 'Sales Return' &&
+                                                            t.parsedType !== 'Invoice Total'
+                                                        );
+                                                        return (
+                                                            <tr key={i} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{inv.parsedDate}</td>
+                                                                <td 
+                                                                    style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
+                                                                    onClick={() => setSelectedInvoiceDetails({ invoiceNo: inv.invoiceNo, amount: inv.parsedAmount, items: originalTxns, isReturn: false })}
+                                                                    title="Click to view details"
+                                                                >{inv.invoiceNo}</td>
+                                                                <td style={{ padding: '1rem', color: 'var(--text-primary)' }}>{inv.customerName ? String(inv.customerName).toUpperCase() : '-'}</td>
+                                                                <td style={{ padding: '1rem', textAlign: 'right', color: 'var(--success)', fontWeight: 600 }}>
+                                                                    {formatCurrency(inv.parsedAmount)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })()}
                                             </tbody>
                                         </table>
                                     </div>

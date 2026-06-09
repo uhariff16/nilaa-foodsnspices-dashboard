@@ -151,3 +151,4 @@ WITH CHECK (true);
 -- Migration for Deductions and Reason
 ALTER TABLE public.employee_attendance ADD COLUMN IF NOT EXISTS deductions NUMERIC DEFAULT 0;
 ALTER TABLE public.employee_attendance ADD COLUMN IF NOT EXISTS deduction_reason TEXT;
+ALTER TABLE public.employee_attendance ADD COLUMN IF NOT EXISTS shift_type TEXT DEFAULT 'Full Day';

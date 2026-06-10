@@ -1668,6 +1668,7 @@ const Dashboard = (props) => {
                             overrideSales={salesRevenue}
                             overrideInvoiceCount={salesCount}
                             totalReturns={totalReturns}
+                            serviceRevenue={serviceRevenue}
                         />
 
                         {/* Material Flow Analysis Section */}

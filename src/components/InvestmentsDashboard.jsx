@@ -35,7 +35,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     
     // Form States
     const [assetForm, setAssetForm] = useState({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '' });
-    const [investmentForm, setInvestmentForm] = useState({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '' });
+    const [investmentForm, setInvestmentForm] = useState({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' });
 
     useEffect(() => {
         fetchData();
@@ -74,11 +74,15 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     const handleAddInvestment = async (e) => {
         e.preventDefault();
         try {
-            const payload = { ...investmentForm, asset_id: investmentForm.asset_id || null };
+            const payload = { 
+                ...investmentForm, 
+                asset_id: investmentForm.asset_id || null,
+                partnership_percentage: investmentForm.partnership_percentage ? Number(investmentForm.partnership_percentage) : 0
+            };
             const { error } = await supabase.from('partner_investments').insert([payload]);
             if (error) throw error;
             setShowInvestmentModal(false);
-            setInvestmentForm({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '' });
+            setInvestmentForm({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' });
             fetchData();
         } catch (err) { alert(err.message); }
     };
@@ -277,6 +281,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Partner</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Purpose / Asset</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Amount</th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Partnership %</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Notes</th>
                                 {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
                             </tr>
@@ -288,6 +293,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     <td style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6' }}>{inv.profit_stakeholders?.name}</td>
                                     <td style={{ padding: '1rem' }}>{inv.business_assets?.name || <span style={{ color: '#10b981' }}>General Capital</span>}</td>
                                     <td style={{ padding: '1rem', fontWeight: 'bold' }}>{formatCurrency(inv.amount)}</td>
+                                    <td style={{ padding: '1rem', fontWeight: 600 }}>{inv.partnership_percentage ? `${inv.partnership_percentage}%` : '-'}</td>
                                     <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{inv.notes || '-'}</td>
                                     {isAdmin && (
                                         <td style={{ padding: '1rem' }}>
@@ -365,9 +371,13 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     <input required type="number" className="glass-input" value={investmentForm.amount} onChange={e => setInvestmentForm({...investmentForm, amount: e.target.value})} />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Date</label>
-                                    <input required type="date" className="glass-input" value={investmentForm.investment_date} onChange={e => setInvestmentForm({...investmentForm, investment_date: e.target.value})} />
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Partnership % (Optional)</label>
+                                    <input type="number" step="0.01" min="0" max="100" className="glass-input" placeholder="e.g. 12.5" value={investmentForm.partnership_percentage} onChange={e => setInvestmentForm({...investmentForm, partnership_percentage: e.target.value})} />
                                 </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Date</label>
+                                <input required type="date" className="glass-input" value={investmentForm.investment_date} onChange={e => setInvestmentForm({...investmentForm, investment_date: e.target.value})} />
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Notes</label>
@@ -395,6 +405,10 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                     transition: border-color 0.2s;
                 }
                 .glass-input:focus { border-color: var(--accent-primary); background: rgba(255, 255, 255, 0.1); }
+                .glass-input option {
+                    background: #1e293b;
+                    color: white;
+                }
                 .btn-primary {
                     background: var(--accent-primary);
                     color: white;

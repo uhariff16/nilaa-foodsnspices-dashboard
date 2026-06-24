@@ -87,6 +87,38 @@ const InvestmentsDashboard = ({ isAdmin }) => {
         } catch (err) { alert(err.message); }
     };
 
+    const handleAssetChange = (assetId) => {
+        const selectedAsset = assets.find(a => a.id === assetId);
+        let amount = investmentForm.amount;
+        if (selectedAsset && investmentForm.partnership_percentage) {
+            const pct = Number(investmentForm.partnership_percentage);
+            if (!isNaN(pct) && pct > 0) {
+                amount = Math.round((Number(selectedAsset.total_cost) * pct) / 100).toString();
+            }
+        }
+        setInvestmentForm(prev => ({
+            ...prev,
+            asset_id: assetId,
+            amount: amount
+        }));
+    };
+
+    const handlePercentageChange = (pctValue) => {
+        let amount = investmentForm.amount;
+        const selectedAsset = assets.find(a => a.id === investmentForm.asset_id);
+        if (selectedAsset && pctValue) {
+            const pct = Number(pctValue);
+            if (!isNaN(pct) && pct > 0) {
+                amount = Math.round((Number(selectedAsset.total_cost) * pct) / 100).toString();
+            }
+        }
+        setInvestmentForm(prev => ({
+            ...prev,
+            partnership_percentage: pctValue,
+            amount: amount
+        }));
+    };
+
     const handleDeleteAsset = async (id) => {
         if (!window.confirm("Are you sure? This will not delete related investments but will unlinked them.")) return;
         await supabase.from('business_assets').delete().eq('id', id);
@@ -360,7 +392,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Linked Asset (Optional)</label>
-                                <select className="glass-input" value={investmentForm.asset_id} onChange={e => setInvestmentForm({...investmentForm, asset_id: e.target.value})}>
+                                <select className="glass-input" value={investmentForm.asset_id} onChange={e => handleAssetChange(e.target.value)}>
                                     <option value="">General Investment (Working Capital)</option>
                                     {assets.map(a => <option key={a.id} value={a.id}>{a.name} (₹{a.total_cost})</option>)}
                                 </select>
@@ -372,7 +404,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                 </div>
                                 <div style={{ flex: 1 }}>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Partnership % (Optional)</label>
-                                    <input type="number" step="0.01" min="0" max="100" className="glass-input" placeholder="e.g. 12.5" value={investmentForm.partnership_percentage} onChange={e => setInvestmentForm({...investmentForm, partnership_percentage: e.target.value})} />
+                                    <input type="number" step="0.01" min="0" max="100" className="glass-input" placeholder="e.g. 12.5" value={investmentForm.partnership_percentage} onChange={e => handlePercentageChange(e.target.value)} />
                                 </div>
                             </div>
                             <div>

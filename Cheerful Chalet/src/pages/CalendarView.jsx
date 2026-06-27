@@ -8,9 +8,48 @@ import CalendarTooltip from '../components/CalendarTooltip';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 
+const parseAgentSource = (sourceStr) => {
+  if (!sourceStr) return { isAgent: false, name: '', phone: '' };
+  
+  const str = sourceStr.trim();
+  if (!str.startsWith('Agent:')) {
+    return { isAgent: false, name: str, phone: '' };
+  }
+  
+  const cleaned = str.replace(/^Agent:\s*/i, '').trim();
+  
+  // Pattern 1: Agent: Name | Phone
+  if (cleaned.includes('|')) {
+    const [n, p] = cleaned.split('|');
+    return { isAgent: true, name: (n || '').trim(), phone: (p || '').trim() };
+  }
+  
+  // Pattern 2: Agent: Name (Contact: Phone)
+  const bracketMatch = cleaned.match(/^([^(]+)\(\s*Contact:\s*([^)]+)\)/i);
+  if (bracketMatch) {
+    return { 
+      isAgent: true, 
+      name: bracketMatch[1].trim(), 
+      phone: bracketMatch[2].trim() 
+    };
+  }
+  
+  // Pattern 3: Agent: Name Contact: Phone (without brackets)
+  const contactMatch = cleaned.match(/^([\s\S]+?)\s*Contact:\s*(.+)$/i);
+  if (contactMatch) {
+    return {
+      isAgent: true,
+      name: contactMatch[1].trim(),
+      phone: contactMatch[2].trim()
+    };
+  }
+  
+  return { isAgent: true, name: cleaned, phone: '' };
+};
+
 export default function CalendarView() {
   const navigate = useNavigate();
-  const { activeResortId } = useSettingsStore();
+  const { activeResortId, profile } = useSettingsStore();
   const [bookings, setBookings] = useState([]);
   const [cottages, setCottages] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -59,22 +98,46 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
   const dates = useMemo(() => eachDayOfInterval({ start: startOfMonth(currentDate), end: endOfMonth(currentDate) }), [currentDate]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('cheerful_chalet_whatsapp_template');
-    if (saved) {
-      setShareTemplate(saved);
-    } else {
-      setShareTemplate(DEFAULT_TEMPLATE);
-    }
-  }, []);
+    // Initial fetch of template
+    const loadInitialTemplate = async () => {
+      if (!isSupabaseConfigured() || !activeResortId) return;
+      try {
+        const { data } = await supabase
+          .from('tenant_integrations')
+          .select('whatsapp_share_template')
+          .eq('resort_id', activeResortId)
+          .maybeSingle();
+        if (data && data.whatsapp_share_template) {
+          setShareTemplate(data.whatsapp_share_template);
+        } else {
+          setShareTemplate(DEFAULT_TEMPLATE);
+        }
+      } catch (err) {
+        console.error("Error loading share template:", err);
+        setShareTemplate(DEFAULT_TEMPLATE);
+      }
+    };
+    loadInitialTemplate();
+  }, [activeResortId]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured() || !activeResortId) { setLoading(false); return; }
       try {
+        let bookingsQuery = supabase.from('bookings').select('*').eq('resort_id', activeResortId).neq('status', 'Cancelled');
+        let cottagesQuery = supabase.from('cottages').select('*').eq('resort_id', activeResortId).order('name');
+        let roomsQuery = supabase.from('rooms').select('*').eq('resort_id', activeResortId).order('name');
+
+        if (profile?.role === 'staff' && profile?.cottage_id) {
+          bookingsQuery = bookingsQuery.eq('cottage_id', profile.cottage_id);
+          cottagesQuery = cottagesQuery.eq('id', profile.cottage_id);
+          roomsQuery = roomsQuery.eq('cottage_id', profile.cottage_id);
+        }
+
         const [bks, cts, rms] = await Promise.all([
-          supabase.from('bookings').select('*').eq('resort_id', activeResortId).neq('status', 'Cancelled'),
-          supabase.from('cottages').select('*').eq('resort_id', activeResortId).order('name'),
-          supabase.from('rooms').select('*').eq('resort_id', activeResortId).order('name')
+          bookingsQuery,
+          cottagesQuery,
+          roomsQuery
         ]);
         setBookings(bks.data || []);
         setCottages(cts.data || []);
@@ -88,12 +151,28 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
       }
     };
     fetchData();
-  }, [activeResortId]);
+  }, [activeResortId, profile?.cottage_id, profile?.role]);
 
-  const handleSaveTemplate = () => {
-    localStorage.setItem('cheerful_chalet_whatsapp_template', shareTemplate);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2000);
+  const handleSaveTemplate = async () => {
+    setIsSaved(false);
+    try {
+      const payload = {
+        tenant_id: profile?.id,
+        resort_id: activeResortId,
+        whatsapp_share_template: shareTemplate,
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabase
+        .from('tenant_integrations')
+        .upsert(payload, { onConflict: 'resort_id' });
+      
+      if (error) throw error;
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    } catch (err) {
+      console.error("Error saving share template:", err);
+      alert("Failed to save template: " + err.message);
+    }
   };
 
   const handleResetTemplate = () => {
@@ -707,65 +786,32 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                   })}
                 </div>
 
-                {cottages.map(c => (
-                  <React.Fragment key={c.id}>
-                    {/* Cottage Row */}
-                    <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
-                      <div style={{ width: isMobile ? '100px' : '220px', flexShrink: 0, padding: isMobile ? '0.5rem' : '1rem', fontWeight: '700', fontSize: isMobile ? '0.75rem' : '1rem', borderRight: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg-secondary)', zIndex: 10, display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: isMobile ? 'normal' : 'nowrap', overflow: 'hidden' }}>
-                         <Home size={isMobile ? 14 : 16} color="var(--primary)" style={{ flexShrink: 0 }} /> <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{isMobile ? c.name.split(' ')[0] : c.name}</span>
-                      </div>
-                      {dates.map((d, i) => {
-                        const { blockColor, label, bookingId, booking } = getCellStatus(d, 'Property', c.id);
-                        const isPast = startOfDay(d) < startOfDay(new Date());
-                        const isSelected = dragSelection?.type === 'Property' && dragSelection.itemIds.includes(c.id) && d >= Math.min(dragSelection.startDate, dragSelection.endDate) && d <= Math.max(dragSelection.startDate, dragSelection.endDate);
-                        const isHighlighted = hoveredBooking?.id === bookingId && bookingId !== null;
-                        const isSearchMatch = searchTerm && booking && (booking.guest_name.toLowerCase().includes(searchTerm.toLowerCase()) || (booking.reference_number || '').toLowerCase().includes(searchTerm.toLowerCase()));
-
-                        return (
-                          <div key={i} 
-                               onPointerDown={(e) => { if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId); handleMouseDown(d, 'Property', c.id, bookingId, c.id); }} 
-                               onClick={() => bookingId && setSelectedBooking(bookings.find(x => x.id === bookingId))}
-                               onPointerEnter={(e) => handleMouseEnter(e, d, 'Property', c.id, bookingId, c.id)} 
-                               onDoubleClick={() => { if (bookingId) { navigate(`/bookings/edit/${bookingId}`); } else { handleEmptyCellDoubleClick(d, 'Property', c.id, c.id); } }} 
-                               style={{ width: isMobile ? '45px' : '54px', flexShrink: 0, borderRight: '1px solid var(--border)', padding: '5px', cursor: isPast && !bookingId ? 'not-allowed' : 'pointer', background: isToday(d) ? 'rgba(5, 150, 105, 0.03)' : 'transparent', transition: 'all 0.2s' }}>
-                            <div style={{ 
-                                width: '100%', height: '34px', borderRadius: '6px', 
-                                background: isSelected ? 'var(--primary)' : blockColor, 
-                                opacity: (isPast && !bookingId) ? 0.3 : 1,
-                                border: isHighlighted ? '2px solid white' : (isSearchMatch ? '3px solid var(--warning)' : 'none'),
-                                boxShadow: isHighlighted ? '0 0 10px rgba(0,0,0,0.2)' : 'none',
-                                transform: isHighlighted ? 'scale(1.1)' : 'scale(1)',
-                                zIndex: isHighlighted ? 15 : 1,
-                                position: 'relative'
-                            }}>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Room Rows */}
-                    {rooms.filter(r => r.cottage_id === c.id).map(r => (
-                      <div key={r.id} style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-color)' }}>
-                        <div style={{ width: isMobile ? '100px' : '220px', flexShrink: 0, padding: isMobile ? '0.5rem 0.25rem 0.5rem 0.5rem' : '0.75rem 1rem 0.75rem 3rem', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: 600, borderRight: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg-color)', zIndex: 10, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: isMobile ? 'normal' : 'nowrap', overflow: 'hidden' }}>
-                           <Navigation size={isMobile ? 10 : 12} style={{ transform: 'rotate(90deg)', flexShrink: 0 }} /> <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{r.name}</span>
+                {cottages.map(c => {
+                  const cottageRooms = rooms.filter(r => r.cottage_id === c.id);
+                  const hasNoRooms = cottageRooms.length === 0;
+                  return (
+                    <React.Fragment key={c.id}>
+                      {/* Cottage Row */}
+                      <div style={{ display: 'flex', borderBottom: hasNoRooms ? '4px solid var(--border)' : '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
+                        <div style={{ width: isMobile ? '100px' : '220px', flexShrink: 0, padding: isMobile ? '0.5rem' : '1rem', fontWeight: '700', fontSize: isMobile ? '0.75rem' : '1rem', borderRight: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg-secondary)', zIndex: 10, display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: isMobile ? 'normal' : 'nowrap', overflow: 'hidden' }}>
+                           <Home size={isMobile ? 14 : 16} color="var(--primary)" style={{ flexShrink: 0 }} /> <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{isMobile ? c.name.split(' ')[0] : c.name}</span>
                         </div>
                         {dates.map((d, i) => {
-                          const { blockColor, label, bookingId, booking } = getCellStatus(d, 'Room', r.id);
+                          const { blockColor, label, bookingId, booking } = getCellStatus(d, 'Property', c.id);
                           const isPast = startOfDay(d) < startOfDay(new Date());
-                          const isSelected = dragSelection?.type === 'Room' && dragSelection.itemIds.includes(r.id) && d >= Math.min(dragSelection.startDate, dragSelection.endDate) && d <= Math.max(dragSelection.startDate, dragSelection.endDate);
+                          const isSelected = dragSelection?.type === 'Property' && dragSelection.itemIds.includes(c.id) && d >= Math.min(dragSelection.startDate, dragSelection.endDate) && d <= Math.max(dragSelection.startDate, dragSelection.endDate);
                           const isHighlighted = hoveredBooking?.id === bookingId && bookingId !== null;
                           const isSearchMatch = searchTerm && booking && (booking.guest_name.toLowerCase().includes(searchTerm.toLowerCase()) || (booking.reference_number || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
                           return (
                             <div key={i} 
-                                 onPointerDown={(e) => { if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId); handleMouseDown(d, 'Room', r.id, bookingId, r.cottage_id); }} 
+                                 onPointerDown={(e) => { if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId); handleMouseDown(d, 'Property', c.id, bookingId, c.id); }} 
                                  onClick={() => bookingId && setSelectedBooking(bookings.find(x => x.id === bookingId))}
-                                 onPointerEnter={(e) => handleMouseEnter(e, d, 'Room', r.id, bookingId, r.cottage_id)} 
-                                 onDoubleClick={() => { if (bookingId) { navigate(`/bookings/edit/${bookingId}`); } else { handleEmptyCellDoubleClick(d, 'Room', r.id, r.cottage_id); } }} 
-                                 style={{ width: isMobile ? '45px' : '54px', flexShrink: 0, borderRight: '1px solid var(--border)', padding: '6px', cursor: isPast && !bookingId ? 'not-allowed' : 'pointer', background: isToday(d) ? 'rgba(5, 150, 105, 0.03)' : 'transparent' }}>
+                                 onPointerEnter={(e) => handleMouseEnter(e, d, 'Property', c.id, bookingId, c.id)} 
+                                 onDoubleClick={() => { if (bookingId) { navigate(`/bookings/edit/${bookingId}`); } else { handleEmptyCellDoubleClick(d, 'Property', c.id, c.id); } }} 
+                                 style={{ width: isMobile ? '45px' : '54px', flexShrink: 0, borderRight: '1px solid var(--border)', padding: '5px', cursor: isPast && !bookingId ? 'not-allowed' : 'pointer', background: isToday(d) ? 'rgba(5, 150, 105, 0.03)' : 'transparent', transition: 'all 0.2s' }}>
                               <div style={{ 
-                                  width: '100%', height: '28px', borderRadius: '5px', 
+                                  width: '100%', height: '34px', borderRadius: '6px', 
                                   background: isSelected ? 'var(--primary)' : blockColor, 
                                   opacity: (isPast && !bookingId) ? 0.3 : 1,
                                   border: isHighlighted ? '2px solid white' : (isSearchMatch ? '3px solid var(--warning)' : 'none'),
@@ -779,101 +825,185 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                           );
                         })}
                       </div>
-                    ))}
-                  </React.Fragment>
-                ))}
+                      
+                      {/* Room Rows */}
+                      {cottageRooms.map((r, rIdx) => {
+                        const isLastRoom = rIdx === cottageRooms.length - 1;
+                        return (
+                          <div key={r.id} style={{ display: 'flex', borderBottom: isLastRoom ? '4px solid var(--border)' : '1px solid var(--border)', background: 'var(--bg-color)' }}>
+                            <div style={{ width: isMobile ? '100px' : '220px', flexShrink: 0, padding: isMobile ? '0.5rem 0.25rem 0.5rem 0.5rem' : '0.75rem 1rem 0.75rem 3rem', fontSize: isMobile ? '0.7rem' : '0.85rem', fontWeight: 600, borderRight: '1px solid var(--border)', position: 'sticky', left: 0, background: 'var(--bg-color)', zIndex: 10, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: isMobile ? 'normal' : 'nowrap', overflow: 'hidden' }}>
+                               <Navigation size={isMobile ? 10 : 12} style={{ transform: 'rotate(90deg)', flexShrink: 0 }} /> <span style={{ textOverflow: 'ellipsis', overflow: 'hidden' }}>{r.name}</span>
+                            </div>
+                            {dates.map((d, i) => {
+                              const { blockColor, label, bookingId, booking } = getCellStatus(d, 'Room', r.id);
+                              const isPast = startOfDay(d) < startOfDay(new Date());
+                              const isSelected = dragSelection?.type === 'Room' && dragSelection.itemIds.includes(r.id) && d >= Math.min(dragSelection.startDate, dragSelection.endDate) && d <= Math.max(dragSelection.startDate, dragSelection.endDate);
+                              const isHighlighted = hoveredBooking?.id === bookingId && bookingId !== null;
+                              const isSearchMatch = searchTerm && booking && (booking.guest_name.toLowerCase().includes(searchTerm.toLowerCase()) || (booking.reference_number || '').toLowerCase().includes(searchTerm.toLowerCase()));
+
+                              return (
+                                <div key={i} 
+                                     onPointerDown={(e) => { if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId); handleMouseDown(d, 'Room', r.id, bookingId, r.cottage_id); }} 
+                                     onClick={() => bookingId && setSelectedBooking(bookings.find(x => x.id === bookingId))}
+                                     onPointerEnter={(e) => handleMouseEnter(e, d, 'Room', r.id, bookingId, r.cottage_id)} 
+                                     onDoubleClick={() => { if (bookingId) { navigate(`/bookings/edit/${bookingId}`); } else { handleEmptyCellDoubleClick(d, 'Room', r.id, r.cottage_id); } }} 
+                                     style={{ width: isMobile ? '45px' : '54px', flexShrink: 0, borderRight: '1px solid var(--border)', padding: '6px', cursor: isPast && !bookingId ? 'not-allowed' : 'pointer', background: isToday(d) ? 'rgba(5, 150, 105, 0.03)' : 'transparent' }}>
+                                  <div style={{ 
+                                      width: '100%', height: '28px', borderRadius: '5px', 
+                                      background: isSelected ? 'var(--primary)' : blockColor, 
+                                      opacity: (isPast && !bookingId) ? 0.3 : 1,
+                                      border: isHighlighted ? '2px solid white' : (isSearchMatch ? '3px solid var(--warning)' : 'none'),
+                                      boxShadow: isHighlighted ? '0 0 10px rgba(0,0,0,0.2)' : 'none',
+                                      transform: isHighlighted ? 'scale(1.1)' : 'scale(1)',
+                                      zIndex: isHighlighted ? 15 : 1,
+                                      position: 'relative'
+                                  }}>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </div>
           )}
-
+          
           {viewType === 'monthly' && (
-            <div style={{ padding: isMobile ? '0.5rem' : '1.5rem', height: '100%' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} style={{ padding: isMobile ? '0.5rem 0.25rem' : '1rem', background: 'var(--bg-secondary)', fontWeight: '800', textAlign: 'center', color: 'var(--primary)', textTransform: 'uppercase', fontSize: isMobile ? '0.65rem' : '0.75rem', letterSpacing: isMobile ? 'normal' : '0.1em' }}>{isMobile ? day.substring(0, 3) : day}</div>
-                ))}
-                {(() => {
-                  const start = startOfWeek(startOfMonth(currentDate));
-                  const end = endOfWeek(endOfMonth(currentDate));
-                  const calendarDates = eachDayOfInterval({ start, end });
-                  return calendarDates.map(d => {
-                    const isCurrentMonth = d.getMonth() === currentDate.getMonth();
-                    const isTodayDate = isToday(d);
-                    const dayBookings = filteredBookings.filter(b => isWithinInterval(d, { start: startOfDay(new Date(b.check_in_date)), end: startOfDay(new Date(b.check_out_date)) }));
-                    
-                    return (
-                      <div key={d.toString()} style={{ minWidth: 0, overflow: 'hidden', minHeight: isMobile ? '70px' : '140px', padding: isMobile ? '0.25rem' : '0.75rem', background: isCurrentMonth ? 'white' : 'var(--bg-color)', opacity: isCurrentMonth ? 1 : 0.4, position: 'relative', transition: 'all 0.2s' }}>
-                        <div style={{ fontWeight: '900', marginBottom: isMobile ? '0.25rem' : '0.75rem', fontSize: isMobile ? '0.85rem' : '1.1rem', color: isTodayDate ? 'var(--primary)' : 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'space-between' }}>
-                            {format(d, 'd')}
-                            {isTodayDate && !isMobile && <span style={{ fontSize: '0.6rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '10px', textTransform: 'uppercase' }}>Today</span>}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                          {dayBookings.slice(0, isMobile ? 2 : 4).map(b => (
-                            <div key={b.id} 
-                                 onClick={() => setSelectedBooking(b)} 
-                                 onMouseEnter={(e) => { setHoveredBooking(b); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
-                                 onMouseLeave={() => setHoveredBooking(null)}
-                                 style={{ 
-                                    fontSize: isMobile ? '0.55rem' : '0.75rem', padding: isMobile ? '0.15rem' : '0.35rem 0.6rem', borderRadius: '4px', 
-                                    background: b.status === 'Checked-in' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                                    color: b.status === 'Checked-in' ? '#6366f1' : '#10b981', 
-                                    borderLeft: `2px solid ${b.status === 'Checked-in' ? '#6366f1' : '#10b981'}`, 
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
-                                    fontWeight: 700,
-                                    transform: hoveredBooking?.id === b.id ? 'translateX(4px)' : 'none',
-                                    transition: 'transform 0.2s',
-                                    textAlign: isMobile ? 'center' : 'left'
-                                 }}>
-                              {isMobile ? b.guest_name.split(' ')[0] : b.guest_name}
+            <div style={{ padding: isMobile ? '0.5rem' : '1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {cottages.map(c => {
+                return (
+                  <div key={c.id} className="card" style={{ padding: '1rem' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Home size={20} /> {c.name}
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} style={{ padding: isMobile ? '0.5rem 0.25rem' : '1rem', background: 'var(--bg-secondary)', fontWeight: '800', textAlign: 'center', color: 'var(--primary)', textTransform: 'uppercase', fontSize: isMobile ? '0.65rem' : '0.75rem', letterSpacing: isMobile ? 'normal' : '0.1em' }}>{isMobile ? day.substring(0, 3) : day}</div>
+                      ))}
+                      {(() => {
+                        const start = startOfWeek(startOfMonth(currentDate));
+                        const end = endOfWeek(endOfMonth(currentDate));
+                        const calendarDates = eachDayOfInterval({ start, end });
+                        return calendarDates.map(d => {
+                          const isCurrentMonth = d.getMonth() === currentDate.getMonth();
+                          const isTodayDate = isToday(d);
+                          // Filter bookings specifically for this property
+                          const dayBookings = filteredBookings.filter(b => b.cottage_id === c.id && isWithinInterval(d, { start: startOfDay(new Date(b.check_in_date)), end: startOfDay(new Date(b.check_out_date)) }));
+                          
+                          return (
+                            <div key={d.toString()} style={{ minWidth: 0, overflow: 'hidden', minHeight: isMobile ? '60px' : '120px', padding: isMobile ? '0.25rem' : '0.5rem', background: isCurrentMonth ? 'white' : 'var(--bg-color)', opacity: isCurrentMonth ? 1 : 0.4, position: 'relative', transition: 'all 0.2s' }}>
+                              <div style={{ fontWeight: '900', marginBottom: isMobile ? '0.25rem' : '0.5rem', fontSize: isMobile ? '0.85rem' : '1rem', color: isTodayDate ? 'var(--primary)' : 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'space-between' }}>
+                                  {format(d, 'd')}
+                                  {isTodayDate && !isMobile && <span style={{ fontSize: '0.5rem', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '10px', textTransform: 'uppercase' }}>Today</span>}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                {dayBookings.slice(0, isMobile ? 2 : 3).map(b => (
+                                  <div key={b.id} 
+                                       onClick={() => setSelectedBooking(b)} 
+                                       onMouseEnter={(e) => { setHoveredBooking(b); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+                                       onMouseLeave={() => setHoveredBooking(null)}
+                                       style={{ 
+                                          fontSize: isMobile ? '0.55rem' : '0.75rem', padding: isMobile ? '0.15rem' : '0.35rem 0.6rem', borderRadius: '4px', 
+                                          background: b.status === 'Checked-in' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                                          color: b.status === 'Checked-in' ? '#6366f1' : '#10b981', 
+                                          borderLeft: `2px solid ${b.status === 'Checked-in' ? '#6366f1' : '#10b981'}`, 
+                                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
+                                          fontWeight: 700,
+                                          transform: hoveredBooking?.id === b.id ? 'translateX(4px)' : 'none',
+                                          transition: 'transform 0.2s',
+                                          textAlign: isMobile ? 'center' : 'left'
+                                       }}>
+                                    {isMobile ? b.guest_name.split(' ')[0] : b.guest_name}
+                                  </div>
+                                ))}
+                                {dayBookings.length > (isMobile ? 2 : 3) && <small style={{ color: 'var(--text-muted)', fontWeight: 700, textAlign: 'center', display: 'block', marginTop: '0.25rem', fontSize: isMobile ? '0.55rem' : '0.7rem' }}>+ {dayBookings.length - (isMobile ? 2 : 3)}</small>}
+                              </div>
                             </div>
-                          ))}
-                          {dayBookings.length > (isMobile ? 2 : 4) && <small style={{ color: 'var(--text-muted)', fontWeight: 700, textAlign: 'center', display: 'block', marginTop: '0.25rem', fontSize: isMobile ? '0.55rem' : '0.7rem' }}>+ {dayBookings.length - (isMobile ? 2 : 4)}</small>}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {viewType === 'agenda' && (
-            <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                 {filteredBookings.filter(b => new Date(b.check_in_date) >= startOfMonth(currentDate) && new Date(b.check_in_date) <= endOfMonth(currentDate)).sort((a,b) => new Date(a.check_in_date) - new Date(b.check_in_date)).map(b => (
-                   <div key={b.id} className="card" onClick={() => setSelectedBooking(b)} style={{ padding: '1.25rem', cursor: 'pointer', borderLeft: `8px solid ${b.status === 'Checked-in' ? '#6366f1' : (b.status === 'Confirmed' ? 'var(--primary)' : 'var(--warning)')}`, transition: 'all 0.2s' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+              {cottages.map(c => {
+                const cottageBookings = filteredBookings.filter(b => {
+                  const belongsToCottage = b.cottage_id === c.id || 
+                    (b.room_ids && b.room_ids.some(rid => {
+                      const room = rooms.find(r => r.id === rid);
+                      return room && room.cottage_id === c.id;
+                    }));
+
+                  if (!belongsToCottage) return false;
+
+                  const checkIn = startOfDay(new Date(b.check_in_date.replace(/-/g, '/')));
+                  const checkOut = startOfDay(new Date(b.check_out_date.replace(/-/g, '/')));
+                  const monthStart = startOfMonth(currentDate);
+                  const monthEnd = endOfMonth(currentDate);
+                  return checkIn <= monthEnd && checkOut >= monthStart;
+                }).sort((a,b) => new Date(a.check_in_date.replace(/-/g, '/')) - new Date(b.check_in_date.replace(/-/g, '/')));
+                
+                return (
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid var(--border)', paddingBottom: '0.5rem', margin: 0 }}>
+                      <Home size={20} /> {c.name}
+                    </h3>
+                    
+                    {cottageBookings.length === 0 ? (
+                      <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', paddingLeft: '0.5rem' }}>No bookings for this property in this period.</p>
+                    ) : cottageBookings.map(b => (
+                      <div key={b.id} className="card" onClick={() => setSelectedBooking(b)} style={{ padding: '1.25rem', cursor: 'pointer', borderLeft: `8px solid ${b.status === 'Checked-in' ? '#6366f1' : (b.status === 'Confirmed' ? 'var(--primary)' : 'var(--warning)')}`, transition: 'all 0.2s', margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                             <div style={{ textAlign: 'center', minWidth: '60px', padding: '0.5rem', background: 'var(--bg-color)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{format(new Date(b.check_in_date), 'MMM')}</div>
-                                <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{format(new Date(b.check_in_date), 'dd')}</div>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{format(new Date(b.check_in_date), 'MMM')}</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{format(new Date(b.check_in_date), 'dd')}</div>
                             </div>
                             <div>
-                                <div style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '0.25rem' }}>{b.guest_name}</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Calendar size={14} /> {format(new Date(b.check_in_date), 'dd MMM')} - {format(new Date(b.check_out_date), 'dd MMM')}</span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Home size={14} /> {cottages.find(c => c.id === b.cottage_id)?.name}</span>
-                                </div>
+                              <div style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '0.25rem' }}>{b.guest_name}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Calendar size={14} /> {format(new Date(b.check_in_date), 'dd MMM')} - {format(new Date(b.check_out_date), 'dd MMM')}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Home size={14} /> {c.name}</span>
+                              </div>
                             </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
-                            <span style={{ padding: '0.2rem 0.75rem', borderRadius: '12px', fontSize: '0.65rem', fontWeight: 800, background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>{b.booking_source || 'Direct'}</span>
-                            <span className={`badge badge-${b.status === 'Cancelled' ? 'danger' : b.status === 'Completed' ? 'success' : 'info'}`} style={{ fontSize: '0.65rem' }}>{b.status}</span>
                           </div>
-                          <div style={{ marginTop: '0.75rem', fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{b.total_amount?.toLocaleString()}</div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                              <span style={{ padding: '0.2rem 0.75rem', borderRadius: '12px', fontSize: '0.65rem', fontWeight: 800, background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                                {(() => {
+                                  const { isAgent, name, phone } = parseAgentSource(b.booking_source);
+                                  if (isAgent) {
+                                    return `Agent: ${name}${phone ? `, Contact: ${phone}` : ''}`;
+                                  }
+                                  return b.booking_source || 'Direct';
+                                })()}
+                              </span>
+                              <span className={`badge badge-${b.status === 'Cancelled' ? 'danger' : b.status === 'Completed' ? 'success' : 'info'}`} style={{ fontSize: '0.65rem' }}>{b.status}</span>
+                            </div>
+                            <div style={{ marginTop: '0.75rem', fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{b.total_amount?.toLocaleString()}</div>
+                          </div>
                         </div>
-                     </div>
-                   </div>
-                 ))}
-                 {filteredBookings.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '5rem 2rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', borderRadius: '20px', border: '2px dashed var(--border)' }}>
-                        <Calendar size={48} style={{ marginBottom: '1rem', opacity: 0.3 }} />
-                        <h3 style={{ margin: 0 }}>No bookings found</h3>
-                        <p>Adjust your search or change the month to see results.</p>
-                    </div>
-                 )}
-               </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+              {filteredBookings.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '5rem 2rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', borderRadius: '20px', border: '2px dashed var(--border)' }}>
+                  <Calendar size={48} style={{ marginBottom: '1rem', opacity: 0.3 }} />
+                  <h3 style={{ margin: 0 }}>No bookings found</h3>
+                  <p>Adjust your search or change the month to see results.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -912,7 +1042,26 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                             <div style={{ background: 'var(--bg-color)', p: '0.5rem', borderRadius: '8px' }}><Globe size={20} color="var(--primary)" /></div>
                             <div>
                                 <small style={{ display: 'block', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', fontSize: '0.65rem' }}>Booking Source</small>
-                                <strong style={{ fontSize: '1rem' }}>{selectedBooking.booking_source || 'Direct'}</strong>
+                                 <strong style={{ fontSize: '1rem' }}>
+                                   {(() => {
+                                     const { isAgent, name, phone } = parseAgentSource(selectedBooking.booking_source);
+                                     if (isAgent) {
+                                       return (
+                                         <span>
+                                           Agent: {name} {phone && (
+                                             <>
+                                               {', Contact: '}
+                                               <a href={`tel:${phone}`} style={{ color: 'var(--primary)', textDecoration: 'underline' }} onClick={(e) => e.stopPropagation()}>
+                                                 {phone}
+                                               </a>
+                                             </>
+                                           )}
+                                         </span>
+                                       );
+                                     }
+                                     return selectedBooking.booking_source || 'Direct';
+                                   })()}
+                                 </strong>
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

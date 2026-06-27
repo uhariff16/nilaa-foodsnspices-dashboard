@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { useSettingsStore } from '../lib/store';
-import { Users, Hotel, TrendingUp, DollarSign, Search, ShieldAlert, CheckCircle, XCircle, UserPlus, Trash2, Mail, Lock, Shield } from 'lucide-react';
+import { Users, Hotel, TrendingUp, DollarSign, Search, ShieldAlert, CheckCircle, XCircle, UserPlus, Trash2, Mail, Lock, Shield, MessageCircle } from 'lucide-react';
 
 // Secondary client for creating users without affecting the admin session
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -62,7 +62,9 @@ export default function SuperAdmin() {
   };
 
   const [pricingConfig, setPricingConfig] = useState(DEFAULT_PLANS);
-  
+  const [globalCommEnabled, setGlobalCommEnabled] = useState(true);
+  const [globalTemplatesEnabled, setGlobalTemplatesEnabled] = useState(true);
+
   // Modal states
   const [showUserForm, setShowUserForm] = useState(false);
   const [userFormData, setUserFormData] = useState({ 
@@ -116,6 +118,11 @@ export default function SuperAdmin() {
         });
       }
 
+      if (superAdminProfile?.global_settings) {
+        setGlobalCommEnabled(superAdminProfile.global_settings.comm_features_enabled !== false);
+        setGlobalTemplatesEnabled(superAdminProfile.global_settings.templates_enabled !== false);
+      }
+
       setTenants(tenantsWithData.filter(t => t.id !== profile.id));
       
       setStats({
@@ -138,20 +145,35 @@ export default function SuperAdmin() {
     setIsUpdating(true);
     
     try {
-      const { error } = await supabase
+      let payload = { 
+        plan_type: editingUser.plan_type,
+        subscription_status: editingUser.subscription_status,
+        feature_investment_enabled: editingUser.feature_investment_enabled,
+        feature_comm_enabled: editingUser.feature_comm_enabled !== false
+      };
+      
+      let { error } = await supabase
         .from('profiles')
-        .update({ 
-          plan_type: editingUser.plan_type,
-          subscription_status: editingUser.subscription_status,
-          feature_investment_enabled: editingUser.feature_investment_enabled
-        })
+        .update(payload)
         .eq('id', editingUser.id);
         
-      if (error) throw error;
+      if (error && (error.message?.includes('column') || error.code === '42703')) {
+        console.warn("feature_comm_enabled column missing. Saving other columns.");
+        delete payload.feature_comm_enabled;
+        const retry = await supabase
+          .from('profiles')
+          .update(payload)
+          .eq('id', editingUser.id);
+        if (retry.error) throw retry.error;
+        alert("Account updated successfully! (Note: feature_comm_enabled column is missing in DB. Please run the add_comm_feature.sql script in Supabase SQL editor.)");
+      } else if (error) {
+        throw error;
+      } else {
+        alert("Account updated successfully!");
+      }
       
       setTenants(prev => prev.map(t => t.id === editingUser.id ? editingUser : t));
       setEditingUser(null);
-      alert("Account updated successfully!");
     } catch (err) {
       alert("Update failed: " + err.message);
     } finally {
@@ -229,6 +251,23 @@ export default function SuperAdmin() {
       alert("Global pricing configuration updated successfully!");
     } catch (err) {
       alert("Failed to save pricing: " + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSaveGlobalFeatures = async () => {
+    try {
+      setIsUpdating(true);
+      const settings = profile.global_settings || {};
+      settings.comm_features_enabled = globalCommEnabled;
+      settings.templates_enabled = globalTemplatesEnabled;
+      
+      const { error } = await supabase.from('profiles').update({ global_settings: settings }).eq('id', profile.id);
+      if (error) throw error;
+      alert("Global feature settings updated successfully!");
+    } catch (err) {
+      alert("Failed to save global features: " + err.message);
     } finally {
       setIsUpdating(false);
     }
@@ -420,6 +459,48 @@ export default function SuperAdmin() {
         </div>
       </div>
 
+      {/* Global Feature Controls */}
+      <div className="card" style={{ marginBottom: '2.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+        <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b' }}>
+          <Shield /> Global Feature Toggles
+        </h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Enable or disable system features platform-wide.</p>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: 'white', padding: '1rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            <input 
+              type="checkbox" 
+              id="global_comm" 
+              checked={globalCommEnabled} 
+              onChange={e => setGlobalCommEnabled(e.target.checked)} 
+              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+            />
+            <label htmlFor="global_comm" style={{ fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+              {"Enable General Setting -> Communications & Automations Globally"}
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: 'white', padding: '1rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            <input 
+              type="checkbox" 
+              id="global_templates" 
+              checked={globalTemplatesEnabled} 
+              onChange={e => setGlobalTemplatesEnabled(e.target.checked)} 
+              style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+            />
+            <label htmlFor="global_templates" style={{ fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+              {"Enable Settings -> Template Management Globally"}
+            </label>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+          <button className="btn btn-primary" onClick={handleSaveGlobalFeatures} disabled={isUpdating} style={{ padding: '0.75rem 2rem' }}>
+            {isUpdating ? 'Saving...' : 'Broadcast Feature Controls'}
+          </button>
+        </div>
+      </div>
+
       {/* Account Management Modal */}
       {editingUser && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -463,11 +544,22 @@ export default function SuperAdmin() {
                 <input 
                   type="checkbox" 
                   id="feat_inv" 
-                  checked={editingUser.feature_investment_enabled} 
+                  checked={!!editingUser.feature_investment_enabled} 
                   onChange={e => setEditingUser({...editingUser, feature_investment_enabled: e.target.checked})} 
                   style={{ width: '20px', height: '20px' }}
                 />
                 <label htmlFor="feat_inv" style={{ fontWeight: 600, cursor: 'pointer' }}>Enable Investment Analysis</label>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.8rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="feat_comm" 
+                  checked={editingUser.feature_comm_enabled !== false} 
+                  onChange={e => setEditingUser({...editingUser, feature_comm_enabled: e.target.checked})} 
+                  style={{ width: '20px', height: '20px' }}
+                />
+                <label htmlFor="feat_comm" style={{ fontWeight: 600, cursor: 'pointer' }}>Enable Communications & Automations</label>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -634,7 +726,10 @@ export default function SuperAdmin() {
                     <button 
                       className="btn btn-outline" 
                       style={{ padding: '0.25rem 0.8rem', fontSize: '0.75rem' }} 
-                      onClick={() => setEditingUser(tenant)}
+                      onClick={() => {
+                        console.log("Manage button clicked. Setting editingUser to:", tenant);
+                        setEditingUser(tenant);
+                      }}
                     >
                       Manage
                     </button>

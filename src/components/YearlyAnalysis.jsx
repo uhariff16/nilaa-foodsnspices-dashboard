@@ -90,6 +90,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     const [profitPayouts, setProfitPayouts] = React.useState([]);
     const [profitReservePct, setProfitReservePct] = React.useState(0);
     const [profitMonthlySettings, setProfitMonthlySettings] = React.useState([]);
+    const [totalInvestedCapital, setTotalInvestedCapital] = React.useState(0);
+    const [partnerInvestmentsMap, setPartnerInvestmentsMap] = React.useState({});
     const [isProfitLoading, setIsProfitLoading] = React.useState(false);
     const [activeAnalysisSubTab, setActiveAnalysisSubTab] = React.useState(forceTab || 'performance'); // 'performance' | 'profitHub'
     const [isTableMissing, setIsTableMissing] = React.useState(false);
@@ -109,11 +111,12 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         setIsProfitLoading(true);
         setIsTableMissing(false);
         try {
-            const [stkRes, payRes, setRes, monthlyRes] = await Promise.all([
+            const [stkRes, payRes, setRes, monthlyRes, invsRes] = await Promise.all([
                 supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
                 supabase.from('profit_payouts').select('*').like('month_year', `%${selectedYear}%`),
                 supabase.from('system_settings').select('value').eq('key', 'profit_reserve_percentage').maybeSingle(),
-                supabase.from('profit_monthly_settings').select('*').like('month_year', `%${selectedYear}%`)
+                supabase.from('profit_monthly_settings').select('*').like('month_year', `%${selectedYear}%`),
+                supabase.from('partner_investments').select('amount, investment_date, stakeholder_id')
             ]);
 
             if (stkRes.error || payRes.error) {
@@ -127,6 +130,21 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             if (!payRes.error) setProfitPayouts(payRes.data || []);
             if (!setRes.error && setRes.data) setProfitReservePct(parseFloat(setRes.data.value) || 0);
             if (!monthlyRes?.error) setProfitMonthlySettings(monthlyRes?.data || []);
+            
+            if (!invsRes.error && invsRes.data) {
+                const yearEnd = `${selectedYear}-12-31`;
+                const filtered = invsRes.data.filter(i => i.investment_date <= yearEnd);
+                const total = filtered.reduce((sum, i) => sum + Number(i.amount), 0);
+                setTotalInvestedCapital(total);
+
+                const map = {};
+                filtered.forEach(i => {
+                    if (i.stakeholder_id) {
+                        map[i.stakeholder_id] = (map[i.stakeholder_id] || 0) + Number(i.amount);
+                    }
+                });
+                setPartnerInvestmentsMap(map);
+            }
         } catch (e) {
             console.error("Error fetching profit hub data:", e);
         } finally {
@@ -573,6 +591,98 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         });
     }, [selectedYear, transactions, productionData, invoiceDiscounts, simHistory]);
 
+    const cumulativeAnalysis = useMemo(() => {
+        if (!selectedYear) return { revenue: 0, expenses: 0, profit: 0, actualROI: 0, targetROI: 0, diffYears: 0, isOnTrack: false };
+
+        const yearsToInclude = [];
+        for (let y = 2025; y <= Number(selectedYear); y++) {
+            yearsToInclude.push(String(y));
+        }
+
+        let totalRev = 0;
+        let totalExp = 0;
+
+        yearsToInclude.forEach(yr => {
+            monthNames.forEach((month, index) => {
+                const numMonth = String(index + 1).padStart(2, '0');
+                const targetPrefix = `${yr}-${numMonth}`;
+
+                // Skip Jan 2025 (inception is Feb 2025)
+                if (yr === '2025' && numMonth === '01') return;
+
+                const monthTxns = transactions ? transactions.filter(t => t.parsedDate && t.parsedDate.startsWith(targetPrefix)) : [];
+                if (monthTxns.length === 0) return;
+
+                // Gross Sales
+                const allSales = monthTxns.filter(t =>
+                    String(t.parsedType).toLowerCase().includes('sale') &&
+                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                );
+                const salesReturns = monthTxns.filter(t =>
+                    t.parsedType === 'Sales Return' &&
+                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                );
+                const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary' && t.parsedType !== 'Sales Return');
+                const salesAppearsGranular = allSales.filter(t => {
+                    const type = String(t.parsedType || '').toLowerCase();
+                    const desc = String(t.originalDesc || '').toLowerCase();
+                    if (type === 'sales summary' || type === 'profitsummary' || type === 'invoice total' || type === 'sales return') return false;
+                    const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
+                    const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
+                    if (isCreditNote) return true;
+                    if (keywordsToExclude.some(k => desc.includes(k))) return false;
+                    return true;
+                });
+
+                let selectedSalesRows = [];
+                if (monthTxns.filter(t => t.parsedType === 'Invoice Total').length === 0 && salesAppearsGranular.length === 0) {
+                    selectedSalesRows = salesSummaryRows;
+                } else {
+                    selectedSalesRows = salesAppearsGranular;
+                }
+
+                const uniqueSalesMap = new Map();
+                selectedSalesRows.forEach(t => {
+                    const key = t.id || `${t.invoiceNo}-${t.parsedDate}-${t.parsedAmount}-${t.originalDesc}`;
+                    if (!uniqueSalesMap.has(key)) uniqueSalesMap.set(key, t);
+                });
+                const finalSales = Array.from(uniqueSalesMap.values());
+                const grossRevenue = finalSales.reduce((acc, t) => acc + Math.abs(parseFloat(t.parsedAmount || 0)), 0);
+                const returnRevenue = salesReturns.reduce((acc, t) => acc + Math.abs(parseFloat(t.parsedAmount || 0)), 0);
+
+                const monthDiscounts = invoiceDiscounts.filter(d => d.discount_date && d.discount_date.startsWith(targetPrefix));
+                const discountRevenue = monthDiscounts.reduce((acc, d) => acc + (parseFloat(d.discount_amount) || 0), 0);
+
+                totalRev += (grossRevenue - returnRevenue - discountRevenue);
+
+                // Expenses
+                const expenses = monthTxns.filter(t => String(t.parsedType).toLowerCase().includes('expense') || t.parsedType === 'Purchase');
+                totalExp += expenses.reduce((acc, t) => acc + parseFloat(t.parsedAmount || 0), 0);
+            });
+        });
+
+        const profit = totalRev - totalExp;
+        const actualROI = totalInvestedCapital > 0 ? (profit / totalInvestedCapital * 100) : 0;
+        
+        // Target ROI based on diff years since Feb 2025
+        const startMonth = new Date('2025-02-01');
+        const endMonth = new Date(`${selectedYear}-12-31`);
+        const diffTime = Math.abs(endMonth - startMonth);
+        const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+        const targetROI = diffYears * 15; // 15% annual target
+        const isOnTrack = actualROI >= targetROI;
+
+        return {
+            revenue: totalRev,
+            expenses: totalExp,
+            profit,
+            actualROI,
+            targetROI,
+            diffYears,
+            isOnTrack
+        };
+    }, [selectedYear, transactions, invoiceDiscounts, totalInvestedCapital]);
+
     // Set default analysis month to the latest active month
     React.useEffect(() => {
         if (!selectedAnalysisMonth && yearlyData.length > 0) {
@@ -776,6 +886,12 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Avg Margin</span>
                                     <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>
                                         {totalStats.revenue > 0 ? (totalStats.profit / totalStats.revenue * 100).toFixed(1) + '%' : '0%'}
+                                    </span>
+                                </div>
+                                <div className="glass-panel" style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>ROI (Cumulative)</span>
+                                    <span style={{ fontSize: '1rem', fontWeight: 700, color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444' }}>
+                                        {cumulativeAnalysis.actualROI.toFixed(1)}%
                                     </span>
                                 </div>
                             </div>
@@ -1105,6 +1221,114 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         </div>
                                     </div>
                                 )}
+
+                                <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 100%)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                                                <TrendingUp size={22} color="#10b981" />
+                                                Executive ROI & Investment Analytics (Since Inception)
+                                            </h3>
+                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                Inception: Feb 2025 • Target: 15% Annualized ROI
+                                            </p>
+                                        </div>
+                                        <div style={{
+                                            padding: '0.35rem 0.85rem',
+                                            borderRadius: '2rem',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 'bold',
+                                            background: cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                            color: cumulativeAnalysis.isOnTrack ? '#10b981' : '#f59e0b',
+                                            border: `1px solid ${cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                                        }}>
+                                            {cumulativeAnalysis.isOnTrack ? '✓ ON TRACK' : '⚠ BEHIND TARGET'}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: '2rem' }}>
+                                        {/* Cumulative KPI Area */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.25rem' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Invested Capital</span>
+                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>{formatCurrency(totalInvestedCapital)}</h3>
+                                                </div>
+                                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Cumulative Net Profit</span>
+                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(cumulativeAnalysis.profit)}</h3>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'rgba(16, 185, 129, 0.03)', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Cumulative ROI Percentage</span>
+                                                <h1 style={{ fontSize: '3rem', fontWeight: '800', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444', margin: '0.25rem 0' }}>
+                                                    {cumulativeAnalysis.actualROI.toFixed(1)}%
+                                                </h1>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                    Annualized Target: {cumulativeAnalysis.targetROI.toFixed(1)}% ({cumulativeAnalysis.diffYears.toFixed(1)} Years)
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.35rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                    <span>Inception ROI Progress</span>
+                                                    <span>Target: {cumulativeAnalysis.targetROI.toFixed(1)}%</span>
+                                                </div>
+                                                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                                                    <div style={{ 
+                                                        width: `${Math.min(100, Math.max(0, cumulativeAnalysis.targetROI > 0 ? (cumulativeAnalysis.actualROI / cumulativeAnalysis.targetROI) * 100 : 0))}%`, 
+                                                        height: '100%', 
+                                                        background: cumulativeAnalysis.profit >= 0 ? 'linear-gradient(90deg, #10b981, #3b82f6)' : '#ef4444',
+                                                        borderRadius: '4px',
+                                                        transition: 'width 0.5s ease-out'
+                                                    }} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Partner-wise Breakdown Table */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Partner-wise Investment & Return Breakdown</h4>
+                                            <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', textAlign: 'left', background: 'rgba(255,255,255,0.02)' }}>
+                                                            <th style={{ padding: '0.75rem' }}>Partner</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Invested Capital</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit Share</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Cumulative Return</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Partner ROI</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {profitStakeholders.map((s, idx) => {
+                                                            const cap = partnerInvestmentsMap[s.id] || 0;
+                                                            const profitSharePct = Number(s.default_percent) || 0;
+                                                            const partnerProfit = (profitSharePct / 100) * cumulativeAnalysis.profit;
+                                                            const partnerROI = cap > 0 ? (partnerProfit / cap * 100) : 0;
+
+                                                            return (
+                                                                <tr key={idx} style={{ borderBottom: idx < profitStakeholders.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
+                                                                    <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</td>
+                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(cap)}</td>
+                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6', fontWeight: 500 }}>{profitSharePct.toFixed(1)}%</td>
+                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerProfit >= 0 ? '#10b981' : '#ef4444', fontWeight: 500 }}>{formatCurrency(partnerProfit)}</td>
+                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerROI >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>{partnerROI.toFixed(1)}%</td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                        {profitStakeholders.length === 0 && (
+                                                            <tr>
+                                                                <td colSpan="5" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No stakeholder data available.</td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 {/* Expense Composition Chart */}
                                 {viewSettings.showExpenseComp && (

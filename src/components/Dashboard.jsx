@@ -64,13 +64,18 @@ const Dashboard = (props) => {
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
     const [showExecutiveMenu, setShowExecutiveMenu] = useState(false);
+    const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
 
     useEffect(() => {
         const closeMenu = () => setShowExecutiveMenu(false);
         if (showExecutiveMenu) {
             window.addEventListener('click', closeMenu);
+            window.addEventListener('scroll', closeMenu, { passive: true });
         }
-        return () => window.removeEventListener('click', closeMenu);
+        return () => {
+            window.removeEventListener('click', closeMenu);
+            window.removeEventListener('scroll', closeMenu);
+        };
     }, [showExecutiveMenu]);
 
     // Theme Context
@@ -1627,7 +1632,12 @@ const Dashboard = (props) => {
                 {(hasPermission('dashboard.ytd') || hasPermission('dashboard.profitHub') || isAdmin || hasPermission('dashboard.investments')) && (
                     <div style={{ position: 'relative' }}>
                         <button
-                            onClick={(e) => { e.stopPropagation(); setShowExecutiveMenu(!showExecutiveMenu); }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setMenuCoords({ top: rect.bottom + 8, left: rect.left });
+                                setShowExecutiveMenu(!showExecutiveMenu);
+                            }}
                             style={{
                                 background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
                                 color: ['ytd', 'profitHub', 'investments'].includes(activeTab) ? 'var(--accent-primary)' : 'var(--text-secondary)',
@@ -1643,15 +1653,14 @@ const Dashboard = (props) => {
                         
                         {showExecutiveMenu && (
                             <div style={{
-                                position: 'absolute',
-                                top: '100%',
-                                left: 0,
-                                marginTop: '0.5rem',
+                                position: 'fixed',
+                                top: `${menuCoords.top}px`,
+                                left: `${menuCoords.left}px`,
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--glass-border)',
                                 borderRadius: '0.75rem',
                                 padding: '0.5rem',
-                                zIndex: 1000,
+                                zIndex: 9999,
                                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
                                 minWidth: '180px',
                                 display: 'flex',

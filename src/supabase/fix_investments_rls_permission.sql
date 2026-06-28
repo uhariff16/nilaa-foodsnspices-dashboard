@@ -16,6 +16,7 @@ AS $$
         role = 'admin' 
         OR email = 'uhariff@gmail.com'
         OR (permissions->'dashboard'->>'investments')::boolean = true
+        OR (permissions->'dashboard'->>'ytd')::boolean = true
       )
   );
 $$;

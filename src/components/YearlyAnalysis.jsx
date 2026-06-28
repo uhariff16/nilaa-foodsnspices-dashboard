@@ -339,7 +339,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                     const qty = parseFloat(t.parsedQty || 0);
                     const rawName = (t.originalDesc || 'Generic Item').trim().toUpperCase();
 
-                    const isFinishedPaste = rawName.includes('PASTE') || rawName.includes('G & G') || rawName.includes('G&G');
+                    const isFinishedPaste = rawName.includes('PASTE') || rawName.includes('G & G') || rawName.includes('G&G') || rawName.includes('PEELED');
                     const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) ||
                         rawName === 'ITEM' || rawName === 'PRODUCT' ||
                         rawName === 'AMOUNT' || rawName === 'SUBTOTAL' || rawName === 'INVOICE TOTAL' || rawName === 'TOTAL' ||

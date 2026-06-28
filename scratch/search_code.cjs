@@ -18,4 +18,4 @@ function searchDir(dir, query) {
   }
 }
 
-searchDir('C:/AntiGravity/src', 'partner_investments');
+searchDir('C:/AntiGravity/src', "transactions");

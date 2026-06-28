@@ -1017,6 +1017,115 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
                     {activeAnalysisSubTab === 'performance' ? (
                         <>
+                            {/* Executive ROI & Investment Analytics (Since Inception) */}
+                            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
+                                    <div>
+                                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                                            <TrendingUp size={22} color="#10b981" />
+                                            Executive ROI & Investment Analytics (Since Inception)
+                                        </h3>
+                                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                            Inception: Feb 2025 • Target: 15% Annualized ROI
+                                        </p>
+                                    </div>
+                                    <div style={{
+                                        padding: '0.35rem 0.85rem',
+                                        borderRadius: '2rem',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 'bold',
+                                        background: cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                        color: cumulativeAnalysis.isOnTrack ? '#10b981' : '#f59e0b',
+                                        border: `1px solid ${cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                                    }}>
+                                        {cumulativeAnalysis.isOnTrack ? '✓ ON TRACK' : '⚠ BEHIND TARGET'}
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: '2rem' }}>
+                                    {/* Cumulative KPI Area */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.25rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Invested Capital</span>
+                                                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>{formatCurrency(totalInvestedCapital)}</h3>
+                                            </div>
+                                            <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Cumulative Net Profit</span>
+                                                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(cumulativeAnalysis.profit)}</h3>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'rgba(16, 185, 129, 0.03)', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Cumulative ROI Percentage</span>
+                                            <h1 style={{ fontSize: '3rem', fontWeight: '800', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444', margin: '0.25rem 0' }}>
+                                                {cumulativeAnalysis.actualROI.toFixed(1)}%
+                                            </h1>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                Annualized Target: {cumulativeAnalysis.targetROI.toFixed(1)}% ({cumulativeAnalysis.diffYears.toFixed(1)} Years)
+                                            </span>
+                                        </div>
+
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.35rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                <span>Inception ROI Progress</span>
+                                                <span>Target: {cumulativeAnalysis.targetROI.toFixed(1)}%</span>
+                                            </div>
+                                            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                                                <div style={{ 
+                                                    width: `${Math.min(100, Math.max(0, cumulativeAnalysis.targetROI > 0 ? (cumulativeAnalysis.actualROI / cumulativeAnalysis.targetROI) * 100 : 0))}%`, 
+                                                    height: '100%', 
+                                                    background: cumulativeAnalysis.profit >= 0 ? 'linear-gradient(90deg, #10b981, #3b82f6)' : '#ef4444',
+                                                    borderRadius: '4px',
+                                                    transition: 'width 0.5s ease-out'
+                                                }} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Partner-wise Breakdown Table */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Partner-wise Investment & Return Breakdown</h4>
+                                        <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', textAlign: 'left', background: 'rgba(255,255,255,0.02)' }}>
+                                                        <th style={{ padding: '0.75rem' }}>Partner</th>
+                                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Invested Capital</th>
+                                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit Share</th>
+                                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Cumulative Return</th>
+                                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Partner ROI</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {profitStakeholders.map((s, idx) => {
+                                                        const cap = partnerInvestmentsMap[s.id] || 0;
+                                                        const profitSharePct = Number(s.default_percent) || 0;
+                                                        const partnerProfit = (profitSharePct / 100) * cumulativeAnalysis.profit;
+                                                        const partnerROI = cap > 0 ? (partnerProfit / cap * 100) : 0;
+
+                                                        return (
+                                                            <tr key={idx} style={{ borderBottom: idx < profitStakeholders.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
+                                                                <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(cap)}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6', fontWeight: 500 }}>{profitSharePct.toFixed(1)}%</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerProfit >= 0 ? '#10b981' : '#ef4444', fontWeight: 500 }}>{formatCurrency(partnerProfit)}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerROI >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>{partnerROI.toFixed(1)}%</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {profitStakeholders.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan="5" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No stakeholder data available.</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Quarterly Summary Section */}
                             {viewSettings.showQuarterly && (
                                 <div style={{ marginBottom: '2rem' }}>
@@ -1221,114 +1330,6 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         </div>
                                     </div>
                                 )}
-
-                                <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 100%)', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
-                                        <div>
-                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.25rem', fontWeight: 'bold' }}>
-                                                <TrendingUp size={22} color="#10b981" />
-                                                Executive ROI & Investment Analytics (Since Inception)
-                                            </h3>
-                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                Inception: Feb 2025 • Target: 15% Annualized ROI
-                                            </p>
-                                        </div>
-                                        <div style={{
-                                            padding: '0.35rem 0.85rem',
-                                            borderRadius: '2rem',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 'bold',
-                                            background: cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                            color: cumulativeAnalysis.isOnTrack ? '#10b981' : '#f59e0b',
-                                            border: `1px solid ${cumulativeAnalysis.isOnTrack ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
-                                        }}>
-                                            {cumulativeAnalysis.isOnTrack ? '✓ ON TRACK' : '⚠ BEHIND TARGET'}
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.2fr', gap: '2rem' }}>
-                                        {/* Cumulative KPI Area */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.25rem' }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Invested Capital</span>
-                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>{formatCurrency(totalInvestedCapital)}</h3>
-                                                </div>
-                                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Cumulative Net Profit</span>
-                                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(cumulativeAnalysis.profit)}</h3>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'rgba(16, 185, 129, 0.03)', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', padding: '1.25rem', textAlign: 'center' }}>
-                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Cumulative ROI Percentage</span>
-                                                <h1 style={{ fontSize: '3rem', fontWeight: '800', color: cumulativeAnalysis.profit >= 0 ? '#10b981' : '#ef4444', margin: '0.25rem 0' }}>
-                                                    {cumulativeAnalysis.actualROI.toFixed(1)}%
-                                                </h1>
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                    Annualized Target: {cumulativeAnalysis.targetROI.toFixed(1)}% ({cumulativeAnalysis.diffYears.toFixed(1)} Years)
-                                                </span>
-                                            </div>
-
-                                            <div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '0.35rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                                    <span>Inception ROI Progress</span>
-                                                    <span>Target: {cumulativeAnalysis.targetROI.toFixed(1)}%</span>
-                                                </div>
-                                                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                                                    <div style={{ 
-                                                        width: `${Math.min(100, Math.max(0, cumulativeAnalysis.targetROI > 0 ? (cumulativeAnalysis.actualROI / cumulativeAnalysis.targetROI) * 100 : 0))}%`, 
-                                                        height: '100%', 
-                                                        background: cumulativeAnalysis.profit >= 0 ? 'linear-gradient(90deg, #10b981, #3b82f6)' : '#ef4444',
-                                                        borderRadius: '4px',
-                                                        transition: 'width 0.5s ease-out'
-                                                    }} />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Partner-wise Breakdown Table */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Partner-wise Investment & Return Breakdown</h4>
-                                            <div style={{ overflowX: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.75rem', background: 'rgba(0,0,0,0.1)' }}>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                    <thead>
-                                                        <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)', textAlign: 'left', background: 'rgba(255,255,255,0.02)' }}>
-                                                            <th style={{ padding: '0.75rem' }}>Partner</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Invested Capital</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Profit Share</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Cumulative Return</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Partner ROI</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {profitStakeholders.map((s, idx) => {
-                                                            const cap = partnerInvestmentsMap[s.id] || 0;
-                                                            const profitSharePct = Number(s.default_percent) || 0;
-                                                            const partnerProfit = (profitSharePct / 100) * cumulativeAnalysis.profit;
-                                                            const partnerROI = cap > 0 ? (partnerProfit / cap * 100) : 0;
-
-                                                            return (
-                                                                <tr key={idx} style={{ borderBottom: idx < profitStakeholders.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                                                                    <td style={{ padding: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</td>
-                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-primary)' }}>{formatCurrency(cap)}</td>
-                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6', fontWeight: 500 }}>{profitSharePct.toFixed(1)}%</td>
-                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerProfit >= 0 ? '#10b981' : '#ef4444', fontWeight: 500 }}>{formatCurrency(partnerProfit)}</td>
-                                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: partnerROI >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>{partnerROI.toFixed(1)}%</td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                        {profitStakeholders.length === 0 && (
-                                                            <tr>
-                                                                <td colSpan="5" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No stakeholder data available.</td>
-                                                            </tr>
-                                                        )}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
 
                                 {/* Expense Composition Chart */}
                                 {viewSettings.showExpenseComp && (

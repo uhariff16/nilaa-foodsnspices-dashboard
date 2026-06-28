@@ -20,17 +20,21 @@ AS $$
   );
 $$;
 
--- 2. Drop the original rigid admin-only policies
+-- 2. Drop any previous policies
 DROP POLICY IF EXISTS "Admins manage assets" ON public.business_assets;
 DROP POLICY IF EXISTS "Admins manage investments" ON public.partner_investments;
+DROP POLICY IF EXISTS "View assets if permitted" ON public.business_assets;
+DROP POLICY IF EXISTS "View investments if permitted" ON public.partner_investments;
+DROP POLICY IF EXISTS "Admins manage assets write" ON public.business_assets;
+DROP POLICY IF EXISTS "Admins manage investments write" ON public.partner_investments;
 
 -- 3. Create updated policies for public.business_assets
 CREATE POLICY "View assets if permitted" 
 ON public.business_assets FOR SELECT TO authenticated
 USING (public.has_investment_access());
 
-CREATE POLICY "Admins manage assets write" 
-ON public.business_assets FOR INSERT, UPDATE, DELETE TO authenticated
+CREATE POLICY "Admins manage assets" 
+ON public.business_assets FOR ALL TO authenticated
 USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
@@ -39,7 +43,7 @@ CREATE POLICY "View investments if permitted"
 ON public.partner_investments FOR SELECT TO authenticated
 USING (public.has_investment_access());
 
-CREATE POLICY "Admins manage investments write" 
-ON public.partner_investments FOR INSERT, UPDATE, DELETE TO authenticated
+CREATE POLICY "Admins manage investments" 
+ON public.partner_investments FOR ALL TO authenticated
 USING (public.is_admin())
 WITH CHECK (public.is_admin());

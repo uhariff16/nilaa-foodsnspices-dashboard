@@ -14,7 +14,8 @@ const defaultPermissions = {
         insights: false,
         simulator: false,
         ytd: false,
-        profitHub: false
+        profitHub: false,
+        investments: false
     },
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },

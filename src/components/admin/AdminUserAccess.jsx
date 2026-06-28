@@ -13,7 +13,8 @@ const initialPermissions = {
         insights: false,
         simulator: false,
         ytd: false,
-        profitHub: false
+        profitHub: false,
+        investments: false
     },
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },
@@ -155,7 +156,8 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                         { id: 'insights', label: 'Customer', icon: <UsersIcon size={14} /> },
                         { id: 'simulator', label: 'Simulator', icon: <Calculator size={14} /> },
                         { id: 'ytd', label: 'YTD Analysis', icon: <TrendingUp size={14} /> },
-                        { id: 'profitHub', label: 'Profit Hub', icon: <Target size={14} /> }
+                        { id: 'profitHub', label: 'Profit Hub', icon: <Target size={14} /> },
+                        { id: 'investments', label: 'Investments', icon: <Briefcase size={14} /> }
                     ].map(tab => (
                         <button
                             key={tab.id}

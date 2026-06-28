@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -63,6 +63,15 @@ const Dashboard = (props) => {
     const navigate = useNavigate();
     // Default to Overview tab (per user request)
     const [activeTab, setActiveTab] = useState('overview');
+    const [showExecutiveMenu, setShowExecutiveMenu] = useState(false);
+
+    useEffect(() => {
+        const closeMenu = () => setShowExecutiveMenu(false);
+        if (showExecutiveMenu) {
+            window.addEventListener('click', closeMenu);
+        }
+        return () => window.removeEventListener('click', closeMenu);
+    }, [showExecutiveMenu]);
 
     // Theme Context
     const { theme, toggleTheme } = useTheme();
@@ -1613,47 +1622,114 @@ const Dashboard = (props) => {
                         Simulator
                     </button>
                 )}
-                {hasPermission('dashboard.ytd') && (
-                    <button
-                        onClick={() => setActiveTab('ytd')}
-                        style={{
-                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
-                            color: activeTab === 'ytd' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                            borderBottom: activeTab === 'ytd' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'ytd' ? 600 : 400
-                        }}
-                    >
-                        <TrendingUp size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        YTD Analysis
-                    </button>
-                )}
-                {hasPermission('dashboard.profitHub') && (
-                    <button
-                        onClick={() => setActiveTab('profitHub')}
-                        style={{
-                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
-                            color: activeTab === 'profitHub' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                            borderBottom: activeTab === 'profitHub' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'profitHub' ? 600 : 400
-                        }}
-                    >
-                        <Target size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        Profit Hub
-                    </button>
-                )}
-                {isAdmin && (
-                    <button
-                        onClick={() => setActiveTab('investments')}
-                        style={{
-                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
-                            color: activeTab === 'investments' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                            borderBottom: activeTab === 'investments' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'investments' ? 600 : 400
-                        }}
-                    >
-                        <Briefcase size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                        Investments
-                    </button>
+
+                {/* Executive Submenu Dropdown */}
+                {(hasPermission('dashboard.ytd') || hasPermission('dashboard.profitHub') || isAdmin || hasPermission('dashboard.investments')) && (
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setShowExecutiveMenu(!showExecutiveMenu); }}
+                            style={{
+                                background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
+                                color: ['ytd', 'profitHub', 'investments'].includes(activeTab) ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                borderBottom: ['ytd', 'profitHub', 'investments'].includes(activeTab) ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                                cursor: 'pointer', fontSize: '1rem', fontWeight: ['ytd', 'profitHub', 'investments'].includes(activeTab) ? 600 : 400,
+                                display: 'flex', alignItems: 'center', gap: '0.25rem'
+                            }}
+                        >
+                            <Briefcase size={18} style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+                            Executive
+                            <ChevronDown size={14} style={{ transform: showExecutiveMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        </button>
+                        
+                        {showExecutiveMenu && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                marginTop: '0.5rem',
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: '0.75rem',
+                                padding: '0.5rem',
+                                zIndex: 1000,
+                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+                                minWidth: '180px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.25rem'
+                            }}>
+                                {(isAdmin || hasPermission('dashboard.ytd')) && (
+                                    <button
+                                        onClick={() => { setActiveTab('ytd'); setShowExecutiveMenu(false); }}
+                                        style={{
+                                            background: activeTab === 'ytd' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                            border: 'none',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.6rem 1rem',
+                                            color: activeTab === 'ytd' ? '#3b82f6' : 'var(--text-primary)',
+                                            fontWeight: activeTab === 'ytd' ? 600 : 400,
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            fontSize: '0.9rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <TrendingUp size={16} />
+                                        YTD Analysis
+                                    </button>
+                                )}
+                                {(isAdmin || hasPermission('dashboard.profitHub')) && (
+                                    <button
+                                        onClick={() => { setActiveTab('profitHub'); setShowExecutiveMenu(false); }}
+                                        style={{
+                                            background: activeTab === 'profitHub' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                            border: 'none',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.6rem 1rem',
+                                            color: activeTab === 'profitHub' ? '#3b82f6' : 'var(--text-primary)',
+                                            fontWeight: activeTab === 'profitHub' ? 600 : 400,
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            fontSize: '0.9rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <Target size={16} />
+                                        Profit Hub
+                                    </button>
+                                )}
+                                {(isAdmin || hasPermission('dashboard.investments')) && (
+                                    <button
+                                        onClick={() => { setActiveTab('investments'); setShowExecutiveMenu(false); }}
+                                        style={{
+                                            background: activeTab === 'investments' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                            border: 'none',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.6rem 1rem',
+                                            color: activeTab === 'investments' ? '#3b82f6' : 'var(--text-primary)',
+                                            fontWeight: activeTab === 'investments' ? 600 : 400,
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            fontSize: '0.9rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <Briefcase size={16} />
+                                        Investments
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div >
 
@@ -3191,7 +3267,7 @@ const Dashboard = (props) => {
 
             {/* [NEW] Investments Dashboard */}
             {
-                activeTab === 'investments' && isAdmin && (
+                activeTab === 'investments' && (isAdmin || hasPermission('dashboard.investments')) && (
                     <InvestmentsDashboard isAdmin={isAdmin} />
                 )
             }

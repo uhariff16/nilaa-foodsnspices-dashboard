@@ -49,6 +49,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     const [showSettlementModal, setShowSettlementModal] = useState(false);
     const [settlementInvestment, setSettlementInvestment] = useState(null);
     const [settlementAmount, setSettlementAmount] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: 'investment_date', direction: 'desc' });
 
     useEffect(() => {
         fetchData();
@@ -296,6 +297,58 @@ const InvestmentsDashboard = ({ isAdmin }) => {
             setSettlementAmount('');
             fetchData();
         } catch (err) { alert(err.message); }
+    };
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const getSortedInvestments = () => {
+        const sorted = [...investments];
+        sorted.sort((a, b) => {
+            let valA, valB;
+
+            switch (sortConfig.key) {
+                case 'investment_date':
+                    valA = new Date(a.investment_date || 0);
+                    valB = new Date(b.investment_date || 0);
+                    break;
+                case 'partner':
+                    valA = a.profit_stakeholders?.name || '';
+                    valB = b.profit_stakeholders?.name || '';
+                    break;
+                case 'asset':
+                    valA = a.business_assets?.name || 'General Capital';
+                    valB = b.business_assets?.name || 'General Capital';
+                    break;
+                case 'total_capital':
+                    const totalCostMatchA = a.notes?.match(/\[Total:\s*(\d+)\]/);
+                    valA = totalCostMatchA ? Number(totalCostMatchA[1]) : (a.business_assets?.total_cost ? Number(a.business_assets.total_cost) : 0);
+                    const totalCostMatchB = b.notes?.match(/\[Total:\s*(\d+)\]/);
+                    valB = totalCostMatchB ? Number(totalCostMatchB[1]) : (b.business_assets?.total_cost ? Number(b.business_assets.total_cost) : 0);
+                    break;
+                case 'amount':
+                    valA = Number(a.amount || 0);
+                    valB = Number(b.amount || 0);
+                    break;
+                case 'partnership_percentage':
+                    valA = Number(a.partnership_percentage || 0);
+                    valB = Number(b.partnership_percentage || 0);
+                    break;
+                default:
+                    valA = a[sortConfig.key];
+                    valB = b[sortConfig.key];
+            }
+
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return sorted;
     };
 
     const handleEditAssetClick = (asset) => {
@@ -737,18 +790,30 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Date</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Partner</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Purpose / Asset</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Total Capital</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Amount</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Partnership %</th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('investment_date')}>
+                                    Date {sortConfig.key === 'investment_date' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('partner')}>
+                                    Partner {sortConfig.key === 'partner' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('asset')}>
+                                    Purpose / Asset {sortConfig.key === 'asset' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('total_capital')}>
+                                    Total Capital {sortConfig.key === 'total_capital' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('amount')}>
+                                    Amount {sortConfig.key === 'amount' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('partnership_percentage')}>
+                                    Partnership % {sortConfig.key === 'partnership_percentage' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Notes</th>
                                 {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
-                            {investments.map(inv => {
+                            {getSortedInvestments().map(inv => {
                                 const totalCostMatch = inv.notes?.match(/\[Total:\s*(\d+)\]/);
                                 const totalCapitalVal = totalCostMatch ? Number(totalCostMatch[1]) : (inv.business_assets?.total_cost ? Number(inv.business_assets.total_cost) : null);
                                 const gstMatch = inv.notes?.match(/\[GST:\s*(\d+)\]/);

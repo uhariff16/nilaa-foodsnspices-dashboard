@@ -3255,6 +3255,8 @@ const Dashboard = (props) => {
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
+                        purchaseData={props.purchaseData || []}
+                        summaryData={props.summaryData || []}
                         invoiceDiscounts={invoiceDiscounts}
                         forceTab="performance"
                     />
@@ -3268,6 +3270,8 @@ const Dashboard = (props) => {
                         selectedYear={selectedYear}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
+                        purchaseData={props.purchaseData || []}
+                        summaryData={props.summaryData || []}
                         invoiceDiscounts={invoiceDiscounts}
                         forceTab="profitHub"
                     />

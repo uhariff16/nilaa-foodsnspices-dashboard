@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
-import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield } from 'lucide-react';
+import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield, ShoppingCart, Truck, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const formatCurrency = (val) => {
@@ -42,7 +42,7 @@ const getPackWeight = (desc) => {
 
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
-const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, invoiceDiscounts = [], forceTab = null }) => {
+const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, purchaseData = [], summaryData = [], invoiceDiscounts = [], forceTab = null }) => {
     const { hasPermission } = useAuth();
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -96,6 +96,13 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     const [activeAnalysisSubTab, setActiveAnalysisSubTab] = React.useState(forceTab || 'performance'); // 'performance' | 'profitHub'
     const [isTableMissing, setIsTableMissing] = React.useState(false);
     const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+    const [ledgerSearchQuery, setLedgerSearchQuery] = React.useState('');
+    const [ledgerCurrentPage, setLedgerCurrentPage] = React.useState(1);
+
+    React.useEffect(() => {
+        setLedgerSearchQuery('');
+        setLedgerCurrentPage(1);
+    }, [selectedYear]);
 
     React.useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -258,6 +265,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             let salesKg = 0;
             let productionKgValue = 0; // Final Paste
             let productionInputKgValue = 0; // Raw Material Input (e.g., Peeled Garlic)
+            let productionGingerInputKg = 0;
+            let productionGarlicInputKg = 0;
             let purchasesKgValue = 0;  // Raw Material In
 
             // 1. Process Transactions (Revenue, Expenses, Sales Kg)
@@ -432,7 +441,15 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             if (productionData?.preProduction) {
                 productionData.preProduction.forEach(item => {
                     if (item.date && item.date.startsWith(targetPrefix)) {
-                        productionInputKgValue += parseFloat(item.weight || 0);
+                        const weight = parseFloat(item.weight || 0);
+                        productionInputKgValue += weight;
+
+                        const mat = String(item.material || '').toLowerCase();
+                        if (mat.includes('ginger')) {
+                            productionGingerInputKg += weight;
+                        } else if (mat.includes('garlic')) {
+                            productionGarlicInputKg += weight;
+                        }
                     }
                 });
             }
@@ -470,6 +487,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 salesKg,
                 purchasesKg: purchasesKgValue,
                 peeledKg: productionInputKgValue,
+                gingerInputKg: productionGingerInputKg,
+                garlicInputKg: productionGarlicInputKg,
                 productionKg: effectiveOutput,
                 itemBreakdown: (() => {
                     const breakdown = [];
@@ -831,6 +850,186 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         }
         return null;
     };
+    const yearlyProcurementData = useMemo(() => {
+        if (!purchaseData || purchaseData.length === 0) return {
+            filteredPurchases: [],
+            totalSpent: 0,
+            totalWeight: 0,
+            materialGroups: [],
+            materialStats: {},
+            supplierSummary: [],
+            trendData: [],
+            priceTrendData: [],
+            varietyStats: []
+        };
+
+        // Filter purchases strictly for the selectedYear
+        const yearPurchases = purchaseData.filter(item => {
+            const dateStr = item.parsedDate || item.date || '';
+            if (!dateStr.startsWith(selectedYear)) return false;
+
+            const inv = String(item.invoiceNo || item.invoice_no || '').trim().toUpperCase();
+            const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
+            
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || 
+                                     desc.includes('ginger') || 
+                                     desc.includes('garlic') || 
+                                     desc.includes('jayakodi') || 
+                                     /\bdesi\b/.test(desc) || 
+                                     desc.includes('naatu');
+            
+            if (inv.startsWith('P')) return true;
+            
+            const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
+            if (isExpense) return false;
+            
+            return isPurchaseKeyword;
+        });
+
+        // Group by Material
+        const groups = { Ginger: 0, Garlic: 0, Others: 0 };
+        const stats = {
+            Ginger: { cost: 0, count: 0, invoices: new Set() },
+            Garlic: { cost: 0, count: 0, invoices: new Set() },
+            Others: { cost: 0, count: 0, invoices: new Set() }
+        };
+
+        yearPurchases.forEach((p, idx) => {
+            const str = ((p.originalDesc || '') + ' ' + (p.supplier || '') + ' ' + (p.remarks || '')).toLowerCase();
+            const amt = p.parsedAmount || p.amount || 0;
+            const qty = p.parsedQty || p.quantity || 0;
+            const inv = p.invoiceNo || p.invoice_no || `__NO_INV_${idx}`;
+
+            let matched = false;
+            if (str.includes('ginger') || str.includes('jayakodi')) {
+                groups.Ginger += qty;
+                stats.Ginger.cost += amt;
+                stats.Ginger.invoices.add(inv);
+                matched = true;
+            } else if (str.includes('garlic') || str.includes('senthil') || str.includes('svg') || str.includes('pk') || str.includes('poondu') || /\bdesi\b/.test(str) || str.includes('naatu')) {
+                groups.Garlic += qty;
+                stats.Garlic.cost += amt;
+                stats.Garlic.invoices.add(inv);
+                matched = true;
+            } else {
+                groups.Others += qty;
+                stats.Others.cost += amt;
+                stats.Others.invoices.add(inv);
+            }
+        });
+
+        const totalWeight = Object.values(groups).reduce((a, b) => a + b, 0);
+        const totalSpent = yearPurchases.reduce((sum, i) => sum + (i.parsedAmount || i.amount || 0), 0);
+
+        // Convert invoice sets to counts
+        Object.keys(stats).forEach(k => {
+            stats[k].count = stats[k].invoices.size;
+        });
+
+        // Prepare Material Groups list
+        const materialGroups = Object.entries(groups)
+            .map(([name, weight]) => ({ name, weight }))
+            .filter(g => g.weight > 0 || stats[g.name].cost > 0)
+            .sort((a, b) => b.weight - a.weight);
+
+        // Supplier summary
+        const suppliers = yearPurchases.reduce((acc, curr) => {
+            const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
+            if (!acc[sName]) acc[sName] = { amount: 0, count: 0 };
+            acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
+            acc[sName].count += 1;
+            return acc;
+        }, {});
+        const supplierSummary = Object.entries(suppliers).sort((a, b) => b[1].amount - a[1].amount);
+
+        // Monthly trends
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const monthMap = {};
+        months.forEach((m, idx) => {
+            monthMap[idx] = { 
+                name: m, 
+                GingerQty: 0, GingerCost: 0, 
+                GarlicQty: 0, GarlicCost: 0, 
+                OthersQty: 0, OthersCost: 0,
+                totalQty: 0, totalCost: 0
+            };
+        });
+
+        yearPurchases.forEach(item => {
+            const dateStr = item.parsedDate || item.date;
+            if (!dateStr || typeof dateStr !== 'string') return;
+            const parts = dateStr.split('-'); // YYYY-MM-DD
+            if (parts.length >= 2) {
+                const monthIdx = parseInt(parts[1], 10) - 1;
+                if (monthIdx >= 0 && monthIdx < 12) {
+                    const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
+                    const qty = item.parsedQty || item.quantity || 0;
+                    const amt = item.parsedAmount || item.amount || 0;
+
+                    monthMap[monthIdx].totalQty += qty;
+                    monthMap[monthIdx].totalCost += amt;
+
+                    if (desc.includes('ginger') || desc.includes('jayakodi')) {
+                        monthMap[monthIdx].GingerQty += qty;
+                        monthMap[monthIdx].GingerCost += amt;
+                    } else if (desc.includes('garlic') || desc.includes('senthil') || desc.includes('svg') || desc.includes('pk') || desc.includes('poondu') || /\bdesi\b/.test(desc) || desc.includes('naatu')) {
+                        monthMap[monthIdx].GarlicQty += qty;
+                        monthMap[monthIdx].GarlicCost += amt;
+                    } else {
+                        monthMap[monthIdx].OthersQty += qty;
+                        monthMap[monthIdx].OthersCost += amt;
+                    }
+                }
+            }
+        });
+
+        const trendData = Object.values(monthMap);
+
+        // Calculate Monthly Price Trends (Avg price/kg = Cost / Qty)
+        const priceTrendData = trendData.map(m => ({
+            name: m.name,
+            GingerPrice: m.GingerQty > 0 ? Math.round(m.GingerCost / m.GingerQty) : null,
+            GarlicPrice: m.GarlicQty > 0 ? Math.round(m.GarlicCost / m.GarlicQty) : null
+        }));
+
+        // Variety summary
+        let varietyStats = [];
+        if (summaryData && summaryData.length > 0) {
+            const varGroups = {};
+            summaryData.forEach(d => {
+                const dDate = d.date ? new Date(d.date) : null;
+                if (!dDate) return;
+                const dYear = dDate.getFullYear();
+                if (String(dYear) !== String(selectedYear)) return;
+
+                const vName = d.variety.toUpperCase();
+                if (!varGroups[vName]) varGroups[vName] = { qty: 0, cost: 0 };
+                varGroups[vName].qty += d.quantity || 0;
+                varGroups[vName].cost += d.amount || 0;
+            });
+            varietyStats = Object.entries(varGroups)
+                .map(([name, stats]) => ({
+                    name,
+                    qty: stats.qty,
+                    avgPrice: stats.qty > 0 ? stats.cost / stats.qty : 0,
+                    cost: stats.cost
+                }))
+                .sort((a, b) => b.qty - a.qty);
+        }
+
+        return {
+            filteredPurchases: yearPurchases.sort((a, b) => (b.parsedDate || b.date || '').localeCompare(a.parsedDate || a.date || '')),
+            totalSpent,
+            totalWeight,
+            materialGroups,
+            materialStats: stats,
+            supplierSummary,
+            trendData,
+            priceTrendData,
+            varietyStats
+        };
+    }, [purchaseData, summaryData, selectedYear]);
+
     const currentRole = localStorage.getItem('user_role') || 'staff';
     const isAdmin = currentRole === 'admin';
 
@@ -1017,7 +1216,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                         )}
                     </div>
 
-                    {activeAnalysisSubTab === 'performance' ? (
+                    {activeAnalysisSubTab === 'performance' && (
                         <>
                             {/* Executive ROI & Investment Analytics (Since Inception) */}
                             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1332,6 +1531,68 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Raw Material Procurement & Price Fluctuations */}
+                                <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)', display: 'flex', flexDirection: 'column' }}>
+                                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                                        <ShoppingCart size={18} color="#38bdf8" />
+                                        Raw Material Purchase Price Fluctuation & Averages
+                                    </h3>
+                                    
+                                    {/* Annual Averages Cards */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                                        <div style={{ background: 'rgba(252, 211, 77, 0.05)', border: '1px solid rgba(252, 211, 77, 0.2)', padding: '0.75rem', borderRadius: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Ginger YTD Avg Price</p>
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.15rem', fontWeight: 'bold', color: '#FCD34D' }}>
+                                                    {(() => {
+                                                        const gingerWeight = yearlyProcurementData.materialGroups.find(g => g.name === 'Ginger')?.weight || 0;
+                                                        const gingerCost = yearlyProcurementData.materialStats.Ginger?.cost || 0;
+                                                        return gingerWeight > 0 ? `₹${Math.round(gingerCost / gingerWeight)}/kg` : 'No purchases';
+                                                    })()}
+                                                </p>
+                                            </div>
+                                            <Wheat size={20} color="#FCD34D" style={{ opacity: 0.8 }} />
+                                        </div>
+                                        
+                                        <div style={{ background: 'rgba(224, 231, 255, 0.05)', border: '1px solid rgba(224, 231, 255, 0.2)', padding: '0.75rem', borderRadius: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Garlic YTD Avg Price</p>
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.15rem', fontWeight: 'bold', color: '#E0E7FF' }}>
+                                                    {(() => {
+                                                        const garlicWeight = yearlyProcurementData.materialGroups.find(g => g.name === 'Garlic')?.weight || 0;
+                                                        const garlicCost = yearlyProcurementData.materialStats.Garlic?.cost || 0;
+                                                        return garlicWeight > 0 ? `₹${Math.round(garlicCost / garlicWeight)}/kg` : 'No purchases';
+                                                    })()}
+                                                </p>
+                                            </div>
+                                            <Activity size={20} color="#E0E7FF" style={{ opacity: 0.8 }} />
+                                        </div>
+                                    </div>
+
+                                    {/* Monthly fluctuation Chart */}
+                                    <div style={{ width: '100%', height: 260 }}>
+                                        {yearlyProcurementData.priceTrendData.some(m => m.GingerPrice || m.GarlicPrice) ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={yearlyProcurementData.priceTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
+                                                    <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} unit="₹" axisLine={false} tickLine={false} />
+                                                    <Tooltip
+                                                        contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: 'none', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: '0.5rem' }} />
+                                                    <Line type="monotone" dataKey="GingerPrice" stroke="#FCD34D" name="Ginger Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                                                    <Line type="monotone" dataKey="GarlicPrice" stroke="#E0E7FF" name="Garlic Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                                No purchase data available for price trend analysis.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
                                 {/* Expense Composition Chart */}
                                 {viewSettings.showExpenseComp && (
@@ -1787,6 +2048,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.peeledKg > 0 ? m.peeledKg.toLocaleString() : '-'}</td>)}
                                             </tr>
                                             <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Ginger Input (kg)</td>
+                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.gingerInputKg > 0 ? m.gingerInputKg.toLocaleString() : '-'}</td>)}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Garlic Input (kg)</td>
+                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.garlicInputKg > 0 ? m.garlicInputKg.toLocaleString() : '-'}</td>)}
+                                            </tr>
+                                            <tr>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Finished Output (Paste/Peeled) (kg)</td>
                                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.productionKg > 0 ? m.productionKg.toLocaleString() : '-'}</td>)}
                                             </tr>
@@ -1802,12 +2071,74 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Profit Margin %</td>
                                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: m.margin > 15 ? '#10b981' : (m.margin > 0 ? '#f59e0b' : 'var(--text-secondary)'), fontSize: '0.85rem' }}>{m.isActive ? `${m.margin.toFixed(1)}%` : '-'}</td>)}
                                             </tr>
+
+                                            {/* PROCUREMENT SECTION */}
+                                            <tr>
+                                                <td colSpan={13} style={{ textAlign: 'left', padding: '1rem 0.5rem 0.4rem 0.5rem', color: '#38bdf8', fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Raw Material Procurement</td>
+                                            </tr>
+                                            <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
+                                                <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontWeight: 600, color: '#38bdf8', fontSize: '0.85rem' }}>Total Procurement Spend</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const cost = yearlyProcurementData.trendData[idx]?.totalCost || 0;
+                                                    return <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: '#38bdf8', fontSize: '0.85rem' }}>{cost > 0 ? formatCurrency(cost) : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Ginger Spend</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const cost = yearlyProcurementData.trendData[idx]?.GingerCost || 0;
+                                                    return <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cost > 0 ? formatCurrency(cost) : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.8 }}>- Qty (kg)</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const qty = yearlyProcurementData.trendData[idx]?.GingerQty || 0;
+                                                    return <td key={m.name} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8 }}>{qty > 0 ? `${qty.toLocaleString()} kg` : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.8 }}>- Avg Price (₹/kg)</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const price = yearlyProcurementData.priceTrendData[idx]?.GingerPrice || 0;
+                                                    return <td key={m.name} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8 }}>{price > 0 ? `₹${price}` : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Garlic Spend</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const cost = yearlyProcurementData.trendData[idx]?.GarlicCost || 0;
+                                                    return <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cost > 0 ? formatCurrency(cost) : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.8 }}>- Qty (kg)</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const qty = yearlyProcurementData.trendData[idx]?.GarlicQty || 0;
+                                                    return <td key={m.name} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8 }}>{qty > 0 ? `${qty.toLocaleString()} kg` : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.75rem', opacity: 0.8 }}>- Avg Price (₹/kg)</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const price = yearlyProcurementData.priceTrendData[idx]?.GarlicPrice || 0;
+                                                    return <td key={m.name} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8 }}>{price > 0 ? `₹${price}` : '-'}</td>;
+                                                })}
+                                            </tr>
+                                            <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Other Material Spend</td>
+                                                {yearlyData.map((m, idx) => {
+                                                    const cost = yearlyProcurementData.trendData[idx]?.OthersCost || 0;
+                                                    return <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{cost > 0 ? formatCurrency(cost) : '-'}</td>;
+                                                })}
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         </>
-                    ) : (
+                    )}
+                    {activeAnalysisSubTab === 'profitHub' && (
                         <div className="profit-hub-container animate-fade-in" style={{ padding: '0' }} key="profit-hub-view">
                             <div style={{ 
                                 display: 'flex', 

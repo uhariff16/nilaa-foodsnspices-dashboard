@@ -3258,7 +3258,6 @@ const Dashboard = (props) => {
                         purchaseData={props.purchaseData || []}
                         summaryData={props.summaryData || []}
                         invoiceDiscounts={invoiceDiscounts}
-                        forceTab="performance"
                     />
                 )
             }

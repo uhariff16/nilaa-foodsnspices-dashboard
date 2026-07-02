@@ -1075,6 +1075,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     >
                                         <Target size={16} /> Profit Hub
                                     </button>
+                                    <button
+                                        onClick={() => setActiveAnalysisSubTab('insights')}
+                                        style={{
+                                            padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                            background: activeAnalysisSubTab === 'insights' ? 'var(--accent-primary)' : 'transparent',
+                                            color: activeAnalysisSubTab === 'insights' ? 'white' : 'var(--text-secondary)',
+                                            fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                        }}
+                                    >
+                                        <Info size={16} /> Insights
+                                    </button>
                                 </div>
                             )}
 
@@ -1531,68 +1542,6 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         </div>
                                     </div>
                                 )}
-
-                                {/* Raw Material Procurement & Price Fluctuations */}
-                                <div className="glass-panel" style={{ padding: '1.5rem', flex: '1 1 min(100%, 500px)', display: 'flex', flexDirection: 'column' }}>
-                                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
-                                        <ShoppingCart size={18} color="#38bdf8" />
-                                        Raw Material Purchase Price Fluctuation & Averages
-                                    </h3>
-                                    
-                                    {/* Annual Averages Cards */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-                                        <div style={{ background: 'rgba(252, 211, 77, 0.05)', border: '1px solid rgba(252, 211, 77, 0.2)', padding: '0.75rem', borderRadius: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Ginger YTD Avg Price</p>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.15rem', fontWeight: 'bold', color: '#FCD34D' }}>
-                                                    {(() => {
-                                                        const gingerWeight = yearlyProcurementData.materialGroups.find(g => g.name === 'Ginger')?.weight || 0;
-                                                        const gingerCost = yearlyProcurementData.materialStats.Ginger?.cost || 0;
-                                                        return gingerWeight > 0 ? `₹${Math.round(gingerCost / gingerWeight)}/kg` : 'No purchases';
-                                                    })()}
-                                                </p>
-                                            </div>
-                                            <Wheat size={20} color="#FCD34D" style={{ opacity: 0.8 }} />
-                                        </div>
-                                        
-                                        <div style={{ background: 'rgba(224, 231, 255, 0.05)', border: '1px solid rgba(224, 231, 255, 0.2)', padding: '0.75rem', borderRadius: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Garlic YTD Avg Price</p>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '1.15rem', fontWeight: 'bold', color: '#E0E7FF' }}>
-                                                    {(() => {
-                                                        const garlicWeight = yearlyProcurementData.materialGroups.find(g => g.name === 'Garlic')?.weight || 0;
-                                                        const garlicCost = yearlyProcurementData.materialStats.Garlic?.cost || 0;
-                                                        return garlicWeight > 0 ? `₹${Math.round(garlicCost / garlicWeight)}/kg` : 'No purchases';
-                                                    })()}
-                                                </p>
-                                            </div>
-                                            <Activity size={20} color="#E0E7FF" style={{ opacity: 0.8 }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Monthly fluctuation Chart */}
-                                    <div style={{ width: '100%', height: 260 }}>
-                                        {yearlyProcurementData.priceTrendData.some(m => m.GingerPrice || m.GarlicPrice) ? (
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <LineChart data={yearlyProcurementData.priceTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
-                                                    <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                                                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} unit="₹" axisLine={false} tickLine={false} />
-                                                    <Tooltip
-                                                        contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: 'none', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
-                                                    />
-                                                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: '0.5rem' }} />
-                                                    <Line type="monotone" dataKey="GingerPrice" stroke="#FCD34D" name="Ginger Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
-                                                    <Line type="monotone" dataKey="GarlicPrice" stroke="#E0E7FF" name="Garlic Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
-                                                </LineChart>
-                                            </ResponsiveContainer>
-                                        ) : (
-                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                                No purchase data available for price trend analysis.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
 
                                 {/* Expense Composition Chart */}
                                 {viewSettings.showExpenseComp && (
@@ -2338,6 +2287,150 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     </>
                                 );
                             })()}
+                        </div>
+                    )}
+
+                    {activeAnalysisSubTab === 'insights' && (
+                        <div className="strategic-insights-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }} key="insights-view">
+                            <h2 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-primary)' }}>
+                                <Info size={isMobile ? 24 : 32} color="#3b82f6" /> Strategic Executive Insights
+                            </h2>
+
+                            {/* 1. TOP ROW: HIGH IMPACT STRATEGIC KPI CARDS */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: '1.5rem'
+                            }}>
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Top Profit Month</span>
+                                    <h3 style={{ margin: '0.25rem 0', color: '#10b981', fontSize: '1.5rem', fontWeight: 'bold' }}>March Peak</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        Revenue: <strong>{formatCurrency(553840)}</strong> • Profit: <strong>{formatCurrency(208243)}</strong> (37.6% margin)
+                                    </p>
+                                </div>
+
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #FCD34D' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ginger Price Surge</span>
+                                    <h3 style={{ margin: '0.25rem 0', color: '#FCD34D', fontSize: '1.5rem', fontWeight: 'bold' }}>₹109/kg (June)</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        Nearly doubled from the winter baseline of <strong>₹55/kg</strong> in March.
+                                    </p>
+                                </div>
+
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #60A5FA' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Garlic Deflation</span>
+                                    <h3 style={{ margin: '0.25rem 0', color: '#60A5FA', fontSize: '1.5rem', fontWeight: 'bold' }}>₹74/kg (March)</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        Dropped by <strong>36.2%</strong> from peak price of <strong>₹116/kg</strong> in January.
+                                    </p>
+                                </div>
+
+                                <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ef4444' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yield Anomaly</span>
+                                    <h3 style={{ margin: '0.25rem 0', color: '#ef4444', fontSize: '1.5rem', fontWeight: 'bold' }}>92.1% (April)</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        The only month below the 102% average baseline. Indicates processing loss.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* 2. MIDDLE ROW: CHART & RECOMMENDATIONS SIDE-BY-SIDE */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr',
+                                gap: '1.5rem'
+                            }}>
+                                {/* Fluctuation Chart */}
+                                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', height: '380px' }}>
+                                    <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', fontWeight: 700 }}>
+                                        <ShoppingCart size={18} color="#38bdf8" />
+                                        Raw Material Purchase Price Fluctuation (₹/kg)
+                                    </h3>
+                                    <div style={{ width: '100%', height: 280 }}>
+                                        {yearlyProcurementData.priceTrendData.some(m => m.GingerPrice || m.GarlicPrice) ? (
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <LineChart data={yearlyProcurementData.priceTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--glass-border)" vertical={false} />
+                                                    <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                                    <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} unit="₹" axisLine={false} tickLine={false} />
+                                                    <Tooltip
+                                                        contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: 'none', borderRadius: '0.5rem', color: 'var(--text-primary)' }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: '0.5rem' }} />
+                                                    <Line type="monotone" dataKey="GingerPrice" stroke="#FCD34D" name="Ginger Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                                                    <Line type="monotone" dataKey="GarlicPrice" stroke="#E0E7FF" name="Garlic Avg (₹/kg)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                                                </LineChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                                No purchase data available for price trend analysis.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Strategic Recommendations */}
+                                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', height: '380px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                    <h3 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1rem', fontWeight: 700 }}>
+                                        <Target size={18} color="#3b82f6" />
+                                        Strategic Action Points
+                                    </h3>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1 }} className="custom-scrollbar">
+                                        <div style={{ background: 'rgba(245, 158, 11, 0.03)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.15)' }}>
+                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <Activity size={14} /> 1. Garlic Inventory Hedging
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                                Garlic drops by 36% in spring. Build bulk inventory during March/April (target under ₹75/kg) to carry through winter peaks (₹116/kg).
+                                            </p>
+                                        </div>
+
+                                        <div style={{ background: 'rgba(16, 185, 129, 0.03)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <Wheat size={14} /> 2. Pre-Summer Ginger Contracts
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                                Ginger prices surge by 98% from April to June. Secure forward purchase agreements or peel/stock ginger before May.
+                                            </p>
+                                        </div>
+
+                                        <div style={{ background: 'rgba(239, 68, 68, 0.03)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontWeight: 700, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <AlertTriangle size={14} /> 3. April Yield Waste Audit
+                                            </h4>
+                                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                                April yield drop to 92.1% signifies waste or batch leakage. Enforce a processing floor of 105% to save ~280 kg of finished paste.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. BOTTOM ROW: FULL SUMMARY OF OBSERVATIONS */}
+                            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Key Observations Overview</h3>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                                        <div style={{ minWidth: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6', marginTop: '7px' }} />
+                                        <p style={{ margin: 0 }}>
+                                            <strong>Margins vs. Expenses:</strong> Although February generated higher revenue than January, its net profit dropped by over 40% (₹80k vs ₹140k). This cost anomaly was driven by a four-fold bills spike (deferred utility charges) and massive upfront raw material purchases.
+                                        </p>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                                        <div style={{ minWidth: '6px', height: '6px', borderRadius: '50%', background: '#10b981', marginTop: '7px' }} />
+                                        <p style={{ margin: 0 }}>
+                                            <strong>Production Cost Peak:</strong> In June, production cost soared to its YTD maximum of ₹140.4/kg. This peak was caused by the combined pressure of record-high ginger prices (₹109/kg) and lower plant throughput.
+                                        </p>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                                        <div style={{ minWidth: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', marginTop: '7px' }} />
+                                        <p style={{ margin: 0 }}>
+                                            <strong>Yield Loss:</strong> Most months maintain yields between 102%–111% due to blending inputs. April's anomaly (92.1%) represents a clear operational outlier that directly affected unit production efficiency.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </>

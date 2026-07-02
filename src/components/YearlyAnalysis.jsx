@@ -1065,17 +1065,6 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         <TrendingUp size={16} /> Performance
                                     </button>
                                     <button
-                                        onClick={() => setActiveAnalysisSubTab('profitHub')}
-                                        style={{
-                                            padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
-                                            background: activeAnalysisSubTab === 'profitHub' ? 'var(--accent-primary)' : 'transparent',
-                                            color: activeAnalysisSubTab === 'profitHub' ? 'white' : 'var(--text-secondary)',
-                                            fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                        }}
-                                    >
-                                        <Target size={16} /> Profit Hub
-                                    </button>
-                                    <button
                                         onClick={() => setActiveAnalysisSubTab('insights')}
                                         style={{
                                             padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',

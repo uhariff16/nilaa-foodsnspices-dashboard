@@ -565,6 +565,31 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     };
 
     // Calculations
+    // Helper to calculate correct asset funding percentage incorporating any recorded GST
+    const getAssetFundingDetails = (asset) => {
+        const assetInvestments = investments.filter(i => i.asset_id === asset.id);
+        const uniqueTransactions = [];
+        const processedKeys = new Set();
+        assetInvestments.forEach(inv => {
+            const cleanNotes = inv.notes 
+                ? inv.notes.replace(/\[Settled\]/, '').replace(/\[PaidUpfrontBy:[^\]]+\]/, '').trim() 
+                : '';
+            const key = `${inv.investment_date}_${cleanNotes}`;
+            if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                uniqueTransactions.push(inv);
+            }
+        });
+        const totalGst = uniqueTransactions.reduce((sum, inv) => {
+            const gstMatch = inv.notes?.match(/\[GST:\s*(\d+)\]/);
+            return sum + (gstMatch ? Number(gstMatch[1]) : 0);
+        }, 0);
+        const totalCostWithGst = Number(asset.total_cost) + totalGst;
+        const funded = assetInvestments.reduce((s, i) => s + Number(i.amount), 0);
+        const pct = totalCostWithGst > 0 ? (funded / totalCostWithGst) * 100 : 0;
+        return { funded, totalCostWithGst, pct };
+    };
+
     const totalAssetValue = assets.reduce((sum, a) => sum + Number(a.total_cost), 0);
     const totalInvested = investments.reduce((sum, i) => sum + Number(i.amount), 0);
     
@@ -576,8 +601,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
 
     // Asset Funding Health Summary
     const assetFundingStats = assets.reduce((stats, asset) => {
-        const funded = investments.filter(i => i.asset_id === asset.id).reduce((s, i) => s + Number(i.amount), 0);
-        const pct = asset.total_cost > 0 ? (funded / asset.total_cost) * 100 : 0;
+        const { pct } = getAssetFundingDetails(asset);
         if (pct >= 99.9) {
             stats.fullyFunded += 1;
         } else {
@@ -854,8 +878,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                         </thead>
                         <tbody>
                             {assets.map(asset => {
-                                const funded = investments.filter(i => i.asset_id === asset.id).reduce((s, i) => s + Number(i.amount), 0);
-                                const pct = (funded / asset.total_cost) * 100;
+                                const { funded, pct } = getAssetFundingDetails(asset);
                                 return (
                                     <tr key={asset.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '1rem', fontWeight: 500 }}>{asset.name}</td>

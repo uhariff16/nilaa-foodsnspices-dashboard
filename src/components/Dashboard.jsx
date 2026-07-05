@@ -165,14 +165,7 @@ const Dashboard = (props) => {
         alert_stock_garlic_paste_enabled: 'true',
         alert_stock_garlic_paste_threshold: '20'
     });
-    const [dismissedAlerts, setDismissedAlerts] = useState(() => {
-        try {
-            const saved = localStorage.getItem('dismissed_alerts');
-            return saved ? JSON.parse(saved) : {};
-        } catch {
-            return {};
-        }
-    });
+    const [alertsDismissed, setAlertsDismissed] = useState(false);
 
     const fetchAlertDetails = async () => {
         try {
@@ -251,16 +244,9 @@ const Dashboard = (props) => {
         fetchAlertDetails();
     }, [props.data]);
 
-    const handleDismissAlert = (id) => {
-        const updated = { ...dismissedAlerts, [id]: true };
-        setDismissedAlerts(updated);
-        localStorage.setItem('dismissed_alerts', JSON.stringify(updated));
-    };
 
-    const handleResetDismissedAlerts = () => {
-        setDismissedAlerts({});
-        localStorage.removeItem('dismissed_alerts');
-    };
+
+
 
 
 
@@ -271,6 +257,10 @@ const Dashboard = (props) => {
         return `${m[d.getMonth()]} ${d.getFullYear()}`;
     });
     const [selectedYear, setSelectedYear] = React.useState(() => String(new Date().getFullYear()));
+
+    useEffect(() => {
+        setAlertsDismissed(false);
+    }, [selectedMonth]);
 
     // State for tooltips
     const [hoveredCard, setHoveredCard] = useState(null);
@@ -2122,10 +2112,8 @@ const Dashboard = (props) => {
                             }
 
                             if (alertSettings.alert_system_enabled !== 'true') return null;
-
-                            const activeAlerts = alerts.filter(a => !dismissedAlerts[a.id]);
-
-                            if (activeAlerts.length === 0 && Object.keys(dismissedAlerts).length === 0) return null;
+                            if (alertsDismissed) return null;
+                            if (alerts.length === 0) return null;
 
                             return (
                                 <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid #3b82f6', position: 'relative', zIndex: 20 }}>
@@ -2135,130 +2123,91 @@ const Dashboard = (props) => {
                                             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                                                 Executive Alerts & Actionable Insights
                                             </h3>
-                                            {activeAlerts.length > 0 && (
+                                            {alerts.length > 0 && (
                                                 <span style={{ fontSize: '0.75rem', background: '#3b82f6', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '1rem', fontWeight: 600 }}>
-                                                    {activeAlerts.length} Active
+                                                    {alerts.length} Active
                                                 </span>
                                             )}
                                         </div>
-                                        {Object.keys(dismissedAlerts).length > 0 && (
-                                            <button
-                                                onClick={handleResetDismissedAlerts}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: '#3b82f6',
-                                                    fontSize: '0.8rem',
-                                                    fontWeight: 500,
-                                                    cursor: 'pointer',
-                                                    padding: '0.25rem 0.5rem',
-                                                    borderRadius: '0.25rem',
-                                                    transition: 'background 0.2s'
-                                                }}
-                                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)'}
-                                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                                            >
-                                                Restore Dismissed ({Object.keys(dismissedAlerts).length})
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={() => setAlertsDismissed(true)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#ef4444',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 500,
+                                                cursor: 'pointer',
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '0.25rem',
+                                                transition: 'background 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                        >
+                                            Dismiss All
+                                        </button>
                                     </div>
 
-                                    {activeAlerts.length === 0 ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', fontSize: '0.9rem', background: 'rgba(16, 185, 129, 0.05)', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
-                                            <Check size={16} />
-                                            <span>All financial, stock, and asset metrics are within healthy limits!</span>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-                                            {activeAlerts.map(alert => {
-                                                const isCritical = alert.type === 'critical';
-                                                return (
-                                                    <div
-                                                        key={alert.id}
-                                                        style={{
-                                                            background: isCritical ? 'rgba(239, 68, 68, 0.03)' : 'rgba(245, 158, 11, 0.03)',
-                                                            border: `1px solid ${isCritical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
-                                                            borderRadius: '0.75rem',
-                                                            padding: '1rem',
-                                                            display: 'flex',
-                                                            gap: '0.75rem',
-                                                            position: 'relative',
-                                                            transition: 'transform 0.2s, box-shadow 0.2s',
-                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.transform = 'translateY(-1px)';
-                                                            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.04)';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.transform = 'none';
-                                                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)';
-                                                        }}
-                                                    >
-                                                        {/* Icon */}
-                                                        <div style={{
-                                                            width: '36px',
-                                                            height: '36px',
-                                                            borderRadius: '0.5rem',
-                                                            background: isCritical ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            flexShrink: 0
-                                                        }}>
-                                                            <AlertTriangle size={18} color={isCritical ? '#ef4444' : '#f59e0b'} />
-                                                        </div>
-
-                                                        {/* Content */}
-                                                        <div style={{ flex: 1, paddingRight: '1.25rem' }}>
-                                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                                {alert.title}
-                                                            </h4>
-                                                            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                                                                {alert.desc}
-                                                            </p>
-                                                            {alert.action && (
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.775rem', color: isCritical ? '#f87171' : '#eab308', fontWeight: 500 }}>
-                                                                    <Sparkles size={12} style={{ flexShrink: 0 }} />
-                                                                    <span>{alert.action}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Dismiss Button */}
-                                                        <button
-                                                            onClick={() => handleDismissAlert(alert.id)}
-                                                            style={{
-                                                                position: 'absolute',
-                                                                top: '0.75rem',
-                                                                right: '0.75rem',
-                                                                background: 'none',
-                                                                border: 'none',
-                                                                color: 'var(--text-secondary)',
-                                                                cursor: 'pointer',
-                                                                padding: '0.25rem',
-                                                                borderRadius: '50%',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                transition: 'background 0.2s, color 0.2s'
-                                                            }}
-                                                            onMouseEnter={(e) => {
-                                                                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                                                                e.currentTarget.style.color = 'var(--text-primary)';
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                e.currentTarget.style.background = 'none';
-                                                                e.currentTarget.style.color = 'var(--text-secondary)';
-                                                            }}
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+                                        {alerts.map(alert => {
+                                            const isCritical = alert.type === 'critical';
+                                            return (
+                                                <div
+                                                    key={alert.id}
+                                                    style={{
+                                                        background: isCritical ? 'rgba(239, 68, 68, 0.03)' : 'rgba(245, 158, 11, 0.03)',
+                                                        border: `1px solid ${isCritical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
+                                                        borderRadius: '0.75rem',
+                                                        padding: '1rem',
+                                                        display: 'flex',
+                                                        gap: '0.75rem',
+                                                        position: 'relative',
+                                                        transition: 'transform 0.2s, box-shadow 0.2s',
+                                                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.transform = 'translateY(-1px)';
+                                                        e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.04)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.transform = 'none';
+                                                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)';
+                                                    }}
+                                                >
+                                                    {/* Icon */}
+                                                    <div style={{
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        borderRadius: '0.5rem',
+                                                        background: isCritical ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        flexShrink: 0
+                                                    }}>
+                                                        <AlertTriangle size={18} color={isCritical ? '#ef4444' : '#f59e0b'} />
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+
+                                                    {/* Content */}
+                                                    <div style={{ flex: 1 }}>
+                                                        <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                            {alert.title}
+                                                        </h4>
+                                                        <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                                            {alert.desc}
+                                                        </p>
+                                                        {alert.action && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.775rem', color: isCritical ? '#f87171' : '#eab308', fontWeight: 500 }}>
+                                                                <Sparkles size={12} style={{ flexShrink: 0 }} />
+                                                                <span>{alert.action}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             );
                         })()}

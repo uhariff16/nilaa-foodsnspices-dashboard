@@ -36,6 +36,7 @@ const Login = () => {
                 if (resetError) throw resetError;
                 setSuccessMessage("A password recovery link has been sent to your email address. Please check your inbox.");
             } else {
+                localStorage.removeItem('dismissed_alerts');
                 await login(email, password);
                 navigate('/', { replace: true });
             }

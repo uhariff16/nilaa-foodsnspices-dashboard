@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown, AlertTriangle, AlertCircle, X, ShieldAlert, Sparkles, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -135,6 +135,134 @@ const Dashboard = (props) => {
 
     const [salesViewMode, setSalesViewMode] = useState('summary'); // 'summary' | 'item'
     const [expenseSearch, setExpenseSearch] = useState('');
+
+    // [NEW] Alerts & Insights State & Fetching
+    const [assets, setAssets] = useState([]);
+    const [reimbursementSummary, setReimbursementSummary] = useState({});
+    const [alertSettings, setAlertSettings] = useState({
+        alert_system_enabled: 'true',
+        alert_material_cost_enabled: 'true',
+        alert_material_cost_threshold: '40',
+        alert_labour_cost_enabled: 'true',
+        alert_labour_cost_threshold: '15',
+        alert_net_margin_enabled: 'true',
+        alert_net_margin_threshold: '15',
+        alert_warranty_expiry_enabled: 'true',
+        alert_partner_debt_enabled: 'true',
+        alert_partner_debt_threshold: '10000',
+        alert_stock_ginger_raw_enabled: 'true',
+        alert_stock_ginger_raw_threshold: '100',
+        alert_stock_garlic_raw_enabled: 'true',
+        alert_stock_garlic_raw_threshold: '100',
+        alert_stock_ginger_peeled_enabled: 'true',
+        alert_stock_ginger_peeled_threshold: '50',
+        alert_stock_garlic_peeled_enabled: 'true',
+        alert_stock_garlic_peeled_threshold: '50',
+        alert_stock_mix_paste_enabled: 'true',
+        alert_stock_mix_paste_threshold: '20',
+        alert_stock_ginger_paste_enabled: 'true',
+        alert_stock_ginger_paste_threshold: '20',
+        alert_stock_garlic_paste_enabled: 'true',
+        alert_stock_garlic_paste_threshold: '20'
+    });
+    const [dismissedAlerts, setDismissedAlerts] = useState(() => {
+        try {
+            const saved = localStorage.getItem('dismissed_alerts');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    const fetchAlertDetails = async () => {
+        try {
+            const [assetsRes, investmentsRes, settingsRes] = await Promise.all([
+                supabase.from('business_assets').select('*'),
+                supabase.from('partner_investments').select('*, profit_stakeholders(name)'),
+                supabase.from('system_settings').select('*')
+            ]);
+
+            if (assetsRes.data) {
+                setAssets(assetsRes.data);
+            }
+
+            if (settingsRes.data) {
+                const mapped = {
+                    alert_system_enabled: 'true',
+                    alert_material_cost_enabled: 'true',
+                    alert_material_cost_threshold: '40',
+                    alert_labour_cost_enabled: 'true',
+                    alert_labour_cost_threshold: '15',
+                    alert_net_margin_enabled: 'true',
+                    alert_net_margin_threshold: '15',
+                    alert_warranty_expiry_enabled: 'true',
+                    alert_partner_debt_enabled: 'true',
+                    alert_partner_debt_threshold: '10000',
+                    alert_stock_ginger_raw_enabled: 'true',
+                    alert_stock_ginger_raw_threshold: '100',
+                    alert_stock_garlic_raw_enabled: 'true',
+                    alert_stock_garlic_raw_threshold: '100',
+                    alert_stock_ginger_peeled_enabled: 'true',
+                    alert_stock_ginger_peeled_threshold: '50',
+                    alert_stock_garlic_peeled_enabled: 'true',
+                    alert_stock_garlic_peeled_threshold: '50',
+                    alert_stock_mix_paste_enabled: 'true',
+                    alert_stock_mix_paste_threshold: '20',
+                    alert_stock_ginger_paste_enabled: 'true',
+                    alert_stock_ginger_paste_threshold: '20',
+                    alert_stock_garlic_paste_enabled: 'true',
+                    alert_stock_garlic_paste_threshold: '20'
+                };
+                settingsRes.data.forEach(item => {
+                    mapped[item.key] = item.value;
+                });
+                setAlertSettings(mapped);
+            }
+
+            if (investmentsRes.data) {
+                const summary = {};
+                investmentsRes.data.forEach(inv => {
+                    const upfrontMatch = inv.notes?.match(/\[PaidUpfrontBy:([^:]+):([^\]]+)\]/);
+                    if (upfrontMatch) {
+                        const payerId = upfrontMatch[1];
+                        const payerName = upfrontMatch[2];
+                        const reimbMatch = inv.notes?.match(/\[Reimbursed:\s*(\d+)\]/);
+                        const rowReimbAmt = reimbMatch ? Number(reimbMatch[1]) : 0;
+                        const rowOwed = Number(inv.amount) - rowReimbAmt;
+                        const isSettled = inv.notes?.includes('[Settled]') || rowOwed <= 0;
+                        const isPayer = inv.stakeholder_id === payerId;
+                        
+                        if (!isPayer && !isSettled) {
+                            const debtorName = inv.profit_stakeholders?.name || 'Partner';
+                            const label = `${debtorName} owes ${payerName}`;
+                            if (!summary[label]) summary[label] = 0;
+                            summary[label] += rowOwed;
+                        }
+                    }
+                });
+                setReimbursementSummary(summary);
+            }
+        } catch (err) {
+            console.error("Error loading alert data:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchAlertDetails();
+    }, [props.data]);
+
+    const handleDismissAlert = (id) => {
+        const updated = { ...dismissedAlerts, [id]: true };
+        setDismissedAlerts(updated);
+        localStorage.setItem('dismissed_alerts', JSON.stringify(updated));
+    };
+
+    const handleResetDismissedAlerts = () => {
+        setDismissedAlerts({});
+        localStorage.removeItem('dismissed_alerts');
+    };
+
+
 
     // Default to Current Date
     const [selectedMonth, setSelectedMonth] = React.useState(() => {
@@ -996,6 +1124,127 @@ const Dashboard = (props) => {
             .reduce((sum, t) => sum + Math.abs(t.parsedAmount || 0), 0);
     }, [salesTransactions]);
 
+    // Calculate Stock Closing Values for Alerts
+    const currentStocks = React.useMemo(() => {
+        let ginger = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let garlic = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let gingerPeeled = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let garlicPeeled = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let paste = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let gingerPaste = { open: 0, in: 0, out: 0, nextOpen: 0 };
+        let garlicPaste = { open: 0, in: 0, out: 0, nextOpen: 0 };
+
+        let targetPrefix = selectedYear;
+        let nextMonthPrefix = null;
+        if (selectedMonth !== 'Overall') {
+            const parts = selectedMonth.split(' ');
+            if (parts.length === 2) {
+                const selMonth = parts[0];
+                const selYear = parts[1];
+                const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+                if (monthMap[selMonth]) {
+                    targetPrefix = selYear + '-' + monthMap[selMonth];
+                    let yearInt = parseInt(selYear);
+                    let monthInt = parseInt(monthMap[selMonth]);
+                    monthInt++;
+                    if (monthInt > 12) {
+                        monthInt = 1;
+                        yearInt++;
+                    }
+                    nextMonthPrefix = yearInt + '-' + String(monthInt).padStart(2, '0');
+                }
+            }
+        }
+
+        const isMatch = (dateStr) => dateStr && dateStr.startsWith(targetPrefix);
+        const isNextMonthMatch = (dateStr) => nextMonthPrefix && dateStr && dateStr.startsWith(nextMonthPrefix);
+
+        const addToStat = (statObj, type, weight) => {
+            if (type === 'open') statObj.open += weight;
+            else if (type === 'in') statObj.in += weight;
+            else if (type === 'out') statObj.out += weight;
+            else if (type === 'nextOpen') statObj.nextOpen += weight;
+        };
+
+        const classifyAndAdd = (name, weight, type) => {
+            const uName = (name || '').trim().toUpperCase();
+            if (uName.includes('GINGER') && !uName.includes('PASTE') && !uName.includes('PEELED') && !uName.includes('PROCESSED') && !uName.includes('CLEANED')) {
+                addToStat(ginger, type, weight);
+            } else if (uName.includes('GARLIC') && !uName.includes('PASTE') && !uName.includes('PEELED') && !uName.includes('PROCESSED') && !uName.includes('CLEANED')) {
+                addToStat(garlic, type, weight);
+            } else if (uName.includes('GINGER') && (uName.includes('PEELED') || uName.includes('PROCESSED') || uName.includes('CLEANED')) && !uName.includes('PASTE')) {
+                addToStat(gingerPeeled, type, weight);
+            } else if (uName.includes('GARLIC') && (uName.includes('PEELED') || uName.includes('PROCESSED') || uName.includes('CLEANED')) && !uName.includes('PASTE')) {
+                addToStat(garlicPeeled, type, weight);
+            } else if (uName.includes('PASTE')) {
+                if (uName.includes('GINGER') && !uName.includes('GARLIC')) {
+                    addToStat(gingerPaste, type, weight);
+                } else if (uName.includes('GARLIC') && !uName.includes('GINGER')) {
+                    addToStat(garlicPaste, type, weight);
+                } else {
+                    addToStat(paste, type, weight);
+                }
+            }
+        };
+
+        (props.productionData?.stockIn || []).forEach(item => {
+            const name = (item.material || item.item || '').trim().toUpperCase();
+            const weight = parseFloat(item.weight || 0);
+            const isOS = name.startsWith('OS') || name.startsWith('O.S') || name.includes('OPENING') || name.includes('B/F');
+            if (isMatch(item.date)) {
+                classifyAndAdd(name, weight, isOS ? 'open' : 'in');
+            }
+            if (isNextMonthMatch(item.date) && isOS) {
+                classifyAndAdd(name, weight, 'nextOpen');
+            }
+        });
+
+        (props.productionData?.preProduction || []).forEach(item => {
+            if (!isMatch(item.date)) return;
+            const name = (item.material || '').toUpperCase();
+            const weight = parseFloat(item.weight || 0);
+            classifyAndAdd(name, weight, 'out');
+        });
+
+        (props.productionData?.postProduction || []).forEach(item => {
+            if (!isMatch(item.date)) return;
+            const name = (item.material || '').toUpperCase();
+            const weight = parseFloat(item.weight || 0);
+            classifyAndAdd(name, weight, 'in');
+        });
+
+        (filteredItems || []).forEach(item => {
+            const name = (item.name || '').toUpperCase();
+            classifyAndAdd(name, parseFloat(item.qty || 0), 'out');
+        });
+
+        const close = (obj) => obj.open + obj.in - obj.out;
+        const hasNextMonthData = props.productionData?.stockIn?.some(item => isNextMonthMatch(item.date));
+
+        const reconcile = (obj) => {
+            if (hasNextMonthData && obj.out < 1 && (obj.open > 0 || obj.in > 0)) {
+                const theoreticalClosing = obj.open + obj.in;
+                if (theoreticalClosing > obj.nextOpen) {
+                    const implicitSales = theoreticalClosing - obj.nextOpen;
+                    if (implicitSales > 0) {
+                        return obj.nextOpen;
+                    }
+                }
+            }
+            return close(obj);
+        };
+
+        return [
+            { id: 'ginger_raw', name: "Ginger (Raw)", val: close(ginger), threshold: parseFloat(alertSettings.alert_stock_ginger_raw_threshold) || 100, enabled: alertSettings.alert_stock_ginger_raw_enabled === 'true' },
+            { id: 'garlic_raw', name: "Garlic (Raw)", val: close(garlic), threshold: parseFloat(alertSettings.alert_stock_garlic_raw_threshold) || 100, enabled: alertSettings.alert_stock_garlic_raw_enabled === 'true' },
+            { id: 'ginger_peeled', name: "Ginger (Peeled)", val: reconcile(gingerPeeled), threshold: parseFloat(alertSettings.alert_stock_ginger_peeled_threshold) || 50, enabled: alertSettings.alert_stock_ginger_peeled_enabled === 'true' },
+            { id: 'garlic_peeled', name: "Garlic (Peeled)", val: reconcile(garlicPeeled), threshold: parseFloat(alertSettings.alert_stock_garlic_peeled_threshold) || 50, enabled: alertSettings.alert_stock_garlic_peeled_enabled === 'true' },
+            { id: 'mix_paste', name: "G&G Paste (Mix)", val: reconcile(paste), threshold: parseFloat(alertSettings.alert_stock_mix_paste_threshold) || 20, enabled: alertSettings.alert_stock_mix_paste_enabled === 'true' },
+            { id: 'ginger_paste', name: "Ginger Paste", val: reconcile(gingerPaste), threshold: parseFloat(alertSettings.alert_stock_ginger_paste_threshold) || 20, enabled: alertSettings.alert_stock_ginger_paste_enabled === 'true' },
+            { id: 'garlic_paste', name: "Garlic Paste", val: reconcile(garlicPaste), threshold: parseFloat(alertSettings.alert_stock_garlic_paste_threshold) || 20, enabled: alertSettings.alert_stock_garlic_paste_enabled === 'true' }
+        ];
+    }, [props.productionData, filteredItems, selectedMonth, selectedYear, alertSettings]);
+
     // [NEW] Previous Month Stats for Simulator Defaults
     // [NEW] Previous Month Stats for Simulator Defaults
     const previousMonthStats = React.useMemo(() => {
@@ -1771,6 +2020,248 @@ const Dashboard = (props) => {
                             totalReturns={totalReturns}
                             serviceRevenue={serviceRevenue}
                         />
+
+                        {(() => {
+                            const alerts = [];
+
+                            // 1. Material Cost Alert
+                            if (alertSettings.alert_material_cost_enabled === 'true') {
+                                const materialCostPct = salesRevenue > 0 ? (materialStats.materialCost / salesRevenue * 100) : 0;
+                                const threshold = parseFloat(alertSettings.alert_material_cost_threshold) || 40;
+                                if (materialCostPct > threshold) {
+                                    alerts.push({
+                                        id: 'material-cost',
+                                        type: materialCostPct > (threshold + 10) ? 'critical' : 'warning',
+                                        title: materialCostPct > (threshold + 10) ? 'Critical Material Cost Drag' : 'High Material Cost Warning',
+                                        desc: `Raw Material Cost is at ${materialCostPct.toFixed(1)}% of Net Sales (₹${Number(materialStats.materialCost.toFixed(0)).toLocaleString()} out of ₹${Number(salesRevenue.toFixed(0)).toLocaleString()}).`,
+                                        action: 'Check procurement prices or optimize raw ingredient usage ratios.'
+                                    });
+                                }
+                            }
+
+                            // 2. Labour Cost Alert
+                            if (alertSettings.alert_labour_cost_enabled === 'true') {
+                                const labourCostPct = salesRevenue > 0 ? (materialStats.labourCost / salesRevenue * 100) : 0;
+                                const threshold = parseFloat(alertSettings.alert_labour_cost_threshold) || 15;
+                                if (labourCostPct > threshold) {
+                                    alerts.push({
+                                        id: 'labour-cost',
+                                        type: labourCostPct > (threshold + 10) ? 'critical' : 'warning',
+                                        title: labourCostPct > (threshold + 10) ? 'Critical Labour Cost Drag' : 'High Labour Cost Warning',
+                                        desc: `Labour & Wages Cost is at ${labourCostPct.toFixed(1)}% of Net Sales (₹${Number(materialStats.labourCost.toFixed(0)).toLocaleString()} out of ₹${Number(salesRevenue.toFixed(0)).toLocaleString()}).`,
+                                        action: 'Review attendance records, check staff scheduling or optimize labor productivity.'
+                                    });
+                                }
+                            }
+
+                            // 3. Profit Margin Alert
+                            if (alertSettings.alert_net_margin_enabled === 'true') {
+                                const netProfit = salesRevenue - grandTotalExpenses;
+                                const netMarginPct = salesRevenue > 0 ? (netProfit / salesRevenue * 100) : 0;
+                                const threshold = parseFloat(alertSettings.alert_net_margin_threshold) || 15;
+                                if (netMarginPct < threshold) {
+                                    alerts.push({
+                                        id: 'net-margin',
+                                        type: netMarginPct < (threshold - 5) ? 'critical' : 'warning',
+                                        title: netMarginPct < (threshold - 5) ? 'Critical Profit Margin Alert' : 'Low Profit Margin Warning',
+                                        desc: `Overall Net Margin is at ${netMarginPct.toFixed(1)}% (₹${Number(netProfit.toFixed(0)).toLocaleString()} Net Profit on ₹${Number(salesRevenue.toFixed(0)).toLocaleString()} Net Sales).`,
+                                        action: 'Examine overheads or consider dynamic selling price increases in the Cost Simulator.'
+                                    });
+                                }
+                            }
+
+                            // 4. Low Stock Alerts
+                            currentStocks.forEach(item => {
+                                if (item.enabled && item.val < item.threshold) {
+                                    alerts.push({
+                                        id: `stock-${item.id}`,
+                                        type: item.val <= 0 ? 'critical' : 'warning',
+                                        title: item.val <= 0 ? `${item.name} Out of Stock` : `${item.name} Low Stock Alert`,
+                                        desc: `${item.name} current stock is at ${item.val.toFixed(1)} kg (Safety limit: ${item.threshold} kg).`,
+                                        action: 'Schedule fresh raw purchases or adjust production queues immediately.'
+                                    });
+                                }
+                            });
+
+                            // 5. Warranty Expiry Alerts
+                            if (alertSettings.alert_warranty_expiry_enabled === 'true') {
+                                assets.forEach(asset => {
+                                    if (asset.warranty_expiry_date) {
+                                        const expiry = new Date(asset.warranty_expiry_date);
+                                        const diffTime = expiry - new Date();
+                                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                        if (diffDays <= 30) {
+                                            alerts.push({
+                                                id: `warranty-${asset.id}`,
+                                                type: diffDays < 0 ? 'critical' : 'warning',
+                                                title: diffDays < 0 ? `Warranty Expired: ${asset.name}` : `Warranty Expiring Soon: ${asset.name}`,
+                                                desc: diffDays < 0 
+                                                    ? `Warranty expired on ${expiry.toLocaleDateString()} (Expired ${Math.abs(diffDays)} days ago).`
+                                                    : `Warranty expires on ${expiry.toLocaleDateString()} (in ${diffDays} days).`,
+                                                action: 'Verify machine health, perform checks or check renewal terms with the supplier.'
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+
+                            // 6. Outstanding Partner Debt Alerts
+                            if (alertSettings.alert_partner_debt_enabled === 'true') {
+                                const threshold = parseFloat(alertSettings.alert_partner_debt_threshold) || 10000;
+                                Object.entries(reimbursementSummary).forEach(([debtLabel, amount]) => {
+                                    if (amount > threshold) {
+                                        alerts.push({
+                                            id: `debt-${debtLabel}`,
+                                            type: 'warning',
+                                            title: 'Outstanding Partner Settlement Required',
+                                            desc: `${debtLabel}: ₹${Number(amount.toFixed(0)).toLocaleString()} is pending reimbursement.`,
+                                            action: 'Access the Partner Settlement panel inside Investments tab to log a reimbursement.'
+                                        });
+                                    }
+                                });
+                            }
+
+                            if (alertSettings.alert_system_enabled !== 'true') return null;
+
+                            const activeAlerts = alerts.filter(a => !dismissedAlerts[a.id]);
+
+                            if (activeAlerts.length === 0 && Object.keys(dismissedAlerts).length === 0) return null;
+
+                            return (
+                                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid #3b82f6', position: 'relative', zIndex: 20 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <ShieldAlert size={20} color="#3b82f6" />
+                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                                                Executive Alerts & Actionable Insights
+                                            </h3>
+                                            {activeAlerts.length > 0 && (
+                                                <span style={{ fontSize: '0.75rem', background: '#3b82f6', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '1rem', fontWeight: 600 }}>
+                                                    {activeAlerts.length} Active
+                                                </span>
+                                            )}
+                                        </div>
+                                        {Object.keys(dismissedAlerts).length > 0 && (
+                                            <button
+                                                onClick={handleResetDismissedAlerts}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#3b82f6',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 500,
+                                                    cursor: 'pointer',
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '0.25rem',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)'}
+                                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                            >
+                                                Restore Dismissed ({Object.keys(dismissedAlerts).length})
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {activeAlerts.length === 0 ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', fontSize: '0.9rem', background: 'rgba(16, 185, 129, 0.05)', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                                            <Check size={16} />
+                                            <span>All financial, stock, and asset metrics are within healthy limits!</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+                                            {activeAlerts.map(alert => {
+                                                const isCritical = alert.type === 'critical';
+                                                return (
+                                                    <div
+                                                        key={alert.id}
+                                                        style={{
+                                                            background: isCritical ? 'rgba(239, 68, 68, 0.03)' : 'rgba(245, 158, 11, 0.03)',
+                                                            border: `1px solid ${isCritical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)'}`,
+                                                            borderRadius: '0.75rem',
+                                                            padding: '1rem',
+                                                            display: 'flex',
+                                                            gap: '0.75rem',
+                                                            position: 'relative',
+                                                            transition: 'transform 0.2s, box-shadow 0.2s',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                                            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.04)';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            e.currentTarget.style.transform = 'none';
+                                                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)';
+                                                        }}
+                                                    >
+                                                        {/* Icon */}
+                                                        <div style={{
+                                                            width: '36px',
+                                                            height: '36px',
+                                                            borderRadius: '0.5rem',
+                                                            background: isCritical ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            flexShrink: 0
+                                                        }}>
+                                                            <AlertTriangle size={18} color={isCritical ? '#ef4444' : '#f59e0b'} />
+                                                        </div>
+
+                                                        {/* Content */}
+                                                        <div style={{ flex: 1, paddingRight: '1.25rem' }}>
+                                                            <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                                {alert.title}
+                                                            </h4>
+                                                            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                                                {alert.desc}
+                                                            </p>
+                                                            {alert.action && (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.775rem', color: isCritical ? '#f87171' : '#eab308', fontWeight: 500 }}>
+                                                                    <Sparkles size={12} style={{ flexShrink: 0 }} />
+                                                                    <span>{alert.action}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Dismiss Button */}
+                                                        <button
+                                                            onClick={() => handleDismissAlert(alert.id)}
+                                                            style={{
+                                                                position: 'absolute',
+                                                                top: '0.75rem',
+                                                                right: '0.75rem',
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                color: 'var(--text-secondary)',
+                                                                cursor: 'pointer',
+                                                                padding: '0.25rem',
+                                                                borderRadius: '50%',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                transition: 'background 0.2s, color 0.2s'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                                                e.currentTarget.style.color = 'var(--text-primary)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.currentTarget.style.background = 'none';
+                                                                e.currentTarget.style.color = 'var(--text-secondary)';
+                                                            }}
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Material Flow Analysis Section */}
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', position: 'relative', zIndex: 20 }}>

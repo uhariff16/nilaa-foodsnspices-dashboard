@@ -3280,7 +3280,7 @@ const Dashboard = (props) => {
             {/* [NEW] Investments Dashboard */}
             {
                 activeTab === 'investments' && (isAdmin || hasPermission('dashboard.investments')) && (
-                    <InvestmentsDashboard isAdmin={isAdmin} />
+                    <InvestmentsDashboard isAdmin={isAdmin} canWrite={isAdmin || hasPermission('dashboard.investments.write')} />
                 )
             }
 

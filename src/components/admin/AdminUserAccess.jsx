@@ -14,7 +14,7 @@ const initialPermissions = {
         simulator: false,
         ytd: false,
         profitHub: false,
-        investments: false
+        investments: { read: false, write: false }
     },
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },
@@ -28,7 +28,13 @@ const initialPermissions = {
 const getRolePermissions = (role) => {
     const p = JSON.parse(JSON.stringify(initialPermissions));
     if (role === 'admin') {
-        Object.keys(p.dashboard).forEach(k => p.dashboard[k] = true);
+        Object.keys(p.dashboard).forEach(k => {
+            if (typeof p.dashboard[k] === 'object') {
+                Object.keys(p.dashboard[k]).forEach(sub => p.dashboard[k][sub] = true);
+            } else {
+                p.dashboard[k] = true;
+            }
+        });
         Object.keys(p.attendance).forEach(k => {
             if (typeof p.attendance[k] === 'object') {
                 Object.keys(p.attendance[k]).forEach(sub => p.attendance[k][sub] = true);
@@ -157,18 +163,49 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                         { id: 'simulator', label: 'Simulator', icon: <Calculator size={14} /> },
                         { id: 'ytd', label: 'YTD Analysis', icon: <TrendingUp size={14} /> },
                         { id: 'profitHub', label: 'Profit Hub', icon: <Target size={14} /> },
-                        { id: 'investments', label: 'Investments', icon: <Briefcase size={14} /> }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => toggle('dashboard', tab.id)}
-                            style={toggleBtnStyle(mergedPerms.dashboard?.[tab.id])}
-                        >
-                            {tab.icon}
-                            {tab.label}
-                        </button>
-                    ))}
+                        { id: 'investments', label: 'Investments', icon: <Briefcase size={14} />, sub: ['read', 'write'] }
+                    ].map(tab => {
+                        const isActive = typeof mergedPerms.dashboard?.[tab.id] === 'object' 
+                            ? Object.values(mergedPerms.dashboard[tab.id]).some(v => v) 
+                            : !!mergedPerms.dashboard?.[tab.id];
+                        return (
+                            <div key={tab.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)', justifyContent: 'center' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => toggle('dashboard', tab.id)}
+                                    style={{ ...toggleBtnStyle(isActive), width: '100%', justifyContent: 'center' }}
+                                >
+                                    {tab.icon}
+                                    {tab.label}
+                                </button>
+                                {isActive && tab.sub && (
+                                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.25rem' }}>
+                                        {tab.sub.map(sub => (
+                                            <button
+                                                key={sub}
+                                                type="button"
+                                                onClick={() => toggle('dashboard', tab.id, sub)}
+                                                style={{
+                                                    padding: '0.25rem 0.5rem',
+                                                    fontSize: '0.65rem',
+                                                    borderRadius: '0.3rem',
+                                                    border: '1px solid',
+                                                    fontWeight: 600,
+                                                    textTransform: 'capitalize',
+                                                    background: mergedPerms.dashboard?.[tab.id]?.[sub] ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                                                    color: mergedPerms.dashboard?.[tab.id]?.[sub] ? '#10b981' : 'var(--text-secondary)',
+                                                    borderColor: mergedPerms.dashboard?.[tab.id]?.[sub] ? '#10b981' : 'var(--glass-border)',
+                                                    cursor: disabled ? 'default' : 'pointer'
+                                                }}
+                                            >
+                                                {sub}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 

@@ -20,7 +20,8 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-const InvestmentsDashboard = ({ isAdmin }) => {
+const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
+    const hasWriteAccess = isAdmin || canWrite;
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -821,7 +822,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                     <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <HardHat size={20} color="#8b5cf6" /> Asset & Machinery Ledger
                     </h3>
-                    {isAdmin && (
+                    {hasWriteAccess && (
                         <button onClick={() => { setEditingAssetId(null); setAssetForm({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '' }); setShowAssetModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Plus size={16} /> Add Asset
                         </button>
@@ -836,7 +837,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Purchase Date</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Total Cost</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Funding %</th>
-                                {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
+                                {hasWriteAccess && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -855,7 +856,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                             </div>
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{pct.toFixed(0)}% Funded</span>
                                         </td>
-                                        {isAdmin && (
+                                        {hasWriteAccess && (
                                             <td style={{ padding: '1rem' }}>
                                                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                                                     <button onClick={() => handleEditAssetClick(asset)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Edit size={16} /></button>
@@ -878,7 +879,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                         <TrendingUp size={20} color="#10b981" /> Partner Contribution History
                     </h3>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        {isAdmin && selectedInvestmentIds.length > 0 && (
+                        {hasWriteAccess && selectedInvestmentIds.length > 0 && (
                             <button 
                                 onClick={handleBulkDeleteInvestments} 
                                 style={{ 
@@ -899,7 +900,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                 <Trash2 size={16} /> Delete Selected ({selectedInvestmentIds.length})
                             </button>
                         )}
-                        {isAdmin && (
+                        {hasWriteAccess && (
                             <button onClick={() => { setEditingInvestmentId(null); setInvestmentForm({ stakeholder_id: 'all', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' }); setPartnerShares({}); setPaidUpfront(false); setUpfrontPayerId(''); setShowInvestmentModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Plus size={16} /> Record Investment
                             </button>
@@ -923,7 +924,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                                 <span style={{ color: 'var(--text-secondary)' }}>• from {debtor}</span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                     <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(amt)}</span>
-                                                    {isAdmin && (
+                                                    {hasWriteAccess && (
                                                         <button 
                                                             onClick={() => {
                                                                 const payerId = stakeholders.find(s => s.name === payer)?.id;
@@ -968,7 +969,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
-                                {isAdmin && (
+                                {hasWriteAccess && (
                                     <th style={{ padding: '1rem', width: '40px' }}>
                                         <input 
                                             type="checkbox" 
@@ -1003,7 +1004,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     Partnership % {sortConfig.key === 'partnership_percentage' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
                                 </th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Notes</th>
-                                {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
+                                {hasWriteAccess && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -1043,7 +1044,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
 
                                 return (
                                     <tr key={inv.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        {isAdmin && (
+                                        {hasWriteAccess && (
                                             <td style={{ padding: '1rem', width: '40px' }}>
                                                 <input 
                                                     type="checkbox" 
@@ -1140,7 +1141,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                         <td style={{ padding: '1rem', fontWeight: 'bold' }}>{formatCurrency(inv.amount)}</td>
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{inv.partnership_percentage ? `${inv.partnership_percentage}%` : '-'}</td>
                                         <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{displayNotes || '-'}</td>
-                                        {isAdmin && (
+                                        {hasWriteAccess && (
                                             <td style={{ padding: '1rem' }}>
                                                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                                                     <button onClick={() => handleEditInvestmentClick(inv)} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Edit size={16} /></button>
@@ -1177,7 +1178,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>To (Receiver)</th>
                                     <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Amount Paid</th>
                                     <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Notes / Remarks</th>
-                                    {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
+                                    {hasWriteAccess && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -1197,7 +1198,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                                 <td style={{ padding: '1rem', fontWeight: 600, color: '#10b981' }}>{receiverName}</td>
                                                 <td style={{ padding: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(amtPaid)}</td>
                                                 <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{displayPaymentNotes || '-'}</td>
-                                                {isAdmin && (
+                                                {hasWriteAccess && (
                                                     <td style={{ padding: '1rem' }}>
                                                         <button onClick={() => handleDeleteInvestment(inv.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Delete payment log & restore outstanding debt balances"><Trash2 size={16} /></button>
                                                     </td>

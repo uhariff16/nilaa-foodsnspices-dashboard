@@ -2163,21 +2163,21 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             gap: isMobile ? '0.75rem' : '1rem', 
                                             marginBottom: '2rem' 
                                         }}>
-                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #10b981' }}>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: `4px solid ${totalProfit < 0 ? '#ef4444' : '#10b981'}` }}>
                                                 <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Profit Pool</span>
-                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#10b981', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalProfit)}</h3>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: totalProfit < 0 ? '#ef4444' : '#10b981', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalProfit)}</h3>
                                             </div>
-                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #3b82f6' }}>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: `4px solid ${totalPaid < 0 ? '#ef4444' : '#3b82f6'}` }}>
                                                 <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Distributed</span>
-                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#3b82f6', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPaid)}</h3>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: totalPaid < 0 ? '#ef4444' : '#3b82f6', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPaid)}</h3>
                                             </div>
                                             <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #ef4444' }}>
                                                 <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Pending Payouts</span>
                                                 <h3 style={{ margin: '0.25rem 0 0 0', color: '#ef4444', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalPending)}</h3>
                                             </div>
-                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: '4px solid #f59e0b' }}>
+                                            <div className="glass-panel" style={{ padding: isMobile ? '0.75rem' : '1.25rem', borderLeft: `4px solid ${totalReserve < 0 ? '#ef4444' : '#f59e0b'}` }}>
                                                 <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Reserved</span>
-                                                <h3 style={{ margin: '0.25rem 0 0 0', color: '#f59e0b', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalReserve)}</h3>
+                                                <h3 style={{ margin: '0.25rem 0 0 0', color: totalReserve < 0 ? '#ef4444' : '#f59e0b', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>{formatCurrency(totalReserve)}</h3>
                                             </div>
                                         </div>
 
@@ -2206,14 +2206,15 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                             return (
                                                                 <tr key={month.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                                                                     <td style={{ padding: '1.25rem 1rem', fontWeight: 700 }}>{month.name}</td>
-                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(mProfit)}</td>
+                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: mProfit < 0 ? '#ef4444' : '#10b981' }}>{formatCurrency(mProfit)}</td>
                                                                     {profitStakeholders.map(s => {
                                                                         const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);
                                                                         const status = p?.status || 'pending';
                                                                         const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
+                                                                        const cellColor = share < 0 ? '#ef4444' : (status === 'paid' ? '#10b981' : '#3b82f6');
                                                                         return (
                                                                             <td key={s.id} style={{ padding: '1rem' }}>
-                                                                                <div style={{ color: status === 'paid' ? '#10b981' : '#3b82f6', fontWeight: 700 }}>{formatCurrency(share)}</div>
+                                                                                <div style={{ color: cellColor, fontWeight: 700 }}>{formatCurrency(share)}</div>
                                                                                 <select
                                                                                     value={status}
                                                                                     onChange={async (e) => {
@@ -2223,7 +2224,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                                         await logProfitHubAction('Status Change', { month: `${month.name} ${selectedYear}`, stakeholder: s.name, status: newVal });
                                                                                         await fetchProfitHubData();
                                                                                     }}
-                                                                                    style={{ fontSize: '0.65rem', padding: '0.2rem', borderRadius: '4px', border: '1px solid var(--glass-border)', background: 'transparent', color: status === 'paid' ? '#10b981' : '#3b82f6' }}
+                                                                                    style={{ fontSize: '0.65rem', padding: '0.2rem', borderRadius: '4px', border: '1px solid var(--glass-border)', background: 'transparent', color: cellColor }}
                                                                                 >
                                                                                     <option value="pending">Wait</option>
                                                                                     <option value="paid">Paid</option>
@@ -2231,7 +2232,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                             </td>
                                                                         );
                                                                     })}
-                                                                    <td style={{ padding: '1rem', fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(reserved)}</td>
+                                                                    <td style={{ padding: '1rem', fontWeight: 700, color: reserved < 0 ? '#ef4444' : '#f59e0b' }}>{formatCurrency(reserved)}</td>
                                                                 </tr>
                                                             );
                                                         })}
@@ -2255,9 +2256,9 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                                 <div style={{ padding: '0.25rem 0.6rem', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 800 }}>{s.default_percent}%</div>
                                                             </div>
                                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                                <div style={{ padding: '0.75rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                                                                <div style={{ padding: '0.75rem', background: s.paid < 0 ? 'rgba(239, 68, 68, 0.05)' : 'rgba(16, 185, 129, 0.05)', borderRadius: '0.75rem', border: s.paid < 0 ? '1px solid rgba(239, 68, 68, 0.1)' : '1px solid rgba(16, 185, 129, 0.1)' }}>
                                                                     <p style={{ margin: 0, fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Paid</p>
-                                                                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(s.paid)}</p>
+                                                                    <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: s.paid < 0 ? '#ef4444' : '#10b981' }}>{formatCurrency(s.paid)}</p>
                                                                 </div>
                                                                 <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
                                                                     <p style={{ margin: 0, fontSize: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Balance</p>
@@ -2266,7 +2267,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                             </div>
                                                             <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6 }}>
                                                                 <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>Total Entitlement</span>
-                                                                <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{formatCurrency(s.total)}</span>
+                                                                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: s.total < 0 ? '#ef4444' : 'var(--text-primary)' }}>{formatCurrency(s.total)}</span>
                                                             </div>
                                                         </div>
                                                     ))}

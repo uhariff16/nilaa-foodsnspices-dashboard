@@ -14,7 +14,8 @@ import {
     Info,
     CheckCircle2,
     AlertCircle,
-    Edit
+    Edit,
+    X
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, ComposedChart, Line } from 'recharts';
 
@@ -38,6 +39,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     // Edit States
     const [editingAssetId, setEditingAssetId] = useState(null);
     const [editingInvestmentId, setEditingInvestmentId] = useState(null);
+    const [originalTransactionRowIds, setOriginalTransactionRowIds] = useState([]);
 
     // Form States
     const [assetForm, setAssetForm] = useState({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '', warranty_expiry_date: '', company_details: '' });
@@ -114,99 +116,77 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
             }
 
             if (isDistribution) {
-                if (investmentForm.stakeholder_id === 'unequal') {
-                    if (editingInvestmentId) {
-                        const payload = {
-                            stakeholder_id: investmentForm.stakeholder_id,
-                            asset_id: investmentForm.asset_id || null,
-                            amount: totalCapital,
-                            partnership_percentage: 100,
-                            investment_date: investmentForm.investment_date,
-                            notes: `[GST: ${gstVal}][Total: ${totalCapital}] ${investmentForm.notes}`.trim()
-                        };
-                        const { error } = await supabase.from('partner_investments').update(payload).eq('id', editingInvestmentId);
-                        if (error) throw error;
-                    } else {
-                        // Distribute to active partners unequally across selected assets (or null if general)
-                        const assetIdList = selectedAssetIds.length > 0 ? selectedAssetIds : [null];
-                        const promises = [];
-                        
-                        assetIdList.forEach((assetId) => {
-                            const assetTotal = assetId 
-                                ? Number(assets.find(a => a.id === assetId)?.total_cost || 0)
-                                : totalAmount;
-                            const ratio = (assetId && totalAmount > 0) ? (assetTotal / totalAmount) : 1;
-                            const assetGst = Math.round(gstVal * ratio);
-                            const assetGrandTotal = assetTotal + assetGst;
+                // If editing a distributed transaction, delete the original rows first
+                if (editingInvestmentId && originalTransactionRowIds.length > 0) {
+                    const { error: delError } = await supabase.from('partner_investments').delete().in('id', originalTransactionRowIds);
+                    if (delError) throw delError;
+                }
 
-                            stakeholders.forEach((partner) => {
-                                const partnerTotalAmount = Number(partnerShares[partner.id]) || 0;
-                                const partnerAmount = Math.round(partnerTotalAmount * (assetGrandTotal / totalAmount));
-                                if (partnerAmount === 0) return;
-                                
-                                const pct = Number(((partnerAmount / assetGrandTotal) * 100).toFixed(2));
-                                const payload = {
-                                    stakeholder_id: partner.id,
-                                    asset_id: assetId,
-                                    amount: partnerAmount,
-                                    partnership_percentage: pct,
-                                    investment_date: investmentForm.investment_date,
-                                    notes: `${upfrontPrefix}[GST: ${assetGst}][Total: ${assetGrandTotal}] ${investmentForm.notes}`.trim()
-                                };
-                                promises.push(supabase.from('partner_investments').insert([payload]));
-                            });
+                if (investmentForm.stakeholder_id === 'unequal') {
+                    // Distribute to active partners unequally across selected assets (or null if general)
+                    const assetIdList = selectedAssetIds.length > 0 ? selectedAssetIds : [null];
+                    const promises = [];
+                    
+                    assetIdList.forEach((assetId) => {
+                        const assetTotal = assetId 
+                            ? Number(assets.find(a => a.id === assetId)?.total_cost || 0)
+                            : totalAmount;
+                        const ratio = (assetId && totalAmount > 0) ? (assetTotal / totalAmount) : 1;
+                        const assetGst = Math.round(gstVal * ratio);
+                        const assetGrandTotal = assetTotal + assetGst;
+
+                        stakeholders.forEach((partner) => {
+                            const partnerTotalAmount = Number(partnerShares[partner.id]) || 0;
+                            const partnerAmount = Math.round(partnerTotalAmount * (assetGrandTotal / totalAmount));
+                            if (partnerAmount === 0) return;
+                            
+                            const pct = Number(((partnerAmount / assetGrandTotal) * 100).toFixed(2));
+                            const payload = {
+                                stakeholder_id: partner.id,
+                                asset_id: assetId,
+                                amount: partnerAmount,
+                                partnership_percentage: pct,
+                                investment_date: investmentForm.investment_date,
+                                notes: `${upfrontPrefix}[GST: ${assetGst}][Total: ${assetGrandTotal}] ${investmentForm.notes}`.trim()
+                            };
+                            promises.push(supabase.from('partner_investments').insert([payload]));
                         });
-                        const results = await Promise.all(promises);
-                        for (const res of results) {
-                            if (res && res.error) throw res.error;
-                        }
+                    });
+                    const results = await Promise.all(promises);
+                    for (const res of results) {
+                        if (res && res.error) throw res.error;
                     }
                 } else {
-                    if (editingInvestmentId) {
-                        const pct = Number((100 / stakeholders.length).toFixed(2));
-                        const partnerAmount = Math.round(totalCapital / stakeholders.length);
-                        const payload = {
-                            stakeholder_id: investmentForm.stakeholder_id,
-                            asset_id: investmentForm.asset_id || null,
-                            amount: partnerAmount,
-                            partnership_percentage: pct,
-                            investment_date: investmentForm.investment_date,
-                            notes: `[GST: ${gstVal}][Total: ${totalCapital}] ${investmentForm.notes}`.trim()
-                        };
-                        const { error } = await supabase.from('partner_investments').update(payload).eq('id', editingInvestmentId);
-                        if (error) throw error;
-                    } else {
-                        // Distribute to all active partners equally across selected assets (or null if general)
-                        const assetIdList = selectedAssetIds.length > 0 ? selectedAssetIds : [null];
-                        const promises = [];
+                    // Distribute to all active partners equally across selected assets (or null if general)
+                    const assetIdList = selectedAssetIds.length > 0 ? selectedAssetIds : [null];
+                    const promises = [];
+                    
+                    assetIdList.forEach((assetId) => {
+                        const assetTotal = assetId 
+                            ? Number(assets.find(a => a.id === assetId)?.total_cost || 0)
+                            : totalAmount;
+                        const ratio = (assetId && totalAmount > 0) ? (assetTotal / totalAmount) : 1;
+                        const assetGst = Math.round(gstVal * ratio);
+                        const assetGrandTotal = assetTotal + assetGst;
                         
-                        assetIdList.forEach((assetId) => {
-                            const assetTotal = assetId 
-                                ? Number(assets.find(a => a.id === assetId)?.total_cost || 0)
-                                : totalAmount;
-                            const ratio = (assetId && totalAmount > 0) ? (assetTotal / totalAmount) : 1;
-                            const assetGst = Math.round(gstVal * ratio);
-                            const assetGrandTotal = assetTotal + assetGst;
-                            
-                            const pct = Number((100 / stakeholders.length).toFixed(2));
-                            const partnerAmount = Math.round(assetGrandTotal / stakeholders.length);
+                        const pct = Number((100 / stakeholders.length).toFixed(2));
+                        const partnerAmount = Math.round(assetGrandTotal / stakeholders.length);
 
-                            stakeholders.forEach((partner) => {
-                                const payload = {
-                                    stakeholder_id: partner.id,
-                                    asset_id: assetId,
-                                    amount: partnerAmount,
-                                    partnership_percentage: pct,
-                                    investment_date: investmentForm.investment_date,
-                                    notes: `${upfrontPrefix}[GST: ${assetGst}][Total: ${assetGrandTotal}] ${investmentForm.notes}`.trim()
-                                };
-                                promises.push(supabase.from('partner_investments').insert([payload]));
-                            });
+                        stakeholders.forEach((partner) => {
+                            const payload = {
+                                stakeholder_id: partner.id,
+                                asset_id: assetId,
+                                amount: partnerAmount,
+                                partnership_percentage: pct,
+                                investment_date: investmentForm.investment_date,
+                                notes: `${upfrontPrefix}[GST: ${assetGst}][Total: ${assetGrandTotal}] ${investmentForm.notes}`.trim()
+                            };
+                            promises.push(supabase.from('partner_investments').insert([payload]));
                         });
-                        const results = await Promise.all(promises);
-                        for (const res of results) {
-                            if (res.error) throw res.error;
-                        }
+                    });
+                    const results = await Promise.all(promises);
+                    for (const res of results) {
+                        if (res.error) throw res.error;
                     }
                 }
             } else {
@@ -426,29 +406,94 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     };
 
     const handleEditInvestmentClick = (inv) => {
-        let formAmount = inv.amount;
-        const isGeneral = !inv.asset_id;
-        if (isGeneral) {
-            const totalCostMatch = inv.notes?.match(/\[Total:\s*(\d+)\]/);
-            if (totalCostMatch) {
-                formAmount = totalCostMatch[1];
-            } else if (inv.partnership_percentage && Number(inv.partnership_percentage) > 0) {
-                formAmount = Math.round(Number(inv.amount) / (Number(inv.partnership_percentage) / 100)).toString();
-            }
-        }
+        // Find all peer rows for the same transaction
+        const cleanNotesVal = inv.notes 
+            ? inv.notes.replace(/\[Settled\]/, '').replace(/\[PaidUpfrontBy:[^\]]+\]/, '').replace(/\[ReimbursementPayment:[^\]]+\]/, '').replace(/\[GST:\s*\d+\]/, '').replace(/\[Total:\s*\d+\]/, '').trim() 
+            : '';
+        const peerRows = investments.filter(i => 
+            i.id !== inv.id && 
+            i.investment_date === inv.investment_date && 
+            (i.notes ? i.notes.replace(/\[Settled\]/, '').replace(/\[PaidUpfrontBy:[^\]]+\]/, '').replace(/\[ReimbursementPayment:[^\]]+\]/, '').replace(/\[GST:\s*\d+\]/, '').replace(/\[Total:\s*\d+\]/, '').trim() : '') === cleanNotesVal
+        );
+        const transactionRows = [inv, ...peerRows];
+        setOriginalTransactionRowIds(transactionRows.map(r => r.id));
 
         const gstMatch = inv.notes?.match(/\[GST:\s*(\d+)\]/);
         const gstVal = gstMatch ? gstMatch[1] : '';
         setGstAmount(gstVal);
 
-        setInvestmentForm({
-            stakeholder_id: inv.stakeholder_id,
-            asset_id: inv.asset_id || '',
-            amount: formAmount,
-            investment_date: inv.investment_date,
-            notes: inv.notes ? inv.notes.replace(/\[GST:\s*\d+\]/, '').replace(/\[Total:\s*\d+\]/, '').replace(/\[PaidUpfrontBy:[^\]]+\]/, '').trim() : '',
-            partnership_percentage: inv.partnership_percentage || ''
-        });
+        const upfrontMatch = inv.notes?.match(/\[PaidUpfrontBy:([^:]+):([^\]]+)\]/);
+        if (upfrontMatch) {
+            setPaidUpfront(true);
+            setUpfrontPayerId(upfrontMatch[1]);
+        } else {
+            setPaidUpfront(false);
+            setUpfrontPayerId('');
+        }
+
+        if (transactionRows.length > 1) {
+            // Distributed transaction
+            const shares = {};
+            transactionRows.forEach(r => {
+                const rGstMatch = r.notes?.match(/\[GST:\s*(\d+)\]/);
+                const rTotalMatch = r.notes?.match(/\[Total:\s*(\d+)\]/);
+                if (rGstMatch && rTotalMatch) {
+                    const gst = Number(rGstMatch[1]);
+                    const total = Number(rTotalMatch[1]);
+                    if (total > 0) {
+                        const ratio = (total - gst) / total;
+                        shares[r.stakeholder_id] = Math.round(Number(r.amount) * ratio).toString();
+                    } else {
+                        shares[r.stakeholder_id] = r.amount.toString();
+                    }
+                } else {
+                    shares[r.stakeholder_id] = r.amount.toString();
+                }
+            });
+            setPartnerShares(shares);
+
+            // Determine if equal or unequal
+            const shareValues = Object.values(shares);
+            const allEqual = shareValues.every(val => val === shareValues[0]);
+            
+            // Reconstruct original base amount (sum of base shares)
+            const baseAmount = shareValues.reduce((sum, v) => sum + Number(v), 0).toString();
+
+            setInvestmentForm({
+                stakeholder_id: allEqual && shareValues.length === stakeholders.length ? 'all' : 'unequal',
+                asset_id: inv.asset_id || '',
+                amount: baseAmount,
+                investment_date: inv.investment_date,
+                notes: cleanNotesVal,
+                partnership_percentage: ''
+            });
+        } else {
+            // Single partner investment
+            let formAmount = inv.amount;
+            const isGeneral = !inv.asset_id;
+            if (isGeneral) {
+                const totalCostMatch = inv.notes?.match(/\[Total:\s*(\d+)\]/);
+                if (totalCostMatch) {
+                    formAmount = totalCostMatch[1];
+                } else if (inv.partnership_percentage && Number(inv.partnership_percentage) > 0) {
+                    formAmount = Math.round(Number(inv.amount) / (Number(inv.partnership_percentage) / 100)).toString();
+                }
+            } else if (gstVal) {
+                // If linked to asset and has GST metadata, amount in DB includes GST. Deduct GST to show base amount.
+                formAmount = (Number(inv.amount) - Number(gstVal)).toString();
+            }
+
+            setPartnerShares({});
+            setInvestmentForm({
+                stakeholder_id: inv.stakeholder_id,
+                asset_id: inv.asset_id || '',
+                amount: formAmount,
+                investment_date: inv.investment_date,
+                notes: cleanNotesVal,
+                partnership_percentage: inv.partnership_percentage || ''
+            });
+        }
+
         setSelectedAssetIds(inv.asset_id ? [inv.asset_id] : []);
         setEditingInvestmentId(inv.id);
         setShowInvestmentModal(true);
@@ -900,7 +945,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{formatCurrency(asset.total_cost)}</td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ width: '100px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '4px' }}>
-                                                <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: pct >= 100 ? '#10b981' : '#f59e0b', borderRadius: '3px' }} />
+                                                <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: Math.round(pct) >= 100 ? '#10b981' : '#f59e0b', borderRadius: '3px' }} />
                                             </div>
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{pct.toFixed(0)}% Funded</span>
                                         </td>
@@ -1263,7 +1308,16 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
             {/* Modals */}
             {showAssetModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '450px', padding: isMobile ? '1.5rem' : '2rem' }}>
+                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '450px', padding: isMobile ? '1.5rem' : '2rem', position: 'relative' }}>
+                        <button 
+                            type="button" 
+                            onClick={() => { setShowAssetModal(false); setEditingAssetId(null); }}
+                            style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem', borderRadius: '50%', transition: 'all 0.2s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'white'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                        >
+                            <X size={20} />
+                        </button>
                         <h2 style={{ marginBottom: '1.5rem' }}>{editingAssetId ? 'Edit Asset Details' : 'Record New Asset'}</h2>
                         <form onSubmit={handleAddAsset} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div>
@@ -1310,7 +1364,16 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
 
             {showInvestmentModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '450px', padding: isMobile ? '1.5rem' : '2rem' }}>
+                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '450px', padding: isMobile ? '1.5rem' : '2rem', position: 'relative' }}>
+                        <button 
+                            type="button" 
+                            onClick={() => { setShowInvestmentModal(false); setEditingInvestmentId(null); setInvestmentForm({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' }); setPartnerShares({}); setSelectedAssetIds([]); setGstAmount(''); setPaidUpfront(false); setUpfrontPayerId(''); }}
+                            style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem', borderRadius: '50%', transition: 'all 0.2s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'white'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                        >
+                            <X size={20} />
+                        </button>
                         <h2 style={{ marginBottom: '1.5rem' }}>{editingInvestmentId ? 'Edit Partner Investment' : 'Record Partner Investment'}</h2>
                         <form onSubmit={handleAddInvestment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div>
@@ -1323,7 +1386,11 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                                     onChange={e => setInvestmentForm({...investmentForm, stakeholder_id: e.target.value})}
                                 >
                                     {editingInvestmentId ? (
-                                        stakeholders.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                        <>
+                                            {investmentForm.stakeholder_id === 'all' && <option value="all">All Partners (Equally Distributed)</option>}
+                                            {investmentForm.stakeholder_id === 'unequal' && <option value="unequal">All Partners (Unequal Distribution)</option>}
+                                            {stakeholders.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </>
                                     ) : (
                                         <>
                                             <option value="all">All Partners (Equally Distributed)</option>
@@ -1389,7 +1456,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                                                                 });
                                                             }}
                                                         />
-                                                        <label htmlFor={`asset-chk-${a.id}`} style={{ fontSize: '0.8rem', cursor: 'pointer', color: 'white' }}>
+                                                        <label htmlFor={`asset-chk-${a.id}`} style={{ fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                                                             {a.name} (₹{Number(a.total_cost).toLocaleString()})
                                                         </label>
                                                     </div>
@@ -1435,7 +1502,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                                     <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Partner Share Amounts (₹)</label>
                                     {stakeholders.map(partner => (
                                         <div key={partner.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                                            <span style={{ fontSize: '0.875rem', color: 'white' }}>{partner.name}</span>
+                                            <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>{partner.name}</span>
                                             <input 
                                                 type="number" 
                                                 required={investmentForm.stakeholder_id === 'unequal'}
@@ -1531,7 +1598,16 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
 
             {showGlobalSettlementModal && globalSettlement.debtorId && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '420px', padding: isMobile ? '1.5rem' : '2rem' }}>
+                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '420px', padding: isMobile ? '1.5rem' : '2rem', position: 'relative' }}>
+                        <button 
+                            type="button" 
+                            onClick={() => { setShowGlobalSettlementModal(false); setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 }); setSettlementAmount(''); setSettlementDate(new Date().toISOString().split('T')[0]); setSettlementNotes(''); }}
+                            style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem', borderRadius: '50%', transition: 'all 0.2s' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'white'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                        >
+                            <X size={20} />
+                        </button>
                         <h2 style={{ marginBottom: '1.25rem', fontSize: '1.25rem', fontWeight: 700 }}>Record Partner Payment</h2>
                         
                         <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -1545,7 +1621,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                             </div>
                             <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '0.25rem 0' }} />
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                <span style={{ color: 'white', fontWeight: 600 }}>Total Outstanding:</span>
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Total Outstanding:</span>
                                 <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(globalSettlement.outstanding)}</span>
                             </div>
                         </div>
@@ -1593,21 +1669,21 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
             )}
 
             <style>{`
-                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 .glass-input {
                     width: 100%;
-                    background: rgba(255, 255, 255, 0.05);
+                    background: var(--glass-highlight);
                     border: 1px solid var(--glass-border);
                     border-radius: 0.5rem;
                     padding: 0.75rem;
-                    color: white;
+                    color: var(--text-primary);
                     outline: none;
                     transition: border-color 0.2s;
                 }
-                .glass-input:focus { border-color: var(--accent-primary); background: rgba(255, 255, 255, 0.1); }
+                .glass-input:focus { border-color: var(--accent-primary); background: var(--row-hover); }
                 .glass-input option {
-                    background: #1e293b;
-                    color: white;
+                    background: var(--bg-secondary);
+                    color: var(--text-primary);
                 }
                 .btn-primary {
                     background: var(--accent-primary);

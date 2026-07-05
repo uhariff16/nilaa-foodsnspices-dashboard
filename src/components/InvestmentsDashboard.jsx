@@ -51,6 +51,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     const [settlementAmount, setSettlementAmount] = useState('');
     const [settlementDate, setSettlementDate] = useState(new Date().toISOString().split('T')[0]);
     const [settlementNotes, setSettlementNotes] = useState('');
+    const [selectedInvestmentIds, setSelectedInvestmentIds] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: 'investment_date', direction: 'desc' });
 
     useEffect(() => {
@@ -543,6 +544,19 @@ const InvestmentsDashboard = ({ isAdmin }) => {
         }
     };
 
+    const handleBulkDeleteInvestments = async () => {
+        if (selectedInvestmentIds.length === 0) return;
+        if (!window.confirm(`Delete the ${selectedInvestmentIds.length} selected contribution records?`)) return;
+        try {
+            const { error } = await supabase.from('partner_investments').delete().in('id', selectedInvestmentIds);
+            if (error) throw error;
+            setSelectedInvestmentIds([]);
+            fetchData();
+        } catch (err) {
+            alert(`Failed to delete records: ${err.message}`);
+        }
+    };
+
     // Calculations
     const totalAssetValue = assets.reduce((sum, a) => sum + Number(a.total_cost), 0);
     const totalInvested = investments.reduce((sum, i) => sum + Number(i.amount), 0);
@@ -859,15 +873,38 @@ const InvestmentsDashboard = ({ isAdmin }) => {
 
             {/* Investment Records */}
             <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                         <TrendingUp size={20} color="#10b981" /> Partner Contribution History
                     </h3>
-                    {isAdmin && (
-                        <button onClick={() => { setEditingInvestmentId(null); setInvestmentForm({ stakeholder_id: 'all', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' }); setPartnerShares({}); setPaidUpfront(false); setUpfrontPayerId(''); setShowInvestmentModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Plus size={16} /> Record Investment
-                        </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {isAdmin && selectedInvestmentIds.length > 0 && (
+                            <button 
+                                onClick={handleBulkDeleteInvestments} 
+                                style={{ 
+                                    background: '#ef4444', 
+                                    color: 'white', 
+                                    border: 'none', 
+                                    borderRadius: '0.5rem', 
+                                    padding: '0.5rem 1rem', 
+                                    cursor: 'pointer', 
+                                    fontWeight: 600, 
+                                    fontSize: '0.875rem',
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '0.5rem',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <Trash2 size={16} /> Delete Selected ({selectedInvestmentIds.length})
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <button onClick={() => { setEditingInvestmentId(null); setInvestmentForm({ stakeholder_id: 'all', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' }); setPartnerShares({}); setPaidUpfront(false); setUpfrontPayerId(''); setShowInvestmentModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Plus size={16} /> Record Investment
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {Object.keys(reimbursementSummary).length > 0 && (
                     <div className="glass-panel animate-fade-in" style={{ padding: '1.25rem', marginBottom: '1.5rem', borderLeft: '4px solid #f59e0b', background: 'rgba(245, 158, 11, 0.02)' }}>
@@ -931,6 +968,22 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                {isAdmin && (
+                                    <th style={{ padding: '1rem', width: '40px' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={getSortedInvestments().length > 0 && selectedInvestmentIds.length === getSortedInvestments().length}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedInvestmentIds(getSortedInvestments().map(i => i.id));
+                                                } else {
+                                                    setSelectedInvestmentIds([]);
+                                                }
+                                            }}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                    </th>
+                                )}
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('investment_date')}>
                                     Date {sortConfig.key === 'investment_date' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '↕'}
                                 </th>
@@ -990,6 +1043,22 @@ const InvestmentsDashboard = ({ isAdmin }) => {
 
                                 return (
                                     <tr key={inv.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        {isAdmin && (
+                                            <td style={{ padding: '1rem', width: '40px' }}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedInvestmentIds.includes(inv.id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedInvestmentIds(prev => [...prev, inv.id]);
+                                                        } else {
+                                                            setSelectedInvestmentIds(prev => prev.filter(id => id !== inv.id));
+                                                        }
+                                                    }}
+                                                    style={{ cursor: 'pointer' }}
+                                                />
+                                            </td>
+                                        )}
                                         <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{new Date(inv.investment_date).toLocaleDateString()}</td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>

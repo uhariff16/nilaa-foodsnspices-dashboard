@@ -49,6 +49,8 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     const [showGlobalSettlementModal, setShowGlobalSettlementModal] = useState(false);
     const [globalSettlement, setGlobalSettlement] = useState({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 });
     const [settlementAmount, setSettlementAmount] = useState('');
+    const [settlementDate, setSettlementDate] = useState(new Date().toISOString().split('T')[0]);
+    const [settlementNotes, setSettlementNotes] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'investment_date', direction: 'desc' });
 
     useEffect(() => {
@@ -293,6 +295,7 @@ const InvestmentsDashboard = ({ isAdmin }) => {
 
             let remainingPayment = enteredAmount;
             const promises = [];
+            const appliedList = [];
 
             for (const inv of debtorInvestments) {
                 if (remainingPayment <= 0) break;
@@ -306,6 +309,8 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                 const paymentForThisRow = Math.min(remainingPayment, rowOwed);
                 const nextReimbursed = currentReimbursed + paymentForThisRow;
                 
+                appliedList.push(`${inv.id}=${paymentForThisRow}`);
+
                 let nextNotes = inv.notes || '';
                 // Remove existing [Reimbursed: X] tag
                 nextNotes = nextNotes.replace(/\[Reimbursed:\s*\d+\]/, '');
@@ -325,9 +330,24 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                 if (res && res.error) throw res.error;
             }
 
+            // Create a payment log entry in partner_investments
+            const paymentNotes = `[ReimbursementPayment:${enteredAmount}:${globalSettlement.payerId}:${globalSettlement.payerName}:${appliedList.join(',')}] ${settlementNotes.trim()}`;
+            const paymentPayload = {
+                stakeholder_id: globalSettlement.debtorId,
+                asset_id: null,
+                amount: 0,
+                investment_date: settlementDate,
+                notes: paymentNotes
+            };
+
+            const { error: insertError } = await supabase.from('partner_investments').insert([paymentPayload]);
+            if (insertError) throw insertError;
+
             setShowGlobalSettlementModal(false);
             setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 });
             setSettlementAmount('');
+            setSettlementDate(new Date().toISOString().split('T')[0]);
+            setSettlementNotes('');
             fetchData();
         } catch (err) { alert(err.message); }
     };
@@ -341,7 +361,8 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     };
 
     const getSortedInvestments = () => {
-        const sorted = [...investments];
+        const filtered = investments.filter(inv => !inv.notes?.includes('[ReimbursementPayment:'));
+        const sorted = [...filtered];
         sorted.sort((a, b) => {
             let valA, valB;
 
@@ -464,9 +485,62 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     };
 
     const handleDeleteInvestment = async (id) => {
-        if (!window.confirm("Delete this investment record?")) return;
-        await supabase.from('partner_investments').delete().eq('id', id);
-        fetchData();
+        const inv = investments.find(i => i.id === id);
+        const isPayment = inv?.notes?.includes('[ReimbursementPayment:');
+
+        if (isPayment) {
+            if (!window.confirm("Delete this payment record? This will revert the outstanding balances of the affected investments.")) return;
+            try {
+                const match = inv.notes.match(/\[ReimbursementPayment:([^:]+):([^:]+):([^:]+):([^\]]*)\]/);
+                if (match) {
+                    const appliedDebtsStr = match[4];
+                    if (appliedDebtsStr) {
+                        const appliedDebts = appliedDebtsStr.split(',');
+                        const updatePromises = [];
+                        
+                        for (const debt of appliedDebts) {
+                            const [debtId, paidAmtStr] = debt.split('=');
+                            const paidAmt = Number(paidAmtStr);
+                            
+                            const debtInv = investments.find(i => i.id === debtId);
+                            if (debtInv) {
+                                const originalNotes = debtInv.notes || '';
+                                const reimbMatch = originalNotes.match(/\[Reimbursed:\s*(\d+)\]/);
+                                const currentReimb = reimbMatch ? Number(reimbMatch[1]) : 0;
+                                const nextReimb = Math.max(0, currentReimb - paidAmt);
+                                
+                                let nextNotes = originalNotes.replace(/\[Reimbursed:\s*\d+\]/, '');
+                                nextNotes = nextNotes.replace(/\[Settled\]/, '');
+                                
+                                if (nextReimb > 0) {
+                                    nextNotes = `[Reimbursed: ${nextReimb}]${nextNotes.trim()}`;
+                                } else {
+                                    nextNotes = nextNotes.trim();
+                                }
+                                
+                                updatePromises.push(supabase.from('partner_investments').update({ notes: nextNotes }).eq('id', debtId));
+                            }
+                        }
+                        const results = await Promise.all(updatePromises);
+                        for (const res of results) {
+                            if (res && res.error) throw res.error;
+                        }
+                    }
+                }
+            } catch (err) {
+                alert(`Failed to revert payment: ${err.message}`);
+                return;
+            }
+        } else {
+            if (!window.confirm("Delete this investment record?")) return;
+        }
+
+        const { error } = await supabase.from('partner_investments').delete().eq('id', id);
+        if (error) {
+            alert(`Failed to delete record: ${error.message}`);
+        } else {
+            fetchData();
+        }
     };
 
     // Calculations
@@ -1013,6 +1087,61 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                 </div>
             </div>
 
+            {/* Partner Payment History */}
+            <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <IndianRupee size={20} color="#10b981" /> Partner Reimbursement Payment History
+                    </h3>
+                </div>
+                {investments.filter(inv => inv.notes?.includes('[ReimbursementPayment:')).length === 0 ? (
+                    <div style={{ color: 'var(--text-secondary)', padding: '1rem', textAlign: 'center', fontSize: '0.9rem' }}>
+                        No reimbursement payments recorded yet.
+                    </div>
+                ) : (
+                    <div className="custom-scrollbar" style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Payment Date</th>
+                                    <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>From (Debtor)</th>
+                                    <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>To (Receiver)</th>
+                                    <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Amount Paid</th>
+                                    <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Notes / Remarks</th>
+                                    {isAdmin && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {investments
+                                    .filter(inv => inv.notes?.includes('[ReimbursementPayment:'))
+                                    .sort((a, b) => new Date(b.investment_date || 0) - new Date(a.investment_date || 0))
+                                    .map(inv => {
+                                        const match = inv.notes.match(/\[ReimbursementPayment:([^:]+):([^:]+):([^:]+):([^\]]*)\]/);
+                                        const amtPaid = match ? Number(match[1]) : 0;
+                                        const receiverName = match ? match[3] : 'Partner';
+                                        const displayPaymentNotes = inv.notes.replace(/\[ReimbursementPayment:[^\]]+\]/, '').trim();
+
+                                        return (
+                                            <tr key={inv.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{new Date(inv.investment_date).toLocaleDateString()}</td>
+                                                <td style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6' }}>{inv.profit_stakeholders?.name}</td>
+                                                <td style={{ padding: '1rem', fontWeight: 600, color: '#10b981' }}>{receiverName}</td>
+                                                <td style={{ padding: '1rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(amtPaid)}</td>
+                                                <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{displayPaymentNotes || '-'}</td>
+                                                {isAdmin && (
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <button onClick={() => handleDeleteInvestment(inv.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Delete payment log & restore outstanding debt balances"><Trash2 size={16} /></button>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
             {/* Modals */}
             {showAssetModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
@@ -1307,8 +1436,28 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     placeholder={`Max ₹${globalSettlement.outstanding}`}
                                 />
                             </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Payment Date</label>
+                                <input 
+                                    required 
+                                    type="date" 
+                                    className="glass-input" 
+                                    value={settlementDate} 
+                                    onChange={e => setSettlementDate(e.target.value)} 
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Notes / Remarks (Optional)</label>
+                                <textarea 
+                                    className="glass-input" 
+                                    value={settlementNotes} 
+                                    onChange={e => setSettlementNotes(e.target.value)} 
+                                    placeholder="e.g. Bank transfer transaction ID"
+                                    rows={2}
+                                />
+                            </div>
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                                <button type="button" onClick={() => { setShowGlobalSettlementModal(false); setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 }); setSettlementAmount(''); }} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
+                                <button type="button" onClick={() => { setShowGlobalSettlementModal(false); setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 }); setSettlementAmount(''); setSettlementDate(new Date().toISOString().split('T')[0]); setSettlementNotes(''); }} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
                                 <button type="submit" style={{ flex: 1, background: '#10b981', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>Save Payment</button>
                             </div>
                         </form>

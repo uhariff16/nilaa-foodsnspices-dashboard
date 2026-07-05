@@ -4,6 +4,7 @@ import FileUpload from './components/FileUpload';
 import Dashboard from './components/Dashboard';
 import AdminPanel from './components/admin/AdminPanel';
 import Login from './components/Login';
+import ResetPassword from './components/ResetPassword';
 import AttendancePage from './components/AttendancePage';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -289,6 +290,7 @@ const App = () => {
                     <ErrorBoundary>
                         <Routes>
                             <Route path="/login" element={<Login />} />
+                            <Route path="/reset-password" element={<ResetPassword />} />
                             <Route
                                 path="/admin"
                                 element={

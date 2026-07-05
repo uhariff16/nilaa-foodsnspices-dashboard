@@ -61,8 +61,10 @@ const Dashboard = (props) => {
     const { data, onReset, onRefresh, loading } = props;
     const { logout, user, role, isAdmin, canAccessAttendance, hasPermission } = useAuth();
     const navigate = useNavigate();
-    // Default to Overview tab (per user request)
-    const [activeTab, setActiveTab] = useState('overview');
+    // Default to last active tab from localStorage if available (per user request)
+    const [activeTab, setActiveTab] = useState(() => {
+        return localStorage.getItem('dashboard_active_tab') || 'overview';
+    });
     const [showExecutiveMenu, setShowExecutiveMenu] = useState(false);
     const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
 
@@ -116,6 +118,20 @@ const Dashboard = (props) => {
     useEffect(() => {
         localStorage.setItem('dashboard_active_tab', activeTab);
     }, [activeTab]);
+
+    // Validate tab permissions and fallback to overview if unauthorized
+    useEffect(() => {
+        if (!role) return;
+        const restrictedTabs = ['sales', 'expenses', 'procurement', 'stock', 'production', 'insights', 'simulator', 'ytd', 'profitHub', 'investments'];
+        if (restrictedTabs.includes(activeTab)) {
+            const hasTabPerm = activeTab === 'simulator' 
+                ? (isAdmin || hasPermission('dashboard.simulator'))
+                : (isAdmin || hasPermission(`dashboard.${activeTab}`));
+            if (!hasTabPerm) {
+                setActiveTab('overview');
+            }
+        }
+    }, [role, hasPermission, activeTab]);
 
     const [salesViewMode, setSalesViewMode] = useState('summary'); // 'summary' | 'item'
     const [expenseSearch, setExpenseSearch] = useState('');

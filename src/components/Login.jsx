@@ -1,29 +1,46 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lock, Mail, Loader2, Play } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 import logo from '../assets/logo.png';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [isForgotMode, setIsForgotMode] = useState(false);
+    
     const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const from = location.state?.from?.pathname || "/";
+    
+    // Check if redirect state had a success message (e.g. from password reset page)
+    const redirectMessage = location.state?.message;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setSuccessMessage('');
         setIsLoading(true);
 
         try {
-            await login(email, password);
-            navigate('/', { replace: true });
+            if (isForgotMode) {
+                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/reset-password`
+                });
+                if (resetError) throw resetError;
+                setSuccessMessage("A password recovery link has been sent to your email address. Please check your inbox.");
+            } else {
+                await login(email, password);
+                navigate('/', { replace: true });
+            }
         } catch (err) {
-            console.error("Login failed:", err);
+            console.error(isForgotMode ? "Password reset request failed:" : "Login failed:", err);
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -80,10 +97,10 @@ const Login = () => {
                         Nilaa Foods & Spices
                     </h2>
                     <h1 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', opacity: 0.8 }}>
-                        Welcome Back
+                        {isForgotMode ? 'Recover Password' : 'Welcome Back'}
                     </h1>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-                        Sign in to access your dashboard
+                        {isForgotMode ? 'Enter your email to receive a recovery link' : 'Sign in to access your dashboard'}
                     </p>
                 </div>
 
@@ -100,6 +117,23 @@ const Login = () => {
                         gap: '0.5rem'
                     }}>
                         <span style={{ fontWeight: 600 }}>Error:</span> {error}
+                    </div>
+                )}
+
+                {(successMessage || redirectMessage) && (
+                    <div style={{
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.2)',
+                        color: '#a7f3d0',
+                        padding: '1rem',
+                        borderRadius: '0.75rem',
+                        fontSize: '0.875rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}>
+                        <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                        <span>{successMessage || redirectMessage}</span>
                     </div>
                 )}
 
@@ -146,47 +180,89 @@ const Login = () => {
                         </div>
                     </div>
 
-                    {/* Password Input */}
-                    <div style={{ position: 'relative' }}>
-                        <label style={{
-                            display: 'block',
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            fontWeight: 500,
-                            marginBottom: '0.5rem',
-                            paddingLeft: '0.25rem'
-                        }}>Password</label>
+                    {/* Password Input (Login Mode only) */}
+                    {!isForgotMode && (
                         <div style={{ position: 'relative' }}>
-                            <Lock size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-                            <input
-                                type="password"
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                style={{
-                                    width: '100%',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid var(--glass-border)',
-                                    borderRadius: '0.75rem',
-                                    padding: '0.875rem 1rem 0.875rem 3rem',
-                                    color: 'var(--text-primary)',
-                                    fontSize: '1rem',
-                                    outline: 'none',
-                                    transition: 'all 0.2s',
-                                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
-                                }}
-                                onFocus={(e) => {
-                                    e.target.style.borderColor = '#3b82f6';
-                                    e.target.style.background = 'rgba(15, 23, 42, 0.8)';
-                                }}
-                                onBlur={(e) => {
-                                    e.target.style.borderColor = 'var(--glass-border)';
-                                    e.target.style.background = 'rgba(15, 23, 42, 0.6)';
-                                }}
-                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <label style={{
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '0.875rem',
+                                    fontWeight: 500,
+                                    paddingLeft: '0.25rem'
+                                }}>Password</label>
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsForgotMode(true); setError(''); setSuccessMessage(''); }}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#3b82f6',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        outline: 'none'
+                                    }}
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                                <Lock size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    required
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    style={{
+                                        width: '100%',
+                                        background: 'rgba(15, 23, 42, 0.6)',
+                                        border: '1px solid var(--glass-border)',
+                                        borderRadius: '0.75rem',
+                                        padding: '0.875rem 3rem 0.875rem 3rem',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '1rem',
+                                        outline: 'none',
+                                        transition: 'all 0.2s',
+                                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                                    }}
+                                    onFocus={(e) => {
+                                        e.target.style.borderColor = '#3b82f6';
+                                        e.target.style.background = 'rgba(15, 23, 42, 0.8)';
+                                    }}
+                                    onBlur={(e) => {
+                                        e.target.style.borderColor = 'var(--glass-border)';
+                                        e.target.style.background = 'rgba(15, 23, 42, 0.6)';
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '1rem',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--text-secondary)',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.25rem',
+                                        borderRadius: '50%',
+                                        transition: 'color 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#3b82f6'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Submit Button */}
                     <button
@@ -224,10 +300,33 @@ const Login = () => {
                             }
                         }}
                     >
-                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : "Sign In"}
+                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : (isForgotMode ? "Send Recovery Link" : "Sign In")}
                         {!isLoading && <Play size={16} fill="currentColor" />}
                     </button>
 
+                    {/* Back to Login button in forgot mode */}
+                    {isForgotMode && (
+                        <button
+                            type="button"
+                            onClick={() => { setIsForgotMode(false); setError(''); setSuccessMessage(''); }}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--text-secondary)',
+                                fontSize: '0.9rem',
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                                padding: '0.5rem',
+                                display: 'block',
+                                margin: '0 auto',
+                                outline: 'none'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.color = 'white'}
+                            onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                        >
+                            Back to Sign In
+                        </button>
+                    )}
                 </form>
 
                 <div style={{ textAlign: 'center', marginTop: '1rem', opacity: 0.6 }}>

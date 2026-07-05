@@ -46,8 +46,8 @@ const InvestmentsDashboard = ({ isAdmin }) => {
     const [upfrontPayerId, setUpfrontPayerId] = useState('');
     const [selectedAssetIds, setSelectedAssetIds] = useState([]);
     const [gstAmount, setGstAmount] = useState('');
-    const [showSettlementModal, setShowSettlementModal] = useState(false);
-    const [settlementInvestment, setSettlementInvestment] = useState(null);
+    const [showGlobalSettlementModal, setShowGlobalSettlementModal] = useState(false);
+    const [globalSettlement, setGlobalSettlement] = useState({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 });
     const [settlementAmount, setSettlementAmount] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'investment_date', direction: 'desc' });
 
@@ -262,38 +262,71 @@ const InvestmentsDashboard = ({ isAdmin }) => {
         } catch (err) { alert(err.message); }
     };
 
-    const handleSaveSettlement = async (e) => {
+    const handleSaveGlobalSettlement = async (e) => {
         e.preventDefault();
-        if (!settlementInvestment) return;
+        if (!globalSettlement.payerId || !globalSettlement.debtorId) return;
         try {
             const enteredAmount = Number(settlementAmount);
             if (enteredAmount <= 0) throw new Error('Please enter a valid amount.');
-
-            const originalNotes = settlementInvestment.notes || '';
-            const reimbMatch = originalNotes.match(/\[Reimbursed:\s*(\d+)\]/);
-            const currentReimbursed = reimbMatch ? Number(reimbMatch[1]) : 0;
-            const nextReimbursed = currentReimbursed + enteredAmount;
-            
-            const originalOwed = Number(settlementInvestment.amount);
-            const remainingOwed = originalOwed - currentReimbursed;
-
-            if (enteredAmount > remainingOwed) {
-                throw new Error(`Entered amount exceeds remaining owed of ${remainingOwed}`);
+            if (enteredAmount > globalSettlement.outstanding) {
+                throw new Error(`Entered amount exceeds remaining outstanding of ${globalSettlement.outstanding}`);
             }
 
-            let nextNotes = originalNotes.replace(/\[Reimbursed:\s*\d+\]/, '');
-            nextNotes = `[Reimbursed: ${nextReimbursed}]${nextNotes}`;
+            // Find all investments where debtor is the stakeholder and payer paid upfront
+            const debtorInvestments = investments.filter(inv => {
+                const upfrontMatch = inv.notes?.match(/\[PaidUpfrontBy:([^:]+):([^\]]+)\]/);
+                if (upfrontMatch) {
+                    const payerId = upfrontMatch[1];
+                    const reimbMatch = inv.notes?.match(/\[Reimbursed:\s*(\d+)\]/);
+                    const rowReimbAmt = reimbMatch ? Number(reimbMatch[1]) : 0;
+                    const rowOwed = Number(inv.amount) - rowReimbAmt;
+                    const isSettled = inv.notes?.includes('[Settled]') || rowOwed <= 0;
+                    const isPayer = inv.stakeholder_id === payerId;
+                    
+                    return inv.stakeholder_id === globalSettlement.debtorId && payerId === globalSettlement.payerId && !isPayer && !isSettled;
+                }
+                return false;
+            });
 
-            if (nextReimbursed >= originalOwed) {
-                // Fully settled
-                nextNotes = `[Settled]${nextNotes}`;
+            // Sort by date ascending (oldest first)
+            debtorInvestments.sort((a, b) => new Date(a.investment_date || 0) - new Date(b.investment_date || 0));
+
+            let remainingPayment = enteredAmount;
+            const promises = [];
+
+            for (const inv of debtorInvestments) {
+                if (remainingPayment <= 0) break;
+
+                const reimbMatch = inv.notes?.match(/\[Reimbursed:\s*(\d+)\]/);
+                const currentReimbursed = reimbMatch ? Number(reimbMatch[1]) : 0;
+                const rowOwed = Number(inv.amount) - currentReimbursed;
+
+                if (rowOwed <= 0) continue;
+
+                const paymentForThisRow = Math.min(remainingPayment, rowOwed);
+                const nextReimbursed = currentReimbursed + paymentForThisRow;
+                
+                let nextNotes = inv.notes || '';
+                // Remove existing [Reimbursed: X] tag
+                nextNotes = nextNotes.replace(/\[Reimbursed:\s*\d+\]/, '');
+                // Prepend new [Reimbursed: X] tag
+                nextNotes = `[Reimbursed: ${nextReimbursed}]${nextNotes.replace(/\[Settled\]/, '').trim()}`;
+
+                if (nextReimbursed >= Number(inv.amount)) {
+                    nextNotes = `[Settled]${nextNotes}`;
+                }
+
+                promises.push(supabase.from('partner_investments').update({ notes: nextNotes }).eq('id', inv.id));
+                remainingPayment -= paymentForThisRow;
             }
 
-            const { error } = await supabase.from('partner_investments').update({ notes: nextNotes }).eq('id', settlementInvestment.id);
-            if (error) throw error;
+            const results = await Promise.all(promises);
+            for (const res of results) {
+                if (res && res.error) throw res.error;
+            }
 
-            setShowSettlementModal(false);
-            setSettlementInvestment(null);
+            setShowGlobalSettlementModal(false);
+            setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 });
             setSettlementAmount('');
             fetchData();
         } catch (err) { alert(err.message); }
@@ -775,9 +808,43 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                                         {Object.entries(debtors).map(([debtor, amt]) => (
-                                            <div key={debtor} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                            <div key={debtor} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', padding: '0.15rem 0' }}>
                                                 <span style={{ color: 'var(--text-secondary)' }}>• from {debtor}</span>
-                                                <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(amt)}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(amt)}</span>
+                                                    {isAdmin && (
+                                                        <button 
+                                                            onClick={() => {
+                                                                const payerId = stakeholders.find(s => s.name === payer)?.id;
+                                                                const debtorId = stakeholders.find(s => s.name === debtor)?.id;
+                                                                if (payerId && debtorId) {
+                                                                    setGlobalSettlement({
+                                                                        payerId,
+                                                                        payerName: payer,
+                                                                        debtorId,
+                                                                        debtorName: debtor,
+                                                                        outstanding: amt
+                                                                    });
+                                                                    setSettlementAmount(amt.toString());
+                                                                    setShowGlobalSettlementModal(true);
+                                                                }
+                                                            }}
+                                                            style={{
+                                                                background: '#f59e0b',
+                                                                color: '#1e293b',
+                                                                border: 'none',
+                                                                borderRadius: '4px',
+                                                                padding: '2px 8px',
+                                                                fontSize: '0.7rem',
+                                                                cursor: 'pointer',
+                                                                fontWeight: 700,
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                        >
+                                                            Settle / Pay
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -910,28 +977,6 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                                                                 }}>
                                                                     Owes ₹{rowOwed.toLocaleString()} to {payerName} {rowReimbAmt > 0 && `(Paid ₹${rowReimbAmt.toLocaleString()})`}
                                                                 </span>
-                                                                {isAdmin && (
-                                                                    <button 
-                                                                        onClick={() => {
-                                                                            setSettlementInvestment(inv);
-                                                                            setSettlementAmount(rowOwed.toString());
-                                                                            setShowSettlementModal(true);
-                                                                        }}
-                                                                        style={{
-                                                                            background: '#f59e0b',
-                                                                            color: '#1e293b',
-                                                                            border: 'none',
-                                                                            borderRadius: '4px',
-                                                                            padding: '2px 6px',
-                                                                            fontSize: '0.65rem',
-                                                                            cursor: 'pointer',
-                                                                            fontWeight: 700,
-                                                                            transition: 'all 0.2s'
-                                                                        }}
-                                                                    >
-                                                                        Settle / Pay
-                                                                    </button>
-                                                                )}
                                                             </div>
                                                         )
                                                     )
@@ -1228,67 +1273,48 @@ const InvestmentsDashboard = ({ isAdmin }) => {
                 </div>
             )}
 
-            {showSettlementModal && settlementInvestment && (() => {
-                const reimbMatch = settlementInvestment.notes?.match(/\[Reimbursed:\s*(\d+)\]/);
-                const currentReimbursed = reimbMatch ? Number(reimbMatch[1]) : 0;
-                const originalOwed = Number(settlementInvestment.amount);
-                const remainingOwed = originalOwed - currentReimbursed;
-                const debtorName = settlementInvestment.profit_stakeholders?.name || 'Partner';
-                
-                const upfrontMatch = settlementInvestment.notes?.match(/\[PaidUpfrontBy:([^:]+):([^\]]+)\]/);
-                const payerName = upfrontMatch ? upfrontMatch[2] : 'Payer';
-
-                return (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-                        <div className="glass-panel" style={{ width: isMobile ? '95%' : '420px', padding: isMobile ? '1.5rem' : '2rem' }}>
-                            <h2 style={{ marginBottom: '1.25rem', fontSize: '1.25rem', fontWeight: 700 }}>Record Partner Payment</h2>
-                            
-                            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>Debtor:</span>
-                                    <span style={{ fontWeight: 600, color: 'white' }}>{debtorName}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>Paid to:</span>
-                                    <span style={{ fontWeight: 600, color: '#10b981' }}>{payerName}</span>
-                                </div>
-                                <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '0.25rem 0' }} />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>Original Owed:</span>
-                                    <span style={{ fontWeight: 500, color: 'white' }}>{formatCurrency(originalOwed)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>Previously Paid:</span>
-                                    <span style={{ fontWeight: 500, color: '#10b981' }}>{formatCurrency(currentReimbursed)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                    <span style={{ color: 'white', fontWeight: 600 }}>Remaining Balance:</span>
-                                    <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(remainingOwed)}</span>
-                                </div>
+            {showGlobalSettlementModal && globalSettlement.debtorId && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+                    <div className="glass-panel" style={{ width: isMobile ? '95%' : '420px', padding: isMobile ? '1.5rem' : '2rem' }}>
+                        <h2 style={{ marginBottom: '1.25rem', fontSize: '1.25rem', fontWeight: 700 }}>Record Partner Payment</h2>
+                        
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Debtor (Payer):</span>
+                                <span style={{ fontWeight: 600, color: '#f59e0b' }}>{globalSettlement.debtorName}</span>
                             </div>
-
-                            <form onSubmit={handleSaveSettlement} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Payment Amount (₹)</label>
-                                    <input 
-                                        required 
-                                        type="number" 
-                                        className="glass-input" 
-                                        max={remainingOwed}
-                                        value={settlementAmount} 
-                                        onChange={e => setSettlementAmount(e.target.value)} 
-                                        placeholder={`Max ₹${remainingOwed}`}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                                    <button type="button" onClick={() => { setShowSettlementModal(false); setSettlementInvestment(null); }} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
-                                    <button type="submit" style={{ flex: 1, background: '#10b981', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>Save Payment</button>
-                                </div>
-                            </form>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Paid to (Receiver):</span>
+                                <span style={{ fontWeight: 600, color: '#10b981' }}>{globalSettlement.payerName}</span>
+                            </div>
+                            <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: '0.25rem 0' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                                <span style={{ color: 'white', fontWeight: 600 }}>Total Outstanding:</span>
+                                <span style={{ fontWeight: 700, color: '#f59e0b' }}>{formatCurrency(globalSettlement.outstanding)}</span>
+                            </div>
                         </div>
+
+                        <form onSubmit={handleSaveGlobalSettlement} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Payment Amount (₹)</label>
+                                <input 
+                                    required 
+                                    type="number" 
+                                    className="glass-input" 
+                                    max={globalSettlement.outstanding}
+                                    value={settlementAmount} 
+                                    onChange={e => setSettlementAmount(e.target.value)} 
+                                    placeholder={`Max ₹${globalSettlement.outstanding}`}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                                <button type="button" onClick={() => { setShowGlobalSettlementModal(false); setGlobalSettlement({ payerId: '', payerName: '', debtorId: '', debtorName: '', outstanding: 0 }); setSettlementAmount(''); }} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>
+                                <button type="submit" style={{ flex: 1, background: '#10b981', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>Save Payment</button>
+                            </div>
+                        </form>
                     </div>
-                );
-            })()}
+                </div>
+            )}
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

@@ -1049,6 +1049,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 </div>
             ) : (
                 <>
+                    {/* Page Headings */}
+                    {!forceTab ? (
+                        <h1 style={{ margin: '0 0 1.5rem 0', fontSize: isMobile ? '1.5rem' : '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-primary)' }}>
+                            <TrendingUp size={isMobile ? 24 : 32} color="#3b82f6" /> YTD Performance Analysis
+                        </h1>
+                    ) : forceTab === 'profitHub' ? (
+                        <h1 style={{ margin: '0 0 1.5rem 0', fontSize: isMobile ? '1.5rem' : '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-primary)' }}>
+                            <Wallet size={isMobile ? 24 : 32} color="#3b82f6" /> {isMobile ? 'Profit Hub' : 'Profit Command Center'}
+                        </h1>
+                    ) : null}
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             {!forceTab && (
@@ -2086,11 +2097,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 marginBottom: '2rem',
                                 gap: isMobile ? '1rem' : '0'
                             }}>
-                                <div>
-                                    <h1 style={{ margin: 0, fontSize: isMobile ? '1.5rem' : '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <Wallet size={isMobile ? 24 : 32} color="#3b82f6" /> {isMobile ? 'Profit Hub' : 'Profit Command Center'}
-                                    </h1>
-                                </div>
+                                <div></div>
                                 {isAdmin && (
                                     <button
                                         onClick={async () => {

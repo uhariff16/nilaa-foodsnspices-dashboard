@@ -667,6 +667,10 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
 
     return (
         <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
+            {/* Tab Heading */}
+            <h1 style={{ margin: '0 0 1.5rem 0', fontSize: isMobile ? '1.5rem' : '1.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-primary)' }}>
+                <Briefcase size={isMobile ? 24 : 32} color="#3b82f6" /> Partner Investments
+            </h1>
             {/* Header Cards */}
             <div className="responsive-grid-4" style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
                 <div className="glass-panel" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05))', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '135px' }}>

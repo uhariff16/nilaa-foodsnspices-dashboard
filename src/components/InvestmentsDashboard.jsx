@@ -568,26 +568,23 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     // Helper to calculate correct asset funding percentage incorporating any recorded GST
     const getAssetFundingDetails = (asset) => {
         const assetInvestments = investments.filter(i => i.asset_id === asset.id);
-        const uniqueTransactions = [];
-        const processedKeys = new Set();
-        assetInvestments.forEach(inv => {
-            const cleanNotes = inv.notes 
-                ? inv.notes.replace(/\[Settled\]/, '').replace(/\[PaidUpfrontBy:[^\]]+\]/, '').trim() 
-                : '';
-            const key = `${inv.investment_date}_${cleanNotes}`;
-            if (!processedKeys.has(key)) {
-                processedKeys.add(key);
-                uniqueTransactions.push(inv);
-            }
-        });
-        const totalGst = uniqueTransactions.reduce((sum, inv) => {
+        const fundedBase = assetInvestments.reduce((sum, inv) => {
             const gstMatch = inv.notes?.match(/\[GST:\s*(\d+)\]/);
-            return sum + (gstMatch ? Number(gstMatch[1]) : 0);
+            const totalMatch = inv.notes?.match(/\[Total:\s*(\d+)\]/);
+            if (gstMatch && totalMatch) {
+                const gst = Number(gstMatch[1]);
+                const total = Number(totalMatch[1]);
+                if (total > 0) {
+                    const ratio = (total - gst) / total;
+                    return sum + (Number(inv.amount) * ratio);
+                }
+            }
+            return sum + Number(inv.amount);
         }, 0);
-        const totalCostWithGst = Number(asset.total_cost) + totalGst;
-        const funded = assetInvestments.reduce((s, i) => s + Number(i.amount), 0);
-        const pct = totalCostWithGst > 0 ? (funded / totalCostWithGst) * 100 : 0;
-        return { funded, totalCostWithGst, pct };
+        
+        const roundedFundedBase = Math.round(fundedBase);
+        const pct = asset.total_cost > 0 ? (roundedFundedBase / asset.total_cost) * 100 : 0;
+        return { funded: roundedFundedBase, totalCostWithGst: asset.total_cost, pct };
     };
 
     const totalAssetValue = assets.reduce((sum, a) => sum + Number(a.total_cost), 0);

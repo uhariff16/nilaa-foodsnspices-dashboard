@@ -40,7 +40,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     const [editingInvestmentId, setEditingInvestmentId] = useState(null);
 
     // Form States
-    const [assetForm, setAssetForm] = useState({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '' });
+    const [assetForm, setAssetForm] = useState({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '', warranty_expiry_date: '', company_details: '' });
     const [investmentForm, setInvestmentForm] = useState({ stakeholder_id: '', asset_id: '', amount: '', investment_date: new Date().toISOString().split('T')[0], notes: '', partnership_percentage: '' });
     const [partnerShares, setPartnerShares] = useState({});
     const [paidUpfront, setPaidUpfront] = useState(false);
@@ -81,16 +81,20 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
     const handleAddAsset = async (e) => {
         e.preventDefault();
         try {
+            const submitData = {
+                ...assetForm,
+                warranty_expiry_date: assetForm.warranty_expiry_date || new Date(new Date(assetForm.purchase_date).setFullYear(new Date(assetForm.purchase_date).getFullYear() + 1)).toISOString().split('T')[0]
+            };
             if (editingAssetId) {
-                const { error } = await supabase.from('business_assets').update(assetForm).eq('id', editingAssetId);
+                const { error } = await supabase.from('business_assets').update(submitData).eq('id', editingAssetId);
                 if (error) throw error;
             } else {
-                const { error } = await supabase.from('business_assets').insert([assetForm]);
+                const { error } = await supabase.from('business_assets').insert([submitData]);
                 if (error) throw error;
             }
             setShowAssetModal(false);
             setEditingAssetId(null);
-            setAssetForm({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '' });
+            setAssetForm({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '', warranty_expiry_date: '', company_details: '' });
             fetchData();
         } catch (err) { alert(err.message); }
     };
@@ -413,7 +417,9 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
             category: asset.category || 'Machinery',
             purchase_date: asset.purchase_date,
             total_cost: asset.total_cost,
-            description: asset.description || ''
+            description: asset.description || '',
+            warranty_expiry_date: asset.warranty_expiry_date || '',
+            company_details: asset.company_details || ''
         });
         setEditingAssetId(asset.id);
         setShowAssetModal(true);
@@ -827,7 +833,7 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                         <HardHat size={20} color="#8b5cf6" /> Asset & Machinery Ledger
                     </h3>
                     {hasWriteAccess && (
-                        <button onClick={() => { setEditingAssetId(null); setAssetForm({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '' }); setShowAssetModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button onClick={() => { setEditingAssetId(null); setAssetForm({ name: '', category: 'Machinery', purchase_date: new Date().toISOString().split('T')[0], total_cost: '', description: '', warranty_expiry_date: '', company_details: '' }); setShowAssetModal(true); }} className="btn-primary" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Plus size={16} /> Add Asset
                         </button>
                     )}
@@ -838,7 +844,9 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                             <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Asset Name</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Category</th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Company Details</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Purchase Date</th>
+                                <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Warranty Expiry</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Total Cost</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Funding %</th>
                                 {hasWriteAccess && <th style={{ padding: '1rem', color: 'var(--text-secondary)' }}>Actions</th>}
@@ -852,7 +860,23 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                                     <tr key={asset.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '1rem', fontWeight: 500 }}>{asset.name}</td>
                                         <td style={{ padding: '1rem' }}><span style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '0.25rem 0.75rem', borderRadius: '1rem', fontSize: '0.8rem' }}>{asset.category}</span></td>
+                                        <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{asset.company_details || '-'}</td>
                                         <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{new Date(asset.purchase_date).toLocaleDateString()}</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {asset.warranty_expiry_date ? (() => {
+                                                const isWarrantyExpired = new Date(asset.warranty_expiry_date) < new Date();
+                                                return (
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span style={{ color: isWarrantyExpired ? '#ef4444' : '#10b981', fontWeight: 600 }}>
+                                                            {new Date(asset.warranty_expiry_date).toLocaleDateString()}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                            {isWarrantyExpired ? 'Expired' : 'Active'}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })() : '-'}
+                                        </td>
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{formatCurrency(asset.total_cost)}</td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ width: '100px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', marginBottom: '4px' }}>
@@ -1245,6 +1269,15 @@ const InvestmentsDashboard = ({ isAdmin, canWrite = false }) => {
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Total Cost (₹)</label>
                                 <input required type="number" className="glass-input" value={assetForm.total_cost} onChange={e => setAssetForm({...assetForm, total_cost: e.target.value})} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Company / Vendor Details</label>
+                                <input type="text" className="glass-input" value={assetForm.company_details || ''} onChange={e => setAssetForm({...assetForm, company_details: e.target.value})} placeholder="e.g. ABC Solutions Pvt Ltd" />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Warranty Expiry Date</label>
+                                <input type="date" className="glass-input" value={assetForm.warranty_expiry_date || ''} onChange={e => setAssetForm({...assetForm, warranty_expiry_date: e.target.value})} />
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>Leave blank to default to 1 year from purchase date.</span>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                                 <button type="button" onClick={() => { setShowAssetModal(false); setEditingAssetId(null); }} style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancel</button>

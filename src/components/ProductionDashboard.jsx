@@ -125,9 +125,9 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
 
     return (
         <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
             background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)'
+            justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)'
         }}>
             <div className="glass-panel" style={{ width: '90%', maxWidth: '450px', padding: '2rem', border: '1px solid var(--accent-color)' }}>
                 <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: 'var(--accent-color)' }}>
@@ -150,7 +150,7 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
                         />
                     </div>
 
-                    <div>
+                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Material Type</label>
                         <select
                             value={formData.material}
@@ -161,7 +161,11 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
                                 color: 'var(--text-primary)'
                             }}
                         >
-                            {materials.map(m => <option key={m} value={m}>{m}</option>)}
+                            {materials.map(m => (
+                                <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
+                                    {m}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
@@ -232,6 +236,167 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin }) => {
     );
 };
 
+const PhysicalCountModal = ({ isOpen, onClose, onSave, isAdmin }) => {
+    const [formData, setFormData] = useState({
+        date: new Date().toISOString().split('T')[0],
+        material: 'GINGER RAW',
+        weight: '',
+        remarks: ''
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!isOpen) return null;
+
+    const materials = [
+        'GINGER RAW', 'GARLIC RAW',
+        'GINGER PEELED', 'GARLIC PEELED'
+    ];
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!formData.weight || isNaN(formData.weight) || parseFloat(formData.weight) < 0) {
+            alert("Please enter a valid positive physical count.");
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const { error } = await supabase
+                .from('production_logs')
+                .insert([{
+                    date: formData.date,
+                    type: 'physical_count',
+                    material: formData.material,
+                    weight: parseFloat(formData.weight),
+                    remarks: formData.remarks || 'Physical Stock Count'
+                }]);
+
+            if (error) throw error;
+
+            alert("Physical count recorded successfully!");
+            onSave();
+            onClose();
+        } catch (err) {
+            console.error("Error saving physical count:", err);
+            alert("Failed to save physical count: " + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)'
+        }}>
+            <div className="glass-panel" style={{ width: '90%', maxWidth: '450px', padding: '2rem', border: '1px solid #10b981' }}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: '#10b981' }}>
+                    <PlusCircle size={24} /> Physical Stock Count
+                </h2>
+
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Count Date</label>
+                        <input
+                            type="date"
+                            value={formData.date}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Material Type</label>
+                        <select
+                            value={formData.material}
+                            onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                        >
+                            {materials.map(m => (
+                                <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
+                                    {m}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                            Physical Weight (Kg)
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
+                                (Must be a positive value)
+                            </span>
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g. 150.5"
+                            value={formData.weight}
+                            onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Remarks</label>
+                        <textarea
+                            placeholder="e.g. June End Stock Take..."
+                            value={formData.remarks}
+                            onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem', height: '80px',
+                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)', resize: 'none'
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            style={{
+                                flex: 1, padding: '0.75rem', borderRadius: '0.5rem',
+                                background: 'transparent', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-secondary)', cursor: 'pointer'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isSaving}
+                            style={{
+                                flex: 2, padding: '0.75rem', borderRadius: '0.5rem',
+                                background: '#10b981', border: 'none',
+                                color: 'white', fontWeight: 600, cursor: 'pointer',
+                                opacity: isSaving ? 0.7 : 1
+                            }}
+                        >
+                            {isSaving ? 'Processing...' : 'Record Count'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }) => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
@@ -243,7 +408,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
 
     const [showSettings, setShowSettings] = useState(false);
-    const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
     const [adjustments, setAdjustments] = useState([]);
     const [wastageSettings, setWastageSettings] = useState(() => {
         const saved = localStorage.getItem('productionWastageSettings');
@@ -634,6 +798,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
         }
     }
 
+
     const efficiency = totalPreProd > 0 ? ((totalOutput / totalPreProd) * 100).toFixed(1) : 0;
 
     // Sort logs by date desc
@@ -808,20 +973,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
             {isAdmin && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
                     <button
-                        onClick={() => setShowAdjustmentModal(true)}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                            background: 'var(--glass-highlight)',
-                            border: '1px solid var(--accent-color)',
-                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
-                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
-                            transition: 'all 0.2s'
-                        }}
-                        className="hover-scale"
-                    >
-                        <PlusCircle size={18} color="var(--accent-color)" /> Manual Adjustment
-                    </button>
-                    <button
                         onClick={() => setShowSettings(!showSettings)}
                         style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -836,12 +987,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                 </div>
             )}
 
-            <StockAdjustmentModal 
-                isOpen={showAdjustmentModal} 
-                onClose={() => setShowAdjustmentModal(false)}
-                onSave={() => fetchAdjustments()}
-                isAdmin={isAdmin}
-            />
 
             {/* Admin Settings Panel */}
             {isAdmin && showSettings && (
@@ -902,7 +1047,7 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: gingerBalance < 0 ? '#ef4444' : '#38bdf8', fontWeight: 500 }}>
                                 <span>Purchased:</span>
                                 <span>{gingerBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                            </div>
+                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>
                                 <span>Total In:</span>
                                 <span>{(gingerOpening + gingerBalance).toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
@@ -910,10 +1055,16 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
                             {/* Explicit Wastage Row */}
                             {gingerWastageDisp > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#ff6b6b', fontWeight: 500 }}>
-                                    <span>Less: Wastage ({(wastageSettings.ginger)}%):</span>
-                                    <span>- {gingerWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                                </div>
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                        <span>Less: Issued to Production:</span>
+                                        <span>- {gingerWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#ff6b6b', fontWeight: 500, paddingLeft: '0.75rem', opacity: 0.9 }}>
+                                        <span>└ Includes {wastageSettings.ginger}% Peeling Loss:</span>
+                                        <span>- {(gingerWastageDisp * (wastageSettings.ginger / 100)).toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                    </div>
+                                </>
                             )}
 
                             <div style={{
@@ -951,10 +1102,16 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
                             {/* Explicit Wastage Row */}
                             {garlicWastageDisp > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#ff6b6b', fontWeight: 500 }}>
-                                    <span>Less: Wastage ({(wastageSettings.garlic)}%):</span>
-                                    <span>- {garlicWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
-                                </div>
+                                <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                        <span>Less: Issued to Production:</span>
+                                        <span>- {garlicWastageDisp.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#ff6b6b', fontWeight: 500, paddingLeft: '0.75rem', opacity: 0.9 }}>
+                                        <span>└ Includes {wastageSettings.garlic}% Peeling Loss:</span>
+                                        <span>- {(garlicWastageDisp * (wastageSettings.garlic / 100)).toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg</span>
+                                    </div>
+                                </>
                             )}
 
                             <div style={{
@@ -971,8 +1128,6 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
                     trend="neutral"
                     image={GARLIC_IMG}
                 />
-
-                {/* Today's Production Card replaced by Daily Stats */}
             </div>
 
             {/* Unified Production Performance (Today, Previous, Weekly, Overall) */}

@@ -135,9 +135,12 @@ const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth }) 
 
 // Stock Adjustment Modal Component
 const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClosings, monthlyPhysical, selectedMonth, selectedYear }) => {
+    const [mode, setMode] = useState('adjustment'); // 'adjustment' | 'transfer'
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         material: 'GINGER RAW',
+        sourceMaterial: 'GINGER PEELED',
+        destMaterial: 'G&G PASTE (MIX)',
         weight: '',
         remarks: ''
     });
@@ -148,6 +151,14 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
     const materials = [
         'GINGER RAW', 'GARLIC RAW',
         'GINGER PEELED', 'GARLIC PEELED',
+        'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
+    ];
+
+    const sourcePeeledMaterials = [
+        'GINGER PEELED', 'GARLIC PEELED'
+    ];
+
+    const destPasteMaterials = [
         'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 
@@ -231,24 +242,53 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
 
         setIsSaving(true);
         try {
-            const { error } = await supabase
-                .from('production_logs')
-                .insert([{
-                    date: formData.date,
-                    type: 'adjustment',
-                    material: formData.material,
-                    weight: parseFloat(formData.weight),
-                    remarks: formData.remarks || 'Manual Adjustment'
-                }]);
+            if (mode === 'transfer') {
+                const wt = parseFloat(formData.weight);
+                if (wt <= 0) {
+                    alert("Transfer weight must be greater than zero.");
+                    setIsSaving(false);
+                    return;
+                }
+                const { error } = await supabase
+                    .from('production_logs')
+                    .insert([
+                        {
+                            date: formData.date,
+                            type: 'adjustment',
+                            material: formData.sourceMaterial,
+                            weight: -wt,
+                            remarks: formData.remarks || `Transfer to ${formData.destMaterial}`
+                        },
+                        {
+                            date: formData.date,
+                            type: 'adjustment',
+                            material: formData.destMaterial,
+                            weight: wt,
+                            remarks: formData.remarks || `Transfer from ${formData.sourceMaterial}`
+                        }
+                    ]);
+                if (error) throw error;
+                alert("Stock transfer completed successfully!");
+            } else {
+                const { error } = await supabase
+                    .from('production_logs')
+                    .insert([{
+                        date: formData.date,
+                        type: 'adjustment',
+                        material: formData.material,
+                        weight: parseFloat(formData.weight),
+                        remarks: formData.remarks || 'Manual Adjustment'
+                    }]);
 
-            if (error) throw error;
+                if (error) throw error;
+                alert("Adjustment recorded successfully!");
+            }
             
-            alert("Adjustment recorded successfully!");
             onSave();
             onClose();
         } catch (err) {
-            console.error("Error saving adjustment:", err);
-            alert("Failed to save adjustment: " + err.message);
+            console.error("Error saving adjustment/transfer:", err);
+            alert("Failed to save: " + err.message);
         } finally {
             setIsSaving(false);
         }
@@ -261,12 +301,50 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
             justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)'
         }}>
             <div className="glass-panel" style={{ width: '90%', maxWidth: '450px', padding: '2rem', border: '1px solid var(--accent-color)' }}>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: 'var(--accent-color)' }}>
-                    <PlusCircle size={24} /> Stock Adjustment
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', color: 'var(--accent-color)' }}>
+                    <PlusCircle size={24} /> Stock Operations
                 </h2>
 
+                {/* Mode Selector Tabs */}
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--glass-border)', marginBottom: '1.5rem', gap: '1rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => setMode('adjustment')}
+                        style={{
+                            padding: '0.5rem 1rem',
+                            background: 'none',
+                            border: 'none',
+                            borderBottom: mode === 'adjustment' ? '2px solid var(--accent-color)' : 'none',
+                            color: mode === 'adjustment' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: 650,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            paddingBottom: '0.4rem'
+                        }}
+                    >
+                        Adjustment
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMode('transfer')}
+                        style={{
+                            padding: '0.5rem 1rem',
+                            background: 'none',
+                            border: 'none',
+                            borderBottom: mode === 'transfer' ? '2px solid var(--accent-color)' : 'none',
+                            color: mode === 'transfer' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: 650,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            paddingBottom: '0.4rem'
+                        }}
+                    >
+                        Stock Transfer
+                    </button>
+                </div>
+
                 {/* Auto-Reconcile Section */}
-                {selectedMonth !== 'Overall' && activeDiscrepancies.length > 0 && (
+                {mode === 'adjustment' && selectedMonth !== 'Overall' && activeDiscrepancies.length > 0 && (
                     <div style={{
                         background: 'rgba(59, 130, 246, 0.08)',
                         border: '1px dashed #3b82f6',
@@ -319,7 +397,7 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Adjustment Date</label>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Date</label>
                         <input
                             type="date"
                             value={formData.date}
@@ -333,36 +411,78 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                         />
                     </div>
 
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Material Type</label>
-                        <select
-                            value={formData.material}
-                            onChange={(e) => setFormData({ ...formData, material: e.target.value })}
-                            style={{
-                                width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
-                                background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
-                                color: 'var(--text-primary)'
-                            }}
-                        >
-                            {materials.map(m => (
-                                <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
-                                    {m}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {mode === 'transfer' ? (
+                        <>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Source Material (Deduct)</label>
+                                <select
+                                    value={formData.sourceMaterial}
+                                    onChange={(e) => setFormData({ ...formData, sourceMaterial: e.target.value })}
+                                    style={{
+                                        width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                        background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    {sourcePeeledMaterials.map(m => (
+                                        <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
+                                            {m}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Destination Material (Add)</label>
+                                <select
+                                    value={formData.destMaterial}
+                                    onChange={(e) => setFormData({ ...formData, destMaterial: e.target.value })}
+                                    style={{
+                                        width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                        background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    {destPasteMaterials.map(m => (
+                                        <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
+                                            {m}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                    ) : (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Material Type</label>
+                            <select
+                                value={formData.material}
+                                onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                    background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                    color: 'var(--text-primary)'
+                                }}
+                            >
+                                {materials.map(m => (
+                                    <option key={m} value={m} style={{ background: '#1f2937', color: '#f3f4f6' }}>
+                                        {m}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                            Weight Change (Kg)
+                            {mode === 'transfer' ? 'Weight to Transfer (Kg)' : 'Weight Change (Kg)'}
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
-                                (Use negative for loss/damage)
+                                {mode === 'transfer' ? '(Must be a positive value)' : '(Use negative for loss/damage)'}
                             </span>
                         </label>
                         <input
                             type="number"
                             step="0.01"
-                            placeholder="e.g. -5.2"
+                            placeholder={mode === 'transfer' ? "e.g. 15.0" : "e.g. -5.2"}
                             value={formData.weight}
                             onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
                             style={{
@@ -377,7 +497,7 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Remarks</label>
                         <textarea
-                            placeholder="Reason for adjustment..."
+                            placeholder={mode === 'transfer' ? "e.g. Transferred for paste production..." : "Reason for adjustment..."}
                             value={formData.remarks}
                             onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                             style={{
@@ -410,7 +530,7 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                                 opacity: isSaving ? 0.7 : 1
                             }}
                         >
-                            {isSaving ? 'Processing...' : 'Record Adjustment'}
+                            {isSaving ? 'Processing...' : mode === 'transfer' ? 'Execute Transfer' : 'Record Adjustment'}
                         </button>
                     </div>
                 </form>

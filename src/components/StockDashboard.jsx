@@ -162,6 +162,23 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 
+    const dbToKey = {
+        'GINGER RAW': 'ginger',
+        'GARLIC RAW': 'garlic',
+        'GINGER PEELED': 'gingerPeeled',
+        'GARLIC PEELED': 'garlicPeeled',
+        'G&G PASTE (MIX)': 'paste',
+        'GINGER PASTE': 'gingerPaste',
+        'GARLIC PASTE': 'garlicPaste'
+    };
+
+    const sourceKey = dbToKey[formData.sourceMaterial];
+    const sourceSys = calculatedClosings?.[sourceKey] || 0;
+    const sourcePhysObj = monthlyPhysical?.[sourceKey];
+    const calculatedShortage = sourcePhysObj 
+        ? Math.max(0, sourceSys - sourcePhysObj.weight) 
+        : (sourceSys < 0 ? -sourceSys : 0);
+
     const itemsToReconcile = [
         { key: 'ginger', label: 'Ginger Raw', dbName: 'GINGER RAW', available: calculatedClosings?.ginger || 0 },
         { key: 'garlic', label: 'Garlic Raw', dbName: 'GARLIC RAW', available: calculatedClosings?.garlic || 0 },
@@ -450,6 +467,41 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                                     ))}
                                 </select>
                             </div>
+
+                            {calculatedShortage > 0.01 && (
+                                <div style={{
+                                    background: 'rgba(59, 130, 246, 0.08)',
+                                    border: '1px dashed #3b82f6',
+                                    borderRadius: '0.5rem',
+                                    padding: '0.75rem',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginTop: '0.5rem'
+                                }}>
+                                    <div style={{ color: '#93c5fd' }}>
+                                        <strong>Source Discrepancy (Shortage):</strong> {calculatedShortage.toFixed(1)} kg
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, weight: calculatedShortage.toFixed(2) })}
+                                        style={{
+                                            padding: '0.25rem 0.6rem',
+                                            background: '#3b82f6',
+                                            border: 'none',
+                                            borderRadius: '0.25rem',
+                                            color: 'white',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            transition: 'background 0.2s'
+                                        }}
+                                    >
+                                        Auto-Fill Weight
+                                    </button>
+                                </div>
+                            )}
                         </>
                     ) : (
                         <div>

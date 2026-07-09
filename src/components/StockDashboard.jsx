@@ -61,6 +61,78 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
 );
 
 
+// Stock Logs Modal Component
+const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth }) => {
+    if (!isOpen) return null;
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)'
+        }}>
+            <div className="glass-panel" style={{ width: '90%', maxWidth: '500px', padding: '2rem', border: '1px solid var(--accent-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                        Reconciliation Logs ({selectedMonth})
+                    </h2>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        <XCircle size={24} />
+                    </button>
+                </div>
+                <div style={{ overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }} className="custom-scrollbar">
+                    {monthlyAdjustments.length === 0 ? (
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', margin: '2rem 0' }}>
+                            No adjustments logged for this month.
+                        </div>
+                    ) : (
+                        monthlyAdjustments.map((adj, idx) => (
+                            <div key={adj.id || idx} style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '0.6rem 0.8rem',
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: '0.5rem',
+                                fontSize: '0.85rem'
+                            }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{adj.material}</span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{adj.remarks}</span>
+                                </div>
+                                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                    <span style={{ fontWeight: 700, color: adj.weight >= 0 ? '#34d399' : '#ef4444' }}>
+                                        {adj.weight >= 0 ? '+' : ''}{adj.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
+                                    </span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                        {adj.date ? new Date(adj.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+                <button
+                    onClick={onClose}
+                    style={{
+                        marginTop: '1.5rem',
+                        width: '100%',
+                        padding: '0.6rem',
+                        borderRadius: '0.5rem',
+                        background: 'var(--accent-primary)',
+                        border: 'none',
+                        color: 'white',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                    }}
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // Stock Adjustment Modal Component
 const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailable, garlicAvailable, monthlyPhysical, selectedMonth, selectedYear }) => {
     const [formData, setFormData] = useState({
@@ -522,6 +594,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
     const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
     const [showPhysicalModal, setShowPhysicalModal] = useState(false);
+    const [showLogsModal, setShowLogsModal] = useState(false);
     const [adjustments, setAdjustments] = useState([]);
     const [physicalCounts, setPhysicalCounts] = useState([]);
 
@@ -1076,8 +1149,11 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                     color: 'var(--text-primary)'
                 }}>
                     <CheckCircle size={20} color="#10b981" />
-                    <div style={{ fontSize: '0.9rem' }}>
-                        🎉 <strong>Reconciliation Completed:</strong> The physical stock count and calculated system stock for <strong>{selectedMonth}</strong> are fully reconciled. All manual adjustments have been successfully logged.
+                    <div style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        <span>🎉 <strong>Reconciliation Completed:</strong> The physical stock count and calculated system stock for <strong>{selectedMonth}</strong> are fully reconciled. All manual adjustments have been successfully logged.</span>
+                        <button onClick={() => setShowLogsModal(true)} style={{ background: 'none', border: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+                            [View Adjustments]
+                        </button>
                     </div>
                 </div>
             )}
@@ -1170,6 +1246,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                 onClose={() => setShowPhysicalModal(false)}
                 onSave={() => fetchPhysicalCounts()}
                 isAdmin={isAdmin}
+            />
+
+            <StockLogsModal
+                isOpen={showLogsModal}
+                onClose={() => setShowLogsModal(false)}
+                monthlyAdjustments={monthlyAdjustments}
+                selectedMonth={selectedMonth}
             />
 
             {/* Search & Filter Bar */}
@@ -1428,60 +1511,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         </div>
                     </div>
 
-                    {/* Adjustments Log Card */}
-                    <div style={{
-                        background: 'var(--glass-highlight)',
-                        borderRadius: '1rem',
-                        padding: '1.5rem',
-                        border: '1px solid var(--glass-border)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%',
-                        minHeight: '220px',
-                        position: 'relative',
-                        overflow: 'hidden'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#60a5fa' }}></div>
-                                <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>Adjustments Log</h3>
-                            </div>
-                        </div>
-                        <div style={{ flex: 1, overflowY: 'auto', maxHeight: '140px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }} className="custom-scrollbar">
-                            {monthlyAdjustments.length === 0 ? (
-                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', margin: 'auto' }}>
-                                    No adjustments logged for {selectedMonth}
-                                </div>
-                            ) : (
-                                monthlyAdjustments.map((adj, idx) => (
-                                    <div key={adj.id || idx} style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        padding: '0.4rem 0.6rem',
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid var(--glass-border)',
-                                        borderRadius: '0.5rem',
-                                        fontSize: '0.8rem'
-                                    }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{adj.material}</span>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{adj.remarks}</span>
-                                        </div>
-                                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                                            <span style={{ fontWeight: 700, color: adj.weight >= 0 ? '#34d399' : '#ef4444' }}>
-                                                {adj.weight >= 0 ? '+' : ''}{adj.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
-                                            </span>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                                {adj.date ? new Date(adj.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
                     </div>
-                </div>
             )}
 
             {/* Tables Section */}

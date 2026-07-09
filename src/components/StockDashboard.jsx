@@ -1288,10 +1288,9 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
                         {/* content */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.4rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                                    <span>Ginger (Raw):</span>
-                                    <span>{monthlyPhysical.ginger ? `${monthlyPhysical.ginger.weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg${monthlyPhysical.ginger.source === 'Excel OS' ? ' (OS)' : ''}` : 'Not Recorded'}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700, marginBottom: '0.25rem' }}>
+                                    Ginger (Raw)
                                 </div>
                                 {monthlyPhysical.ginger && (() => {
                                     const originalCalculated = gingerCalculatedClosing - monthlyAdjustedGinger;
@@ -1302,8 +1301,12 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                     return (
                                         <>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                <span>└ Calculated (Original):</span>
+                                                <span>└ System Stock:</span>
                                                 <span>{originalCalculated.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                <span>└ Physical Stock:</span>
+                                                <span>{monthlyPhysical.ginger.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg{monthlyPhysical.ginger.source === 'Excel OS' ? ' (OS)' : ''}</span>
                                             </div>
                                             <div style={{ 
                                                 display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
@@ -1330,10 +1333,9 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                 })()}
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.4rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                                    <span>Garlic (Raw):</span>
-                                    <span>{monthlyPhysical.garlic ? `${monthlyPhysical.garlic.weight.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg${monthlyPhysical.garlic.source === 'Excel OS' ? ' (OS)' : ''}` : 'Not Recorded'}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700, marginBottom: '0.25rem' }}>
+                                    Garlic (Raw)
                                 </div>
                                 {monthlyPhysical.garlic && (() => {
                                     const originalCalculated = garlicCalculatedClosing - monthlyAdjustedGarlic;
@@ -1344,8 +1346,12 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                     return (
                                         <>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                <span>└ Calculated (Original):</span>
+                                                <span>└ System Stock:</span>
                                                 <span>{originalCalculated.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                <span>└ Physical Stock:</span>
+                                                <span>{monthlyPhysical.garlic.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg{monthlyPhysical.garlic.source === 'Excel OS' ? ' (OS)' : ''}</span>
                                             </div>
                                             <div style={{ 
                                                 display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
@@ -1371,6 +1377,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                     );
                                 })()}
                             </div>
+
 
                             {!monthlyPhysical.ginger && !monthlyPhysical.garlic && (
                                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', marginTop: '0.5rem' }}>

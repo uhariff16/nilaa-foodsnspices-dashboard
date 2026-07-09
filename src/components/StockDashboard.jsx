@@ -1427,6 +1427,60 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                             )}
                         </div>
                     </div>
+
+                    {/* Adjustments Log Card */}
+                    <div style={{
+                        background: 'var(--glass-highlight)',
+                        borderRadius: '1rem',
+                        padding: '1.5rem',
+                        border: '1px solid var(--glass-border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        height: '100%',
+                        minHeight: '220px',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#60a5fa' }}></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>Adjustments Log</h3>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', maxHeight: '140px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }} className="custom-scrollbar">
+                            {monthlyAdjustments.length === 0 ? (
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', margin: 'auto' }}>
+                                    No adjustments logged for {selectedMonth}
+                                </div>
+                            ) : (
+                                monthlyAdjustments.map((adj, idx) => (
+                                    <div key={adj.id || idx} style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: '0.4rem 0.6rem',
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid var(--glass-border)',
+                                        borderRadius: '0.5rem',
+                                        fontSize: '0.8rem'
+                                    }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{adj.material}</span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{adj.remarks}</span>
+                                        </div>
+                                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                            <span style={{ fontWeight: 700, color: adj.weight >= 0 ? '#34d399' : '#ef4444' }}>
+                                                {adj.weight >= 0 ? '+' : ''}{adj.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
+                                            </span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                                {adj.date ? new Date(adj.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
 

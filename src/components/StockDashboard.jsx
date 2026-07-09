@@ -1046,11 +1046,42 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         return { total, low, errors };
     }, [filteredStocks]);
 
+    const isGingerReconciled = useMemo(() => {
+        if (!monthlyPhysical.ginger) return false;
+        return Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) < 0.1;
+    }, [monthlyPhysical.ginger, gingerCalculatedClosing]);
+
+    const isGarlicReconciled = useMemo(() => {
+        if (!monthlyPhysical.garlic) return false;
+        return Math.abs(monthlyPhysical.garlic.weight - garlicCalculatedClosing) < 0.1;
+    }, [monthlyPhysical.garlic, garlicCalculatedClosing]);
+
+    const isReconciliationDone = isGingerReconciled && isGarlicReconciled;
+
     const rawMaterialStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Raw'), [filteredStocks]);
     const processedGoodsStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Processed'), [filteredStocks]);
 
     return (
         <div className="animate-fade-in">
+            {/* Reconciliation Success Banner */}
+            {isReconciliationDone && (
+                <div className="glass-panel" style={{
+                    padding: '1rem',
+                    marginBottom: '1.5rem',
+                    borderLeft: '4px solid #10b981',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    color: 'var(--text-primary)'
+                }}>
+                    <CheckCircle size={20} color="#10b981" />
+                    <div style={{ fontSize: '0.9rem' }}>
+                        🎉 <strong>Reconciliation Completed:</strong> The physical stock count and calculated system stock for <strong>{selectedMonth}</strong> are fully reconciled. All manual adjustments have been successfully logged.
+                    </div>
+                </div>
+            )}
+
             {/* Monthly Alert and Discrepancy Banner */}
             {((new Date().getDate() === 1) ||
               (monthlyPhysical.ginger && (Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) > 10 || (gingerCalculatedClosing > 0 && Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) / gingerCalculatedClosing > 0.05))) ||
@@ -1289,8 +1320,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         {/* content */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700, marginBottom: '0.25rem' }}>
-                                    Ginger (Raw)
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>Ginger (Raw)</span>
+                                    {isGingerReconciled && (
+                                        <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
+                                            Reconciled
+                                        </span>
+                                    )}
                                 </div>
                                 {monthlyPhysical.ginger && (() => {
                                     const originalCalculated = gingerCalculatedClosing - monthlyAdjustedGinger;
@@ -1334,8 +1370,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700, marginBottom: '0.25rem' }}>
-                                    Garlic (Raw)
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>Garlic (Raw)</span>
+                                    {isGarlicReconciled && (
+                                        <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
+                                            Reconciled
+                                        </span>
+                                    )}
                                 </div>
                                 {monthlyPhysical.garlic && (() => {
                                     const originalCalculated = garlicCalculatedClosing - monthlyAdjustedGarlic;

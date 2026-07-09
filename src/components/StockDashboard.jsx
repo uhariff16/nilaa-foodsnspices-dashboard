@@ -134,7 +134,7 @@ const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth }) 
 };
 
 // Stock Adjustment Modal Component
-const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailable, garlicAvailable, monthlyPhysical, selectedMonth, selectedYear }) => {
+const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClosings, monthlyPhysical, selectedMonth, selectedYear }) => {
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         material: 'GINGER RAW',
@@ -147,21 +147,60 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailabl
 
     const materials = [
         'GINGER RAW', 'GARLIC RAW',
-        'GINGER PEELED', 'GARLIC PEELED'
+        'GINGER PEELED', 'GARLIC PEELED',
+        'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 
-    const handleAutoReconcile = async () => {
-        const gingerDiff = monthlyPhysical.ginger ? (monthlyPhysical.ginger.weight - gingerAvailable) : 0;
-        const garlicDiff = monthlyPhysical.garlic ? (monthlyPhysical.garlic.weight - garlicAvailable) : 0;
+    const itemsToReconcile = [
+        { key: 'ginger', label: 'Ginger Raw', dbName: 'GINGER RAW', available: calculatedClosings?.ginger || 0 },
+        { key: 'garlic', label: 'Garlic Raw', dbName: 'GARLIC RAW', available: calculatedClosings?.garlic || 0 },
+        { key: 'gingerPeeled', label: 'Ginger Peeled', dbName: 'GINGER PEELED', available: calculatedClosings?.gingerPeeled || 0 },
+        { key: 'garlicPeeled', label: 'Garlic Peeled', dbName: 'GARLIC PEELED', available: calculatedClosings?.garlicPeeled || 0 },
+        { key: 'paste', label: 'G&G Paste (Mix)', dbName: 'G&G PASTE (MIX)', available: calculatedClosings?.paste || 0 },
+        { key: 'gingerPaste', label: 'Ginger Paste', dbName: 'GINGER PASTE', available: calculatedClosings?.gingerPaste || 0 },
+        { key: 'garlicPaste', label: 'Garlic Paste', dbName: 'GARLIC PASTE', available: calculatedClosings?.garlicPaste || 0 }
+    ];
 
-        if (Math.abs(gingerDiff) < 0.01 && Math.abs(garlicDiff) < 0.01) {
+    const activeDiscrepancies = itemsToReconcile.filter(item => {
+        const phys = monthlyPhysical?.[item.key];
+        return phys && Math.abs(phys.weight - item.available) >= 0.01;
+    });
+
+    const handleAutoReconcile = async () => {
+        let targetDate = new Date().toISOString().split('T')[0];
+        if (selectedMonth !== 'Overall') {
+            const [sMonth, sYear] = selectedMonth.split(' ');
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const mIdx = monthNames.indexOf(sMonth);
+            if (mIdx !== -1) {
+                const lastDay = new Date(parseInt(sYear), mIdx + 1, 0);
+                targetDate = lastDay.toISOString().split('T')[0];
+            }
+        }
+
+        const inserts = [];
+        let msgDetails = '';
+
+        activeDiscrepancies.forEach(item => {
+            const phys = monthlyPhysical[item.key];
+            const diff = phys.weight - item.available;
+            inserts.push({
+                date: targetDate,
+                type: 'adjustment',
+                material: item.dbName,
+                weight: parseFloat(diff.toFixed(2)),
+                remarks: `Auto-Reconcile Discrepancy (${selectedMonth})`
+            });
+            msgDetails += `• ${item.label}: ${diff >= 0 ? '+' : ''}${diff.toFixed(1)} kg\n`;
+        });
+
+        if (inserts.length === 0) {
             alert("No discrepancies found to reconcile.");
             return;
         }
 
         const msg = `This will log manual adjustments to reconcile calculated stock with physical counts for ${selectedMonth}:\n\n` +
-            (monthlyPhysical.ginger ? `• Ginger Raw: ${gingerDiff >= 0 ? '+' : ''}${gingerDiff.toFixed(1)} kg\n` : '') +
-            (monthlyPhysical.garlic ? `• Garlic Raw: ${garlicDiff >= 0 ? '+' : ''}${garlicDiff.toFixed(1)} kg\n` : '') +
+            msgDetails +
             `\nDo you want to proceed?`;
 
         if (!window.confirm(msg)) return;
@@ -169,42 +208,8 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailabl
 
         setIsSaving(true);
         try {
-            // Find target date (last day of the selected month)
-            let targetDate = new Date().toISOString().split('T')[0];
-            if (selectedMonth !== 'Overall') {
-                const [sMonth, sYear] = selectedMonth.split(' ');
-                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                const mIdx = monthNames.indexOf(sMonth);
-                if (mIdx !== -1) {
-                    const lastDay = new Date(parseInt(sYear), mIdx + 1, 0);
-                    targetDate = lastDay.toISOString().split('T')[0];
-                }
-            }
-
-            const inserts = [];
-            if (monthlyPhysical.ginger && Math.abs(gingerDiff) >= 0.01) {
-                inserts.push({
-                    date: targetDate,
-                    type: 'adjustment',
-                    material: 'GINGER RAW',
-                    weight: parseFloat(gingerDiff.toFixed(2)),
-                    remarks: `Auto-Reconcile Discrepancy (${selectedMonth})`
-                });
-            }
-            if (monthlyPhysical.garlic && Math.abs(garlicDiff) >= 0.01) {
-                inserts.push({
-                    date: targetDate,
-                    type: 'adjustment',
-                    material: 'GARLIC RAW',
-                    weight: parseFloat(garlicDiff.toFixed(2)),
-                    remarks: `Auto-Reconcile Discrepancy (${selectedMonth})`
-                });
-            }
-
-            if (inserts.length > 0) {
-                const { error } = await supabase.from('production_logs').insert(inserts);
-                if (error) throw error;
-            }
+            const { error } = await supabase.from('production_logs').insert(inserts);
+            if (error) throw error;
 
             alert("Discrepancies reconciled and adjustments recorded successfully!");
             onSave();
@@ -261,7 +266,7 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailabl
                 </h2>
 
                 {/* Auto-Reconcile Section */}
-                {selectedMonth !== 'Overall' && (monthlyPhysical.ginger || monthlyPhysical.garlic) && (
+                {selectedMonth !== 'Overall' && activeDiscrepancies.length > 0 && (
                     <div style={{
                         background: 'rgba(59, 130, 246, 0.08)',
                         border: '1px dashed #3b82f6',
@@ -276,22 +281,18 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, gingerAvailabl
                             Auto-Reconcile with Physical Count
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            {monthlyPhysical.ginger && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Ginger (Raw):</span>
-                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                        Diff: {monthlyPhysical.ginger.weight - gingerAvailable >= 0 ? '+' : ''}{(monthlyPhysical.ginger.weight - gingerAvailable).toFixed(1)} kg
-                                    </span>
-                                </div>
-                            )}
-                            {monthlyPhysical.garlic && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Garlic (Raw):</span>
-                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                        Diff: {monthlyPhysical.garlic.weight - garlicAvailable >= 0 ? '+' : ''}{(monthlyPhysical.garlic.weight - garlicAvailable).toFixed(1)} kg
-                                    </span>
-                                </div>
-                            )}
+                            {activeDiscrepancies.map(item => {
+                                const phys = monthlyPhysical[item.key];
+                                const diff = phys.weight - item.available;
+                                return (
+                                    <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>{item.label}:</span>
+                                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            Diff: {diff >= 0 ? '+' : ''}{diff.toFixed(1)} kg
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
                         <button
                             type="button"
@@ -432,7 +433,8 @@ const PhysicalCountModal = ({ isOpen, onClose, onSave, isAdmin }) => {
 
     const materials = [
         'GINGER RAW', 'GARLIC RAW',
-        'GINGER PEELED', 'GARLIC PEELED'
+        'GINGER PEELED', 'GARLIC PEELED',
+        'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 
     const handleSubmit = async (e) => {
@@ -941,27 +943,30 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
         const close = (obj) => obj.open + obj.in - obj.out + (obj.adj || 0);
 
-        // Get physical count for Raw Ginger and Garlic
-        let gingerPhysical = null;
-        let garlicPhysical = null;
+        // Get physical counts dynamically
+        const getPhysical = (materialName) => {
+            if (selectedMonth === 'Overall') {
+                const yearCounts = physicalCounts.filter(p => p.date && p.date.startsWith(selectedYear));
+                const sorted = [...yearCounts].sort((a, b) => b.date.localeCompare(a.date));
+                const count = sorted.find(s => s.material === materialName);
+                return count ? count.weight : null;
+            } else {
+                const [sMonth, sYear] = selectedMonth.split(' ');
+                const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+                const prefix = `${sYear}-${monthMap[sMonth]}`;
+                const monthCounts = physicalCounts.filter(p => p.date && p.date.startsWith(prefix));
+                const count = monthCounts.find(s => s.material === materialName);
+                return count ? count.weight : null;
+            }
+        };
 
-        if (selectedMonth === 'Overall') {
-            const yearCounts = physicalCounts.filter(p => p.date && p.date.startsWith(selectedYear));
-            const sorted = [...yearCounts].sort((a, b) => b.date.localeCompare(a.date));
-            const gCount = sorted.find(s => s.material === 'GINGER RAW');
-            const gaCount = sorted.find(s => s.material === 'GARLIC RAW');
-            gingerPhysical = gCount ? gCount.weight : null;
-            garlicPhysical = gaCount ? gaCount.weight : null;
-        } else {
-            const [sMonth, sYear] = selectedMonth.split(' ');
-            const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-            const prefix = `${sYear}-${monthMap[sMonth]}`;
-            const monthCounts = physicalCounts.filter(p => p.date && p.date.startsWith(prefix));
-            const gCount = monthCounts.find(s => s.material === 'GINGER RAW');
-            const gaCount = monthCounts.find(s => s.material === 'GARLIC RAW');
-            gingerPhysical = gCount ? gCount.weight : null;
-            garlicPhysical = gaCount ? gaCount.weight : null;
-        }
+        let gingerPhysical = getPhysical('GINGER RAW');
+        let garlicPhysical = getPhysical('GARLIC RAW');
+        let gingerPeeledPhysical = getPhysical('GINGER PEELED');
+        let garlicPeeledPhysical = getPhysical('GARLIC PEELED');
+        let pastePhysical = getPhysical('G&G PASTE (MIX)');
+        let gingerPastePhysical = getPhysical('GINGER PASTE');
+        let garlicPastePhysical = getPhysical('GARLIC PASTE');
 
         // Fallbacks to opening stock if no manual count
         if (gingerPhysical === null && selectedMonth !== 'Overall' && ginger.open > 0) {
@@ -1002,15 +1007,21 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             return { ...obj, closing: close(obj) };
         };
 
+        const closeProcessed = (obj, physVal, name) => {
+            if (physVal !== null && physVal !== undefined) {
+                return physVal;
+            }
+            return reconcile(obj, name).closing;
+        };
+
         const ledgers = {
             ginger: { ...ginger, closing: closeRaw(ginger, gingerPhysical) },
             garlic: { ...garlic, closing: closeRaw(garlic, garlicPhysical) },
-            // Reconcile Processed items as per user request
-            gingerPeeled: reconcile(gingerPeeled, 'Ginger Peeled'),
-            garlicPeeled: reconcile(garlicPeeled, 'Garlic Peeled'),
-            paste: reconcile(paste, 'Paste Mix'),
-            gingerPaste: reconcile(gingerPaste, 'Ginger Paste'),
-            garlicPaste: reconcile(garlicPaste, 'Garlic Paste')
+            gingerPeeled: { ...gingerPeeled, closing: closeProcessed(gingerPeeled, gingerPeeledPhysical, 'Ginger Peeled') },
+            garlicPeeled: { ...garlicPeeled, closing: closeProcessed(garlicPeeled, garlicPeeledPhysical, 'Garlic Peeled') },
+            paste: { ...paste, closing: closeProcessed(paste, pastePhysical, 'Paste Mix') },
+            gingerPaste: { ...gingerPaste, closing: closeProcessed(gingerPaste, gingerPastePhysical, 'Ginger Paste') },
+            garlicPaste: { ...garlicPaste, closing: closeProcessed(garlicPaste, garlicPastePhysical, 'Garlic Paste') }
         };
         // console.log('DEBUG: Final Ledgers', ledgers);
         return ledgers;
@@ -1028,40 +1039,59 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         return stockStats.garlic.open + stockStats.garlic.in - stockStats.garlic.out + (stockStats.garlic.adj || 0);
     }, [stockStats.garlic]);
 
+    const gingerPeeledCalculatedClosing = useMemo(() => {
+        return stockStats.gingerPeeled.open + stockStats.gingerPeeled.in - stockStats.gingerPeeled.out + (stockStats.gingerPeeled.adj || 0);
+    }, [stockStats.gingerPeeled]);
+
+    const garlicPeeledCalculatedClosing = useMemo(() => {
+        return stockStats.garlicPeeled.open + stockStats.garlicPeeled.in - stockStats.garlicPeeled.out + (stockStats.garlicPeeled.adj || 0);
+    }, [stockStats.garlicPeeled]);
+
+    const pasteCalculatedClosing = useMemo(() => {
+        return stockStats.paste.open + stockStats.paste.in - stockStats.paste.out + (stockStats.paste.adj || 0);
+    }, [stockStats.paste]);
+
+    const gingerPasteCalculatedClosing = useMemo(() => {
+        return stockStats.gingerPaste.open + stockStats.gingerPaste.in - stockStats.gingerPaste.out + (stockStats.gingerPaste.adj || 0);
+    }, [stockStats.gingerPaste]);
+
+    const garlicPasteCalculatedClosing = useMemo(() => {
+        return stockStats.garlicPaste.open + stockStats.garlicPaste.in - stockStats.garlicPaste.out + (stockStats.garlicPaste.adj || 0);
+    }, [stockStats.garlicPaste]);
+
     const monthlyPhysical = useMemo(() => {
-        let gingerManual = null;
-        let garlicManual = null;
-
-        if (selectedMonth === 'Overall') {
-            const yearCounts = physicalCounts.filter(p => p.date && p.date.startsWith(selectedYear));
-            const sorted = [...yearCounts].sort((a, b) => b.date.localeCompare(a.date));
-            gingerManual = sorted.find(s => s.material === 'GINGER RAW');
-            garlicManual = sorted.find(s => s.material === 'GARLIC RAW');
-        } else {
-            const [sMonth, sYear] = selectedMonth.split(' ');
-            const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-            const prefix = `${sYear}-${monthMap[sMonth]}`;
-            const monthCounts = physicalCounts.filter(p => p.date && p.date.startsWith(prefix));
-            gingerManual = monthCounts.find(s => s.material === 'GINGER RAW');
-            garlicManual = monthCounts.find(s => s.material === 'GARLIC RAW');
-        }
-
-        let gingerRes = gingerManual ? { weight: gingerManual.weight, source: 'Manual' } : null;
-        let garlicRes = garlicManual ? { weight: garlicManual.weight, source: 'Manual' } : null;
-
-        if (!gingerRes && selectedMonth !== 'Overall') {
-            if (stockStats.ginger.open > 0) {
-                gingerRes = { weight: stockStats.ginger.open, source: 'Excel OS' };
+        const getManual = (materialName) => {
+            if (selectedMonth === 'Overall') {
+                const yearCounts = physicalCounts.filter(p => p.date && p.date.startsWith(selectedYear));
+                const sorted = [...yearCounts].sort((a, b) => b.date.localeCompare(a.date));
+                return sorted.find(s => s.material === materialName);
+            } else {
+                const [sMonth, sYear] = selectedMonth.split(' ');
+                const monthMap = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+                const prefix = `${sYear}-${monthMap[sMonth]}`;
+                const monthCounts = physicalCounts.filter(p => p.date && p.date.startsWith(prefix));
+                return monthCounts.find(s => s.material === materialName);
             }
-        }
+        };
 
-        if (!garlicRes && selectedMonth !== 'Overall') {
-            if (stockStats.garlic.open > 0) {
-                garlicRes = { weight: stockStats.garlic.open, source: 'Excel OS' };
+        const buildRes = (matName, openVal) => {
+            const manual = getManual(matName);
+            if (manual) return { weight: manual.weight, source: 'Manual' };
+            if (selectedMonth !== 'Overall' && openVal > 0) {
+                return { weight: openVal, source: 'Excel OS' };
             }
-        }
+            return null;
+        };
 
-        return { ginger: gingerRes, garlic: garlicRes };
+        return {
+            ginger: buildRes('GINGER RAW', stockStats.ginger.open),
+            garlic: buildRes('GARLIC RAW', stockStats.garlic.open),
+            gingerPeeled: buildRes('GINGER PEELED', stockStats.gingerPeeled.open),
+            garlicPeeled: buildRes('GARLIC PEELED', stockStats.garlicPeeled.open),
+            paste: buildRes('G&G PASTE (MIX)', stockStats.paste.open),
+            gingerPaste: buildRes('GINGER PASTE', stockStats.gingerPaste.open),
+            garlicPaste: buildRes('GARLIC PASTE', stockStats.garlicPaste.open)
+        };
     }, [physicalCounts, selectedMonth, selectedYear, stockStats]);
 
     const monthlyAdjustments = useMemo(() => {
@@ -1119,17 +1149,33 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         return { total, low, errors };
     }, [filteredStocks]);
 
-    const isGingerReconciled = useMemo(() => {
-        if (!monthlyPhysical.ginger) return false;
-        return Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) < 0.1;
-    }, [monthlyPhysical.ginger, gingerCalculatedClosing]);
+    const reconciliationItems = useMemo(() => {
+        const getAdjustSum = (matName) => {
+            return monthlyAdjustments
+                .filter(a => String(a.material).toUpperCase() === matName)
+                .reduce((sum, a) => sum + (a.weight || 0), 0);
+        };
 
-    const isGarlicReconciled = useMemo(() => {
-        if (!monthlyPhysical.garlic) return false;
-        return Math.abs(monthlyPhysical.garlic.weight - garlicCalculatedClosing) < 0.1;
-    }, [monthlyPhysical.garlic, garlicCalculatedClosing]);
+        return [
+            { key: 'ginger', label: 'Ginger (Raw)', dbName: 'GINGER RAW', calculated: gingerCalculatedClosing, adjusted: getAdjustSum('GINGER RAW') },
+            { key: 'garlic', label: 'Garlic (Raw)', dbName: 'GARLIC RAW', calculated: garlicCalculatedClosing, adjusted: getAdjustSum('GARLIC RAW') },
+            { key: 'gingerPeeled', label: 'Ginger (Peeled)', dbName: 'GINGER PEELED', calculated: gingerPeeledCalculatedClosing, adjusted: getAdjustSum('GINGER PEELED') },
+            { key: 'garlicPeeled', label: 'Garlic (Peeled)', dbName: 'GARLIC PEELED', calculated: garlicPeeledCalculatedClosing, adjusted: getAdjustSum('GARLIC PEELED') },
+            { key: 'paste', label: 'G&G Paste (Mix)', dbName: 'G&G PASTE (MIX)', calculated: pasteCalculatedClosing, adjusted: getAdjustSum('G&G PASTE (MIX)') },
+            { key: 'gingerPaste', label: 'Ginger Paste', dbName: 'GINGER PASTE', calculated: gingerPasteCalculatedClosing, adjusted: getAdjustSum('GINGER PASTE') },
+            { key: 'garlicPaste', label: 'Garlic Paste', dbName: 'GARLIC PASTE', calculated: garlicPasteCalculatedClosing, adjusted: getAdjustSum('GARLIC PASTE') }
+        ];
+    }, [monthlyAdjustments, gingerCalculatedClosing, garlicCalculatedClosing, gingerPeeledCalculatedClosing, garlicPeeledCalculatedClosing, pasteCalculatedClosing, gingerPasteCalculatedClosing, garlicPasteCalculatedClosing]);
 
-    const isReconciliationDone = isGingerReconciled && isGarlicReconciled;
+    const isReconciliationDone = useMemo(() => {
+        const active = reconciliationItems.filter(item => monthlyPhysical[item.key]);
+        if (active.length === 0) return false;
+        return active.every(item => {
+            const phys = monthlyPhysical[item.key];
+            const remainingGap = phys.weight - item.calculated;
+            return Math.abs(remainingGap) < 0.1;
+        });
+    }, [reconciliationItems, monthlyPhysical]);
 
     const rawMaterialStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Raw'), [filteredStocks]);
     const processedGoodsStocks = useMemo(() => filteredStocks.filter(s => s.category === 'Processed'), [filteredStocks]);
@@ -1234,8 +1280,15 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                 onClose={() => setShowAdjustmentModal(false)}
                 onSave={() => fetchAdjustments()}
                 isAdmin={isAdmin}
-                gingerAvailable={gingerCalculatedClosing}
-                garlicAvailable={garlicCalculatedClosing}
+                calculatedClosings={{
+                    ginger: gingerCalculatedClosing,
+                    garlic: garlicCalculatedClosing,
+                    gingerPeeled: gingerPeeledCalculatedClosing,
+                    garlicPeeled: garlicPeeledCalculatedClosing,
+                    paste: pasteCalculatedClosing,
+                    gingerPaste: gingerPasteCalculatedClosing,
+                    garlicPaste: garlicPasteCalculatedClosing
+                }}
                 monthlyPhysical={monthlyPhysical}
                 selectedMonth={selectedMonth}
                 selectedYear={selectedYear}
@@ -1401,31 +1454,41 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         </div>
 
                         {/* content */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.5rem', marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>Ginger (Raw)</span>
-                                    {isGingerReconciled && (
-                                        <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
-                                            Reconciled
-                                        </span>
-                                    )}
-                                </div>
-                                {monthlyPhysical.ginger && (() => {
-                                    const originalCalculated = gingerCalculatedClosing - monthlyAdjustedGinger;
-                                    const discrepancy = monthlyPhysical.ginger.weight - originalCalculated;
-                                    const discrepancyPct = originalCalculated > 0 ? (discrepancy / originalCalculated) * 100 : 0;
-                                    const isError = Math.abs(discrepancy) > 10 || (originalCalculated > 0 && Math.abs(discrepancy) / originalCalculated > 0.05);
-                                    const remainingGap = monthlyPhysical.ginger.weight - gingerCalculatedClosing;
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem', marginBottom: '1rem', maxHeight: '280px', overflowY: 'auto' }} className="custom-scrollbar">
+                            {(() => {
+                                const countedReconItems = reconciliationItems.filter(item => monthlyPhysical[item.key]);
+                                if (countedReconItems.length === 0) {
                                     return (
-                                        <>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', marginTop: '0.5rem' }}>
+                                            No physical count recorded for {selectedMonth}
+                                        </span>
+                                    );
+                                }
+                                return countedReconItems.map(item => {
+                                    const phys = monthlyPhysical[item.key];
+                                    const originalCalculated = item.calculated - item.adjusted;
+                                    const discrepancy = phys.weight - originalCalculated;
+                                    const discrepancyPct = originalCalculated > 0 ? (discrepancy / originalCalculated) * 100 : 0;
+                                    const remainingGap = phys.weight - item.calculated;
+                                    const isReconciled = Math.abs(remainingGap) < 0.1;
+
+                                    return (
+                                        <div key={item.key} style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>{item.label}</span>
+                                                {isReconciled && (
+                                                    <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
+                                                        Reconciled
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                                 <span>└ System Stock:</span>
                                                 <span>{originalCalculated.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                                                 <span>└ Physical Stock:</span>
-                                                <span>{monthlyPhysical.ginger.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg{monthlyPhysical.ginger.source === 'Excel OS' ? ' (OS)' : ''}</span>
+                                                <span>{phys.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg{phys.source === 'Excel OS' ? ' (OS)' : ''}</span>
                                             </div>
                                             <div style={{ 
                                                 display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
@@ -1435,79 +1498,22 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                                 <span>└ Discrepancy:</span>
                                                 <span>{discrepancy >= 0 ? '+' : ''}{discrepancy.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg ({discrepancy >= 0 ? '+' : ''}{discrepancyPct.toFixed(1)}%)</span>
                                             </div>
-                                            {Math.abs(monthlyAdjustedGinger) >= 0.01 && (
+                                            {Math.abs(item.adjusted) >= 0.01 && (
                                                 <>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>
                                                         <span>└ Reconciled Adj:</span>
-                                                        <span>{monthlyAdjustedGinger >= 0 ? '+' : ''}{monthlyAdjustedGinger.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
+                                                        <span>{item.adjusted >= 0 ? '+' : ''}{item.adjusted.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
                                                     </div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: Math.abs(remainingGap) < 0.1 ? '#34d399' : '#f59e0b', fontStyle: 'italic', paddingLeft: '0.5rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isReconciled ? '#34d399' : '#f59e0b', fontStyle: 'italic', paddingLeft: '0.5rem' }}>
                                                         <span>└ Remaining Gap:</span>
                                                         <span>{remainingGap >= 0 ? '+' : ''}{remainingGap.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
                                                     </div>
                                                 </>
                                             )}
-                                        </>
+                                        </div>
                                     );
-                                })()}
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', padding: '0.6rem', borderRadius: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 700 }}>Garlic (Raw)</span>
-                                    {isGarlicReconciled && (
-                                        <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontWeight: 600 }}>
-                                            Reconciled
-                                        </span>
-                                    )}
-                                </div>
-                                {monthlyPhysical.garlic && (() => {
-                                    const originalCalculated = garlicCalculatedClosing - monthlyAdjustedGarlic;
-                                    const discrepancy = monthlyPhysical.garlic.weight - originalCalculated;
-                                    const discrepancyPct = originalCalculated > 0 ? (discrepancy / originalCalculated) * 100 : 0;
-                                    const isError = Math.abs(discrepancy) > 20 || (originalCalculated > 0 && Math.abs(discrepancy) / originalCalculated > 0.05);
-                                    const remainingGap = monthlyPhysical.garlic.weight - garlicCalculatedClosing;
-                                    return (
-                                        <>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                <span>└ System Stock:</span>
-                                                <span>{originalCalculated.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                <span>└ Physical Stock:</span>
-                                                <span>{monthlyPhysical.garlic.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg{monthlyPhysical.garlic.source === 'Excel OS' ? ' (OS)' : ''}</span>
-                                            </div>
-                                            <div style={{ 
-                                                display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
-                                                color: discrepancy >= 0 ? '#34d399' : '#ef4444', 
-                                                fontWeight: 600 
-                                            }}>
-                                                <span>└ Discrepancy:</span>
-                                                <span>{discrepancy >= 0 ? '+' : ''}{discrepancy.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg ({discrepancy >= 0 ? '+' : ''}{discrepancyPct.toFixed(1)}%)</span>
-                                            </div>
-                                            {Math.abs(monthlyAdjustedGarlic) >= 0.01 && (
-                                                <>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600 }}>
-                                                        <span>└ Reconciled Adj:</span>
-                                                        <span>{monthlyAdjustedGarlic >= 0 ? '+' : ''}{monthlyAdjustedGarlic.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
-                                                    </div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: Math.abs(remainingGap) < 0.1 ? '#34d399' : '#f59e0b', fontStyle: 'italic', paddingLeft: '0.5rem' }}>
-                                                        <span>└ Remaining Gap:</span>
-                                                        <span>{remainingGap >= 0 ? '+' : ''}{remainingGap.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg</span>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-
-
-                            {!monthlyPhysical.ginger && !monthlyPhysical.garlic && (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', marginTop: '0.5rem' }}>
-                                    No physical count recorded for {selectedMonth}
-                                </span>
-                            )}
+                                });
+                            })()}
                         </div>
                     </div>
 

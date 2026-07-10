@@ -873,6 +873,20 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                                     <health.icon size={10} />
                                                     {health.label}
                                                 </div>
+                                                {item.lastDate && (
+                                                    <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', opacity: 0.8, marginTop: '0.05rem' }}>
+                                                        Last Updated: {(() => {
+                                                            const parts = item.lastDate.split('-');
+                                                            if (parts.length !== 3) return item.lastDate;
+                                                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                            const mIdx = parseInt(parts[1]) - 1;
+                                                            if (mIdx >= 0 && mIdx < 12) {
+                                                                return `${parseInt(parts[2])}-${months[mIdx]}-${parts[0]}`;
+                                                            }
+                                                            return item.lastDate;
+                                                        })()}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td style={{ padding: '1rem 0.5rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
@@ -946,15 +960,15 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
     const stockStats = useMemo(() => {
         // Raw
-        let ginger = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 };
-        let garlic = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 };
+        let ginger = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
+        let garlic = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
         // Peeled
-        let gingerPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 };
-        let garlicPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 };
+        let gingerPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
+        let garlicPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
         // Paste
-        let paste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 };       // G&G Paste (Mixed)
-        let gingerPaste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 }; // Ginger Paste
-        let garlicPaste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0 }; // Garlic Paste
+        let paste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };       // G&G Paste (Mixed)
+        let gingerPaste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' }; // Ginger Paste
+        let garlicPaste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' }; // Garlic Paste
 
         // 1. Determine Date Prefix for Filtering Current Month
         let targetPrefix = selectedYear;
@@ -986,6 +1000,15 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         const isMatch = (dateStr) => dateStr && dateStr.startsWith(targetPrefix);
         const isNextMonthMatch = (dateStr) => nextMonthPrefix && dateStr && dateStr.startsWith(nextMonthPrefix);
 
+        const updateLastDate = (statObj, dateStr) => {
+            if (!dateStr) return;
+            const cleanDate = dateStr.split('T')[0];
+            if (!statObj.lastObjDate || cleanDate > statObj.lastObjDate) {
+                statObj.lastObjDate = cleanDate;
+                statObj.lastDate = cleanDate;
+            }
+        };
+
         // Usage Helpers
         const addToStat = (statObj, type, weight) => {
             if (type === 'open') statObj.open += weight;
@@ -994,28 +1017,36 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             else if (type === 'nextOpen') statObj.nextOpen += weight;
         };
 
-        const classifyAndAdd = (name, weight, type) => {
+        const classifyAndAdd = (name, weight, type, dateStr) => {
+            let targetObj = null;
             // Raw
             if (name.includes('GINGER') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
-                addToStat(ginger, type, weight);
+                targetObj = ginger;
             } else if (name.includes('GARLIC') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
-                addToStat(garlic, type, weight);
+                targetObj = garlic;
             }
             // Peeled
             else if (name.includes('GINGER') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
-                addToStat(gingerPeeled, type, weight);
+                targetObj = gingerPeeled;
             } else if (name.includes('GARLIC') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
-                addToStat(garlicPeeled, type, weight);
+                targetObj = garlicPeeled;
             }
             // Paste
             else if (name.includes('PASTE')) {
                 if (name.includes('GINGER') && !name.includes('GARLIC')) {
-                    addToStat(gingerPaste, type, weight);
+                    targetObj = gingerPaste;
                 } else if (name.includes('GARLIC') && !name.includes('GINGER')) {
-                    addToStat(garlicPaste, type, weight);
+                    targetObj = garlicPaste;
                 } else {
                     // Default to G&G Paste if both or neither (usually "Ginger Garlic Paste")
-                    addToStat(paste, type, weight);
+                    targetObj = paste;
+                }
+            }
+
+            if (targetObj) {
+                addToStat(targetObj, type, weight);
+                if (dateStr && type !== 'open' && type !== 'nextOpen') {
+                    updateLastDate(targetObj, dateStr);
                 }
             }
         };
@@ -1030,10 +1061,10 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
             // Current Month Activity
             if (isMatch(item.date)) {
-                classifyAndAdd(name, weight, isOS ? 'open' : 'in');
+                classifyAndAdd(name, weight, isOS ? 'open' : 'in', item.date);
             }
             if (isNextMonthMatch(item.date) && isOS) {
-                classifyAndAdd(name, weight, 'nextOpen');
+                classifyAndAdd(name, weight, 'nextOpen', item.date);
             }
         });
 
@@ -1045,6 +1076,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                 
                 const addAdj = (statObj, wt) => {
                     statObj.adj += wt;
+                    updateLastDate(statObj, item.date);
                 };
                 
                 const classifyAdjustment = (matName, wt) => {
@@ -1052,9 +1084,9 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         addAdj(ginger, wt);
                     } else if (matName.includes('GARLIC') && !matName.includes('PASTE') && !matName.includes('PEELED') && !matName.includes('PROCESSED') && !matName.includes('CLEANED')) {
                         addAdj(garlic, wt);
-                    } else if (matName.includes('GINGER') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !matName.includes('PASTE')) {
+                    } else if (matName.includes('GINGER') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !name.includes('PASTE')) {
                         addAdj(gingerPeeled, wt);
-                    } else if (matName.includes('GARLIC') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !matName.includes('PASTE')) {
+                    } else if (matName.includes('GARLIC') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !name.includes('PASTE')) {
                         addAdj(garlicPeeled, wt);
                     } else if (matName.includes('PASTE')) {
                         if (matName.includes('GINGER') && !matName.includes('GARLIC')) {
@@ -1071,6 +1103,33 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             }
         });
 
+        // 2.2 Process Physical counts (to capture count date)
+        physicalCounts.forEach(item => {
+            if (isMatch(item.date)) {
+                const name = (item.material || '').toUpperCase();
+                const classifyPhys = (statObj) => {
+                    updateLastDate(statObj, item.date);
+                };
+                if (name.includes('GINGER') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
+                    classifyPhys(ginger);
+                } else if (name.includes('GARLIC') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
+                    classifyPhys(garlic);
+                } else if (name.includes('GINGER') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
+                    classifyPhys(gingerPeeled);
+                } else if (name.includes('GARLIC') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
+                    classifyPhys(garlicPeeled);
+                } else if (name.includes('PASTE')) {
+                    if (name.includes('GINGER') && !name.includes('GARLIC')) {
+                        classifyPhys(gingerPaste);
+                    } else if (name.includes('GARLIC') && !name.includes('GINGER')) {
+                        classifyPhys(garlicPaste);
+                    } else {
+                        classifyPhys(paste);
+                    }
+                }
+            }
+        });
+
         // 3. Process Usage (Raw/Peeled Out) -> From PreProduction
         (productionData?.preProduction || []).forEach(item => {
             if (!isMatch(item.date)) return;
@@ -1080,7 +1139,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             // PreProduction usually logs usage of Raw to make Peeled, OR Peeled to make Paste.
             // If name is Raw, it's Usage of Raw.
             // If name is Peeled, it's Usage of Peeled.
-            classifyAndAdd(name, weight, 'out');
+            classifyAndAdd(name, weight, 'out', item.date);
         });
 
         // 4. Process Production (Peeled/Paste In) -> From PostProduction
@@ -1092,7 +1151,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             // PostProduction logs output. 
             // If it's Paste -> In for Paste.
             // If it's Peeled -> In for Peeled (if logged here).
-            classifyAndAdd(name, weight, 'in');
+            classifyAndAdd(name, weight, 'in', item.date);
         });
 
         // 5. Process Sales (Paste Out)
@@ -1100,7 +1159,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             // Note: salesData is now pre-filtered/aggregated by Dashboard.jsx (filteredItems)
             // So we don't check date here, we just sum up what we got.
             const name = (item.name || '').toUpperCase();
-            classifyAndAdd(name, parseFloat(item.qty || 0), 'out');
+            classifyAndAdd(name, parseFloat(item.qty || 0), 'out', item.date || item.Date);
         });
 
         // Detect if we have data for the next month (to enable reconciliation)

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Package, TrendingUp, TrendingDown, ArrowRight, Activity, Layers, AlertCircle, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronRight, PlusCircle } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, ArrowRight, Activity, Layers, AlertCircle, Search, Filter, CheckCircle, AlertTriangle, XCircle, ChevronRight, PlusCircle, Trash2, Edit } from 'lucide-react';
 import gingerIcon from '../assets/ginger.png';
 import garlicIcon from '../assets/garlic.png';
 import { supabase } from '../lib/supabaseClient';
@@ -62,8 +62,54 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
 
 
 // Stock Logs Modal Component
-const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth }) => {
+const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth, isAdmin, onRefresh }) => {
+    const [editingId, setEditingId] = useState(null);
+    const [editWeight, setEditWeight] = useState('');
+    const [editRemarks, setEditRemarks] = useState('');
+
     if (!isOpen) return null;
+
+    const handleStartEdit = (adj) => {
+        setEditingId(adj.id);
+        setEditWeight(adj.weight.toString());
+        setEditRemarks(adj.remarks || '');
+    };
+
+    const handleSave = async (id) => {
+        if (!editWeight || isNaN(editWeight)) {
+            alert("Please enter a valid weight.");
+            return;
+        }
+        const { error } = await supabase
+            .from('production_logs')
+            .update({
+                weight: parseFloat(editWeight),
+                remarks: editRemarks
+            })
+            .eq('id', id);
+        if (error) {
+            alert("Failed to update adjustment: " + error.message);
+        } else {
+            alert("Adjustment updated successfully!");
+            setEditingId(null);
+            if (onRefresh) onRefresh();
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this manual adjustment record? This will update the available stock calculations.")) return;
+        const { error } = await supabase
+            .from('production_logs')
+            .delete()
+            .eq('id', id);
+        if (error) {
+            alert("Failed to delete adjustment: " + error.message);
+        } else {
+            alert("Adjustment deleted successfully!");
+            if (onRefresh) onRefresh();
+        }
+    };
+
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -79,37 +125,97 @@ const StockLogsModal = ({ isOpen, onClose, monthlyAdjustments, selectedMonth }) 
                         <XCircle size={24} />
                     </button>
                 </div>
-                <div style={{ overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }} className="custom-scrollbar">
+                <div style={{ overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }} className="custom-scrollbar">
                     {monthlyAdjustments.length === 0 ? (
                         <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', margin: '2rem 0' }}>
                             No adjustments logged for this month.
                         </div>
                     ) : (
-                        monthlyAdjustments.map((adj, idx) => (
-                            <div key={adj.id || idx} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '0.6rem 0.8rem',
-                                background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid var(--glass-border)',
-                                borderRadius: '0.5rem',
-                                fontSize: '0.85rem'
-                            }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{adj.material}</span>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{adj.remarks}</span>
+                        monthlyAdjustments.map((adj, idx) => {
+                            const isEditing = editingId === adj.id;
+                            if (isEditing) {
+                                return (
+                                    <div key={adj.id || idx} style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.5rem',
+                                        padding: '0.8rem',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid var(--accent-color)',
+                                        borderRadius: '0.5rem',
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem' }}>Editing {adj.material}</div>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <input 
+                                                type="number" 
+                                                step="0.01"
+                                                value={editWeight} 
+                                                onChange={(e) => setEditWeight(e.target.value)}
+                                                style={{ width: '80px', padding: '0.35rem', borderRadius: '0.25rem', background: '#1f2937', border: '1px solid var(--glass-border)', color: 'white', fontSize: '0.8rem' }}
+                                            />
+                                            <input 
+                                                type="text" 
+                                                value={editRemarks} 
+                                                onChange={(e) => setEditRemarks(e.target.value)}
+                                                placeholder="Remarks..."
+                                                style={{ flex: 1, padding: '0.35rem', borderRadius: '0.25rem', background: '#1f2937', border: '1px solid var(--glass-border)', color: 'white', fontSize: '0.8rem' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                            <button onClick={() => setEditingId(null)} style={{ padding: '0.25rem 0.6rem', borderRadius: '0.25rem', background: '#4b5563', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>Cancel</button>
+                                            <button onClick={() => handleSave(adj.id)} style={{ padding: '0.25rem 0.6rem', borderRadius: '0.25rem', background: '#10b981', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>Save</button>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div key={adj.id || idx} style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '0.6rem 0.8rem',
+                                    background: 'rgba(255,255,255,0.03)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.5rem',
+                                    fontSize: '0.85rem'
+                                }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', flex: 1, marginRight: '0.5rem' }}>
+                                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{adj.material}</span>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{adj.remarks}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                            <span style={{ fontWeight: 700, color: adj.weight >= 0 ? '#34d399' : '#ef4444' }}>
+                                                {adj.weight >= 0 ? '+' : ''}{adj.weight.toLocaleString('en-IN', { maximumFractionDigits: 2 })} kg
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                {adj.date ? new Date(adj.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                            </span>
+                                        </div>
+                                        {isAdmin && adj.id && (
+                                            <div style={{ display: 'flex', gap: '0.2rem', marginLeft: '0.4rem', borderLeft: '1px solid var(--glass-border)', paddingLeft: '0.4rem' }}>
+                                                <button 
+                                                    onClick={() => handleStartEdit(adj)}
+                                                    style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '0.2rem', display: 'flex', alignItems: 'center' }}
+                                                    title="Edit Adjustment"
+                                                >
+                                                    <Edit size={13} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(adj.id)}
+                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem', display: 'flex', alignItems: 'center' }}
+                                                    title="Delete Adjustment"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                    <span style={{ fontWeight: 700, color: adj.weight >= 0 ? '#34d399' : '#ef4444' }}>
-                                        {adj.weight >= 0 ? '+' : ''}{adj.weight.toLocaleString('en-IN', { maximumFractionDigits: 1 })} kg
-                                    </span>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                        {adj.date ? new Date(adj.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-                                    </span>
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
                 <button
@@ -1569,6 +1675,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                 onClose={() => setShowLogsModal(false)}
                 monthlyAdjustments={monthlyAdjustments}
                 selectedMonth={selectedMonth}
+                isAdmin={isAdmin}
+                onRefresh={() => fetchAdjustments()}
             />
 
             {/* Search & Filter Bar */}

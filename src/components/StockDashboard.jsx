@@ -1185,17 +1185,12 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         let gingerPastePhysical = getPhysical('GINGER PASTE');
         let garlicPastePhysical = getPhysical('GARLIC PASTE');
 
-        // Fallbacks to opening stock if no manual count
-        if (gingerPhysical === null && selectedMonth !== 'Overall' && ginger.open > 0) {
-            gingerPhysical = ginger.open;
-        }
-        if (garlicPhysical === null && selectedMonth !== 'Overall' && garlic.open > 0) {
-            garlicPhysical = garlic.open;
-        }
-
-        const closeRaw = (obj, physVal) => {
+        const closeRaw = (obj, physVal, nextOpenVal) => {
             if (physVal !== null && physVal !== undefined) {
                 return physVal;
+            }
+            if (selectedMonth !== 'Overall' && nextOpenVal > 0) {
+                return nextOpenVal;
             }
             return obj.open + obj.in - obj.out + (obj.adj || 0);
         };
@@ -1204,10 +1199,6 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         // assume the difference is IMPLICIT SALES defined by the user ("Deduct shortage from sales").
         // Formula: Sales (Out) = (Open + In) - NextOpen
         const reconcile = (obj, name) => {
-            // console.log(`DEBUG: Reconcile check for ${name}`, {
-            //    out: obj.out, open: obj.open, in: obj.in, nextOpen: obj.nextOpen, hasNextMonthData
-            // });
-
             // Only apply to Processed Goods where Sales Qty is often missing
             // Relaxed check: logic applies if Out is negligible (< 1kg)
             if (hasNextMonthData && obj.out < 1 && (obj.open > 0 || obj.in > 0)) {
@@ -1224,21 +1215,24 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             return { ...obj, closing: close(obj) };
         };
 
-        const closeProcessed = (obj, physVal, name) => {
+        const closeProcessed = (obj, physVal, nextOpenVal, name) => {
             if (physVal !== null && physVal !== undefined) {
                 return physVal;
+            }
+            if (selectedMonth !== 'Overall' && nextOpenVal > 0) {
+                return nextOpenVal;
             }
             return reconcile(obj, name).closing;
         };
 
         const ledgers = {
-            ginger: { ...ginger, closing: closeRaw(ginger, gingerPhysical) },
-            garlic: { ...garlic, closing: closeRaw(garlic, garlicPhysical) },
-            gingerPeeled: { ...gingerPeeled, closing: closeProcessed(gingerPeeled, gingerPeeledPhysical, 'Ginger Peeled') },
-            garlicPeeled: { ...garlicPeeled, closing: closeProcessed(garlicPeeled, garlicPeeledPhysical, 'Garlic Peeled') },
-            paste: { ...paste, closing: closeProcessed(paste, pastePhysical, 'Paste Mix') },
-            gingerPaste: { ...gingerPaste, closing: closeProcessed(gingerPaste, gingerPastePhysical, 'Ginger Paste') },
-            garlicPaste: { ...garlicPaste, closing: closeProcessed(garlicPaste, garlicPastePhysical, 'Garlic Paste') }
+            ginger: { ...ginger, closing: closeRaw(ginger, gingerPhysical, ginger.nextOpen) },
+            garlic: { ...garlic, closing: closeRaw(garlic, garlicPhysical, garlic.nextOpen) },
+            gingerPeeled: { ...gingerPeeled, closing: closeProcessed(gingerPeeled, gingerPeeledPhysical, gingerPeeled.nextOpen, 'Ginger Peeled') },
+            garlicPeeled: { ...garlicPeeled, closing: closeProcessed(garlicPeeled, garlicPeeledPhysical, garlicPeeled.nextOpen, 'Garlic Peeled') },
+            paste: { ...paste, closing: closeProcessed(paste, pastePhysical, paste.nextOpen, 'Paste Mix') },
+            gingerPaste: { ...gingerPaste, closing: closeProcessed(gingerPaste, gingerPastePhysical, gingerPaste.nextOpen, 'Ginger Paste') },
+            garlicPaste: { ...garlicPaste, closing: closeProcessed(garlicPaste, garlicPastePhysical, garlicPaste.nextOpen, 'Garlic Paste') }
         };
         // console.log('DEBUG: Final Ledgers', ledgers);
         return ledgers;
@@ -1291,23 +1285,23 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             }
         };
 
-        const buildRes = (matName, openVal) => {
+        const buildRes = (matName, nextOpenVal) => {
             const manual = getManual(matName);
             if (manual) return { weight: manual.weight, source: 'Manual' };
-            if (selectedMonth !== 'Overall' && openVal > 0) {
-                return { weight: openVal, source: 'Excel OS' };
+            if (selectedMonth !== 'Overall' && nextOpenVal > 0) {
+                return { weight: nextOpenVal, source: 'Excel OS' };
             }
             return null;
         };
 
         return {
-            ginger: buildRes('GINGER RAW', stockStats.ginger.open),
-            garlic: buildRes('GARLIC RAW', stockStats.garlic.open),
-            gingerPeeled: buildRes('GINGER PEELED', stockStats.gingerPeeled.open),
-            garlicPeeled: buildRes('GARLIC PEELED', stockStats.garlicPeeled.open),
-            paste: buildRes('G&G PASTE (MIX)', stockStats.paste.open),
-            gingerPaste: buildRes('GINGER PASTE', stockStats.gingerPaste.open),
-            garlicPaste: buildRes('GARLIC PASTE', stockStats.garlicPaste.open)
+            ginger: buildRes('GINGER RAW', stockStats.ginger.nextOpen),
+            garlic: buildRes('GARLIC RAW', stockStats.garlic.nextOpen),
+            gingerPeeled: buildRes('GINGER PEELED', stockStats.gingerPeeled.nextOpen),
+            garlicPeeled: buildRes('GARLIC PEELED', stockStats.garlicPeeled.nextOpen),
+            paste: buildRes('G&G PASTE (MIX)', stockStats.paste.nextOpen),
+            gingerPaste: buildRes('GINGER PASTE', stockStats.gingerPaste.nextOpen),
+            garlicPaste: buildRes('GARLIC PASTE', stockStats.garlicPaste.nextOpen)
         };
     }, [physicalCounts, selectedMonth, selectedYear, stockStats]);
 

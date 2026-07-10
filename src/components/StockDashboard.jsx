@@ -142,7 +142,8 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         sourceMaterial: 'GINGER PEELED',
         destMaterial: 'G&G PASTE (MIX)',
         weight: '',
-        remarks: ''
+        remarks: '',
+        spoilageReason: 'Storage Temperature Issue'
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -301,6 +302,25 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                     ]);
                 if (error) throw error;
                 alert("Stock transfer completed successfully!");
+            } else if (mode === 'spoilage') {
+                const wt = parseFloat(formData.weight);
+                if (wt <= 0) {
+                    alert("Spoiled weight must be greater than zero.");
+                    setIsSaving(false);
+                    return;
+                }
+                const { error } = await supabase
+                    .from('production_logs')
+                    .insert([{
+                        date: formData.date,
+                        type: 'adjustment',
+                        material: formData.material,
+                        weight: -Math.abs(wt),
+                        remarks: `[Spoilage: ${formData.spoilageReason}] ${formData.remarks}`.trim()
+                    }]);
+
+                if (error) throw error;
+                alert("Spoilage logged successfully!");
             } else {
                 const { error } = await supabase
                     .from('production_logs')
@@ -372,6 +392,23 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                         }}
                     >
                         Stock Transfer
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setMode('spoilage')}
+                        style={{
+                            padding: '0.5rem 1rem',
+                            background: 'none',
+                            border: 'none',
+                            borderBottom: mode === 'spoilage' ? '2px solid var(--accent-color)' : 'none',
+                            color: mode === 'spoilage' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: 650,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            paddingBottom: '0.4rem'
+                        }}
+                    >
+                        Spoilage / Loss
                     </button>
                 </div>
 
@@ -507,15 +544,15 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
 
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                            {mode === 'transfer' ? 'Weight to Transfer (Kg)' : 'Weight Change (Kg)'}
+                            {mode === 'transfer' ? 'Weight to Transfer (Kg)' : mode === 'spoilage' ? 'Weight Spoiled (Kg)' : 'Weight Change (Kg)'}
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginLeft: '0.5rem' }}>
-                                {mode === 'transfer' ? '(Must be a positive value)' : '(Use negative for loss/damage)'}
+                                {mode === 'transfer' ? '(Must be a positive value)' : mode === 'spoilage' ? '(Enter positive value - will be deducted)' : '(Use negative for loss/damage)'}
                             </span>
                         </label>
                         <input
                             type="number"
                             step="0.01"
-                            placeholder={mode === 'transfer' ? "e.g. 15.0" : "e.g. -5.2"}
+                            placeholder={mode === 'transfer' ? "e.g. 15.0" : mode === 'spoilage' ? "e.g. 5.0" : "e.g. -5.2"}
                             value={formData.weight}
                             onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
                             style={{
@@ -532,10 +569,31 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                         )}
                     </div>
 
+                    {mode === 'spoilage' && (
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Spoilage Reason</label>
+                            <select
+                                value={formData.spoilageReason}
+                                onChange={(e) => setFormData({ ...formData, spoilageReason: e.target.value })}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '0.5rem',
+                                    background: 'var(--glass-highlight)', border: '1px solid var(--glass-border)',
+                                    color: 'var(--text-primary)'
+                                }}
+                            >
+                                <option value="Storage Temperature Issue" style={{ background: '#1f2937', color: '#f3f4f6' }}>Storage Temperature Issue</option>
+                                <option value="Contamination" style={{ background: '#1f2937', color: '#f3f4f6' }}>Contamination</option>
+                                <option value="Expired / Old Stock" style={{ background: '#1f2937', color: '#f3f4f6' }}>Expired / Old Stock</option>
+                                <option value="Process Spill / Damage" style={{ background: '#1f2937', color: '#f3f4f6' }}>Process Spill / Damage</option>
+                                <option value="Other" style={{ background: '#1f2937', color: '#f3f4f6' }}>Other</option>
+                            </select>
+                        </div>
+                    )}
+
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Remarks</label>
                         <textarea
-                            placeholder={mode === 'transfer' ? "e.g. Transferred for paste production..." : "Reason for adjustment..."}
+                            placeholder={mode === 'transfer' ? "e.g. Transferred for paste production..." : mode === 'spoilage' ? "Additional details..." : "Reason for adjustment..."}
                             value={formData.remarks}
                             onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                             style={{

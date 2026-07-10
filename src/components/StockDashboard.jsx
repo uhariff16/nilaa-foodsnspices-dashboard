@@ -146,6 +146,31 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
     });
     const [isSaving, setIsSaving] = useState(false);
 
+    const dbToKey = {
+        'GINGER RAW': 'ginger',
+        'GARLIC RAW': 'garlic',
+        'GINGER PEELED': 'gingerPeeled',
+        'GARLIC PEELED': 'garlicPeeled',
+        'G&G PASTE (MIX)': 'paste',
+        'GINGER PASTE': 'gingerPaste',
+        'GARLIC PASTE': 'garlicPaste'
+    };
+
+    useEffect(() => {
+        if (mode === 'transfer' && isOpen) {
+            const sKey = dbToKey[formData.sourceMaterial];
+            const sSys = calculatedClosings?.[sKey] || 0;
+            const sPhysObj = monthlyPhysical?.[sKey];
+            const shortage = sPhysObj 
+                ? Math.max(0, sSys - sPhysObj.weight) 
+                : (sSys < 0 ? -sSys : 0);
+            setFormData(prev => ({
+                ...prev,
+                weight: shortage > 0.01 ? shortage.toFixed(2) : ''
+            }));
+        }
+    }, [mode, isOpen, formData.sourceMaterial, calculatedClosings, monthlyPhysical]);
+
     if (!isOpen) return null;
 
     const materials = [
@@ -161,16 +186,6 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
     const destPasteMaterials = [
         'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
-
-    const dbToKey = {
-        'GINGER RAW': 'ginger',
-        'GARLIC RAW': 'garlic',
-        'GINGER PEELED': 'gingerPeeled',
-        'GARLIC PEELED': 'garlicPeeled',
-        'G&G PASTE (MIX)': 'paste',
-        'GINGER PASTE': 'gingerPaste',
-        'GARLIC PASTE': 'garlicPaste'
-    };
 
     const sourceKey = dbToKey[formData.sourceMaterial];
     const sourceSys = calculatedClosings?.[sourceKey] || 0;
@@ -193,21 +208,6 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         const phys = monthlyPhysical?.[item.key];
         return phys && Math.abs(phys.weight - item.available) >= 0.01;
     });
-
-    useEffect(() => {
-        if (mode === 'transfer' && isOpen) {
-            const sKey = dbToKey[formData.sourceMaterial];
-            const sSys = calculatedClosings?.[sKey] || 0;
-            const sPhysObj = monthlyPhysical?.[sKey];
-            const shortage = sPhysObj 
-                ? Math.max(0, sSys - sPhysObj.weight) 
-                : (sSys < 0 ? -sSys : 0);
-            setFormData(prev => ({
-                ...prev,
-                weight: shortage > 0.01 ? shortage.toFixed(2) : ''
-            }));
-        }
-    }, [mode, isOpen, formData.sourceMaterial, calculatedClosings, monthlyPhysical]);
 
     const handleAutoReconcile = async () => {
         let targetDate = new Date().toISOString().split('T')[0];

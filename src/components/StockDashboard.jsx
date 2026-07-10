@@ -194,6 +194,21 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         return phys && Math.abs(phys.weight - item.available) >= 0.01;
     });
 
+    useEffect(() => {
+        if (mode === 'transfer' && isOpen) {
+            const sKey = dbToKey[formData.sourceMaterial];
+            const sSys = calculatedClosings?.[sKey] || 0;
+            const sPhysObj = monthlyPhysical?.[sKey];
+            const shortage = sPhysObj 
+                ? Math.max(0, sSys - sPhysObj.weight) 
+                : (sSys < 0 ? -sSys : 0);
+            setFormData(prev => ({
+                ...prev,
+                weight: shortage > 0.01 ? shortage.toFixed(2) : ''
+            }));
+        }
+    }, [mode, isOpen, formData.sourceMaterial, calculatedClosings, monthlyPhysical]);
+
     const handleAutoReconcile = async () => {
         let targetDate = new Date().toISOString().split('T')[0];
         if (selectedMonth !== 'Overall') {
@@ -468,40 +483,6 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                                 </select>
                             </div>
 
-                            {calculatedShortage > 0.01 && (
-                                <div style={{
-                                    background: 'rgba(59, 130, 246, 0.08)',
-                                    border: '1px dashed #3b82f6',
-                                    borderRadius: '0.5rem',
-                                    padding: '0.75rem',
-                                    fontSize: '0.8rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginTop: '0.5rem'
-                                }}>
-                                    <div style={{ color: '#93c5fd' }}>
-                                        <strong>Source Discrepancy (Shortage):</strong> {calculatedShortage.toFixed(1)} kg
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, weight: calculatedShortage.toFixed(2) })}
-                                        style={{
-                                            padding: '0.25rem 0.6rem',
-                                            background: '#3b82f6',
-                                            border: 'none',
-                                            borderRadius: '0.25rem',
-                                            color: 'white',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            fontSize: '0.75rem',
-                                            transition: 'background 0.2s'
-                                        }}
-                                    >
-                                        Auto-Fill Weight
-                                    </button>
-                                </div>
-                            )}
                         </>
                     ) : (
                         <div>
@@ -544,6 +525,11 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                             }}
                             required
                         />
+                        {mode === 'transfer' && calculatedShortage > 0.01 && (
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: '#60a5fa', marginTop: '0.4rem' }}>
+                                ℹ️ Auto-calculated shortage difference: <strong>{calculatedShortage.toFixed(2)} kg</strong>
+                            </span>
+                        )}
                     </div>
 
                     <div>

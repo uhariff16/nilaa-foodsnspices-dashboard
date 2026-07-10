@@ -1641,6 +1641,20 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                     >
                         <PlusCircle size={18} color="var(--accent-color)" /> Manual Adjustment
                     </button>
+                    <button
+                        onClick={() => setShowLogsModal(true)}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            background: 'var(--glass-highlight)',
+                            border: '1px solid #3b82f6',
+                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                            transition: 'all 0.2s'
+                        }}
+                        className="hover-scale"
+                    >
+                        <Activity size={18} color="#3b82f6" /> View Adjustment Logs
+                    </button>
                 </div>
             )}
 

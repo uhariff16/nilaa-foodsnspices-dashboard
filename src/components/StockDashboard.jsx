@@ -1612,15 +1612,21 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
             {/* Admin Controls */}
             {isAdmin && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'flex-end', 
+                    gap: '1rem', 
+                    marginBottom: '1.5rem',
+                    alignItems: 'stretch'
+                }}>
                     <button
                         onClick={() => setShowPhysicalModal(true)}
                         style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             background: 'var(--glass-highlight)',
                             border: '1px solid #10b981',
-                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
-                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                            color: 'var(--text-primary)', padding: '0.65rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600,
                             transition: 'all 0.2s'
                         }}
                         className="hover-scale"
@@ -1632,14 +1638,14 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             background: 'var(--glass-highlight)',
-                            border: '1px solid var(--accent-color)',
-                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
-                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                            border: '1px solid #818cf8',
+                            color: 'var(--text-primary)', padding: '0.65rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600,
                             transition: 'all 0.2s'
                         }}
                         className="hover-scale"
                     >
-                        <PlusCircle size={18} color="var(--accent-color)" /> Manual Adjustment
+                        <PlusCircle size={18} color="#818cf8" /> Manual Adjustment
                     </button>
                     <button
                         onClick={() => setShowLogsModal(true)}
@@ -1647,8 +1653,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             background: 'var(--glass-highlight)',
                             border: '1px solid #3b82f6',
-                            color: 'var(--text-primary)', padding: '0.6rem 1.25rem', borderRadius: '0.75rem',
-                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
+                            color: 'var(--text-primary)', padding: '0.65rem 1.25rem', borderRadius: '0.75rem',
+                            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600,
                             transition: 'all 0.2s'
                         }}
                         className="hover-scale"

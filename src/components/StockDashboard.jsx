@@ -4,7 +4,7 @@ import gingerIcon from '../assets/ginger.png';
 import garlicIcon from '../assets/garlic.png';
 import { supabase } from '../lib/supabaseClient';
 
-const StockSummaryCard = ({ title, icon, color, opening, purchased, total, available }) => (
+const StockSummaryCard = ({ title, icon, color, opening, purchased, total, used, available }) => (
     <div style={{
         background: 'var(--glass-highlight)',
         borderRadius: '1rem',
@@ -39,12 +39,15 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, avail
         </div>
 
         {/* content */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '1.1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem', fontSize: '1.05rem' }}>
             <span style={{ color: '#d97706', fontWeight: 600 }}>Opening:</span>
             <span style={{ textAlign: 'right', color: '#d97706', fontWeight: 600 }}>{opening.toLocaleString()} kg</span>
 
             <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Purchased:</span>
             <span style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>{purchased.toLocaleString()} kg</span>
+
+            <span style={{ color: '#ef4444', fontWeight: 600 }}>Used (Stock Out):</span>
+            <span style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>-{used.toLocaleString()} kg</span>
 
             <span style={{ color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>Total:</span>
             <span style={{ textAlign: 'right', color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>{total.toLocaleString()} kg</span>
@@ -1799,6 +1802,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         color="#FCD34D"
                         opening={stockStats.ginger.open}
                         purchased={stockStats.ginger.in}
+                        used={stockStats.ginger.out}
                         total={stockStats.ginger.open + stockStats.ginger.in}
                         available={stockStats.ginger.closing}
                     />
@@ -1808,6 +1812,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         color="#818cf8"
                         opening={stockStats.garlic.open}
                         purchased={stockStats.garlic.in}
+                        used={stockStats.garlic.out}
                         total={stockStats.garlic.open + stockStats.garlic.in}
                         available={stockStats.garlic.closing}
                     />

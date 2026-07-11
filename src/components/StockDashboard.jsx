@@ -46,11 +46,11 @@ const StockSummaryCard = ({ title, icon, color, opening, purchased, total, used,
             <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Purchased:</span>
             <span style={{ textAlign: 'right', color: 'var(--accent-primary)', fontWeight: 600 }}>{purchased.toLocaleString()} kg</span>
 
-            <span style={{ color: '#ef4444', fontWeight: 600 }}>Used (Stock Out):</span>
-            <span style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>-{used.toLocaleString()} kg</span>
-
             <span style={{ color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>Total:</span>
             <span style={{ textAlign: 'right', color: 'var(--text-primary)', fontWeight: 700, borderTop: '1px solid var(--glass-border)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>{total.toLocaleString()} kg</span>
+
+            <span style={{ color: '#ef4444', fontWeight: 600 }}>Used (Stock Out):</span>
+            <span style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>-{used.toLocaleString()} kg</span>
         </div>
 
         {/* Footer */}

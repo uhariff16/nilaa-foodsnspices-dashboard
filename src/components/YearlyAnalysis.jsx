@@ -406,6 +406,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             const targetPrefix = `${selectedYear}-${numMonth}`; // e.g., "2025-01"
 
             let revenue = 0;
+            let wholesaleRev = 0;
+            let retailRev = 0;
             let totalExpenses = 0;
             let labour = 0;
             let materialsCost = 0;
@@ -476,6 +478,29 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 const discountRevenue = monthDiscounts.reduce((acc, d) => acc + (parseFloat(d.discount_amount) || 0), 0);
 
                 revenue = grossRevenue - returnRevenue - discountRevenue;
+
+                wholesaleRev = 0;
+                retailRev = 0;
+                finalSales.forEach(t => {
+                    const amt = Math.abs(parseFloat(t.parsedAmount || 0));
+                    const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
+                    const isRetail = customer === 'cash' || customer === 'nfs delivery';
+                    if (isRetail) retailRev += amt;
+                    else wholesaleRev += amt;
+                });
+                
+                salesReturns.forEach(t => {
+                    const amt = Math.abs(parseFloat(t.parsedAmount || 0));
+                    const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
+                    const isRetail = customer === 'cash' || customer === 'nfs delivery';
+                    if (isRetail) retailRev = Math.max(0, retailRev - amt);
+                    else wholesaleRev = Math.max(0, wholesaleRev - amt);
+                });
+
+                monthDiscounts.forEach(d => {
+                    const amt = parseFloat(d.discount_amount) || 0;
+                    wholesaleRev = Math.max(0, wholesaleRev - amt);
+                });
 
                 // 5. Build Item Breakdown from ALL Granular Sales
                 // [NEW] Identify items that were returned in this month via Invoice Lookup
@@ -746,6 +771,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 costPerKg,
                 revenuePerKg,
                 yieldPercent,
+                wholesaleRevenue: wholesaleRev,
+                retailRevenue: retailRev,
                 isActive: revenue > 0 || totalExpenses > 0 || effectiveOutput > 0 || purchasesKgValue > 0 || productionInputKgValue > 0
             };
         });
@@ -2291,6 +2318,14 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                                 <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 600, color: '#10b981', fontSize: '0.85rem' }}>Total Revenue</td>
                                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>{m.revenue > 0 ? formatCurrency(m.revenue) : '-'}</td>)}
+                                            </tr>
+                                            <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--blue-text)', fontSize: '0.8rem' }}>↳ B2B Wholesale Sales</td>
+                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--blue-text)' }}>{m.wholesaleRevenue > 0 ? formatCurrency(m.wholesaleRevenue) : '-'}</td>)}
+                                            </tr>
+                                            <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
+                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--green-text)', fontSize: '0.8rem' }}>↳ B2C Retail Sales</td>
+                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--green-text)' }}>{m.retailRevenue > 0 ? formatCurrency(m.retailRevenue) : '-'}</td>)}
                                             </tr>
                                             <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
                                                 <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Average Price / kg (ASP)</td>

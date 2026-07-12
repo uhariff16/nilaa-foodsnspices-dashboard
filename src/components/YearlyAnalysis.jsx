@@ -1257,6 +1257,17 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                         <TrendingUp size={16} /> Performance
                                     </button>
                                     <button
+                                        onClick={() => setActiveAnalysisSubTab('sales')}
+                                        style={{
+                                            padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                            background: activeAnalysisSubTab === 'sales' ? 'var(--accent-primary)' : 'transparent',
+                                            color: activeAnalysisSubTab === 'sales' ? 'white' : 'var(--text-secondary)',
+                                            fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                        }}
+                                    >
+                                        <ShoppingCart size={16} /> Sales Analysis
+                                    </button>
+                                    <button
                                         onClick={() => setActiveAnalysisSubTab('insights')}
                                         style={{
                                             padding: '0.5rem 1.25rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
@@ -2109,189 +2120,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                 </div>
                             )}
 
-                            {/* YTD Sales Channel & Gram-wise Analysis */}
-                            {viewSettings.showSalesAnalysis && (
-                                <div className="glass-panel" style={{
-                                    marginBottom: '2rem',
-                                    padding: '1.5rem',
-                                    background: 'var(--card-bg)',
-                                    border: '1px solid var(--glass-border)',
-                                    boxShadow: '0 10px 30px -10px rgba(0,0,0,0.2)'
-                                }}>
-                                    {/* Header */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
-                                        <div>
-                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                                <ShoppingCart size={22} color="#3b82f6" />
-                                                Sales Channel & Pack-Size Analysis ({analysisViewMode === 'monthly' ? selectedAnalysisMonth : selectedYear})
-                                            </h3>
-                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                                Breakdown of sales values and volumes by channel and gram packaging
-                                            </p>
-                                        </div>
-                                    </div>
 
-                                    {/* KPI Row */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Sales Revenue</span>
-                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>
-                                                {formatCurrency(salesChannelData.overall.totalRev)}
-                                            </h3>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                                Across both channels
-                                            </span>
-                                        </div>
-                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Wholesale Channel</span>
-                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#3b82f6' }}>
-                                                {formatCurrency(salesChannelData.wholesale.totalRev)}
-                                            </h3>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#3b82f6' }}>
-                                                {salesChannelData.overall.wholesalePct.toFixed(1)}% Share
-                                            </span>
-                                        </div>
-                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Retail Channel</span>
-                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#10b981' }}>
-                                                {formatCurrency(salesChannelData.retail.totalRev)}
-                                            </h3>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#10b981' }}>
-                                                {salesChannelData.overall.retailPct.toFixed(1)}% Share
-                                            </span>
-                                        </div>
-                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Volume Sold</span>
-                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#f59e0b' }}>
-                                                {salesChannelData.overall.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg
-                                            </h3>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                                                Gross physical output weight
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Visual Chart Comparison */}
-                                    {salesChannelData.chartData.length > 0 && (
-                                        <div style={{ height: '300px', marginBottom: '2rem', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
-                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Sales Value Split by Product & Channel</h4>
-                                            <ResponsiveContainer width="100%" height="90%">
-                                                <BarChart data={salesChannelData.chartData}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                                    <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} />
-                                                    <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(v) => `₹${v >= 1000 ? (v/1000) + 'k' : v}`} />
-                                                    <Tooltip 
-                                                        contentStyle={{ background: 'var(--bg-secondary)', borderColor: 'var(--glass-border)' }}
-                                                        formatter={(value) => [formatCurrency(value), '']}
-                                                    />
-                                                    <Legend />
-                                                    <Bar dataKey="Wholesale" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                                                    <Bar dataKey="Retail" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    )}
-
-                                    {/* Detailed Side-by-Side Channels Tables */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '2rem' }}>
-                                        
-                                        {/* Wholesale Segment */}
-                                        <div>
-                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>
-                                                <Users size={18} /> Wholesale Channel Breakdown
-                                            </h4>
-                                            <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                    <thead>
-                                                        <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
-                                                            <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {Object.values(salesChannelData.wholesale.items).length === 0 ? (
-                                                            <tr>
-                                                                <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Wholesale sales records found.</td>
-                                                            </tr>
-                                                        ) : (
-                                                            Object.values(salesChannelData.wholesale.items).map((item) => (
-                                                                <React.Fragment key={item.name}>
-                                                                    {/* Item Group Row */}
-                                                                    <tr style={{ background: 'rgba(59, 130, 246, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
-                                                                        <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6' }}>{formatCurrency(item.totalRev)}</td>
-                                                                    </tr>
-                                                                    {/* Gram Sizes Nested Rows */}
-                                                                    {Object.values(item.sizes).map((size) => (
-                                                                        <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                            <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </React.Fragment>
-                                                            ))
-                                                        )}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                        {/* Retail Segment */}
-                                        <div>
-                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #10b981', paddingBottom: '0.5rem' }}>
-                                                <ShoppingCart size={18} /> Retail Channel Breakdown
-                                            </h4>
-                                            <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                    <thead>
-                                                        <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
-                                                            <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
-                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {Object.values(salesChannelData.retail.items).length === 0 ? (
-                                                            <tr>
-                                                                <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Retail sales records found.</td>
-                                                            </tr>
-                                                        ) : (
-                                                            Object.values(salesChannelData.retail.items).map((item) => (
-                                                                <React.Fragment key={item.name}>
-                                                                    {/* Item Group Row */}
-                                                                    <tr style={{ background: 'rgba(16, 185, 129, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
-                                                                        <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{formatCurrency(item.totalRev)}</td>
-                                                                    </tr>
-                                                                    {/* Gram Sizes Nested Rows */}
-                                                                    {Object.values(item.sizes).map((size) => (
-                                                                        <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                            <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </React.Fragment>
-                                                            ))
-                                                        )}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                </div>
-                            )}
 
                             {/* Detailed Data Table */}
                             <div className="glass-panel" style={{ overflow: 'hidden' }}>
@@ -2660,6 +2489,232 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     </>
                                 );
                             })()}
+                        </div>
+                    )}
+
+                    {activeAnalysisSubTab === 'sales' && (
+                        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }} key="sales-view">
+                            {/* Monthly Selector & Toggle */}
+                            <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        <ShoppingCart size={22} color="#3b82f6" />
+                                        Sales Channel & Pack-Size Analysis
+                                    </h3>
+                                    <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                        <button
+                                            onClick={() => setAnalysisViewMode('monthly')}
+                                            style={{
+                                                padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                                background: analysisViewMode === 'monthly' ? '#3b82f6' : 'transparent',
+                                                color: analysisViewMode === 'monthly' ? 'white' : 'var(--text-secondary)',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >Monthly</button>
+                                        <button
+                                            onClick={() => setAnalysisViewMode('yearly')}
+                                            style={{
+                                                padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
+                                                background: analysisViewMode === 'yearly' ? '#3b82f6' : 'transparent',
+                                                color: analysisViewMode === 'yearly' ? 'white' : 'var(--text-secondary)',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >Yearly (Aggregated)</button>
+                                    </div>
+                                </div>
+
+                                {analysisViewMode === 'monthly' && (
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        gap: '0.4rem', 
+                                        overflowX: 'auto', 
+                                        paddingBottom: '5px',
+                                        msOverflowStyle: 'none',
+                                        scrollbarWidth: 'none'
+                                    }}>
+                                        {yearlyData.filter(m => m.isActive).map(m => (
+                                            <button
+                                                key={m.name}
+                                                onClick={() => setSelectedAnalysisMonth(m.name)}
+                                                style={{
+                                                    padding: '0.4rem 1rem',
+                                                    fontSize: '0.8rem',
+                                                    borderRadius: '0.4rem',
+                                                    border: `1px solid ${selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--glass-border)'}`,
+                                                    background: selectedAnalysisMonth === m.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
+                                                    color: selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--text-secondary)',
+                                                    cursor: 'pointer',
+                                                    fontWeight: selectedAnalysisMonth === m.name ? 700 : 400,
+                                                    transition: 'all 0.2s',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                {m.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* KPI Row */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '1rem' }}>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Sales Revenue</span>
+                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>
+                                        {formatCurrency(salesChannelData.overall.totalRev)}
+                                    </h3>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                        Across both channels
+                                    </span>
+                                </div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Wholesale Channel</span>
+                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#3b82f6' }}>
+                                        {formatCurrency(salesChannelData.wholesale.totalRev)}
+                                    </h3>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#3b82f6' }}>
+                                        {salesChannelData.overall.wholesalePct.toFixed(1)}% Share
+                                    </span>
+                                </div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Retail Channel</span>
+                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#10b981' }}>
+                                        {formatCurrency(salesChannelData.retail.totalRev)}
+                                    </h3>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#10b981' }}>
+                                        {salesChannelData.overall.retailPct.toFixed(1)}% Share
+                                    </span>
+                                </div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Volume Sold</span>
+                                    <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#f59e0b' }}>
+                                        {salesChannelData.overall.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg
+                                    </h3>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                        Gross physical output weight
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Visual Chart Comparison */}
+                            {salesChannelData.chartData.length > 0 && (
+                                <div style={{ height: '300px', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Sales Value Split by Product & Channel</h4>
+                                    <ResponsiveContainer width="100%" height="90%">
+                                        <BarChart data={salesChannelData.chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                            <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} />
+                                            <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(v) => `₹${v >= 1000 ? (v/1000) + 'k' : v}`} />
+                                            <Tooltip 
+                                                contentStyle={{ background: 'var(--bg-secondary)', borderColor: 'var(--glass-border)' }}
+                                                formatter={(value) => [formatCurrency(value), '']}
+                                            />
+                                            <Legend />
+                                            <Bar dataKey="Wholesale" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="Retail" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+
+                            {/* Detailed Side-by-Side Channels Tables */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '2rem' }}>
+                                
+                                {/* Wholesale Segment */}
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>
+                                        <Users size={18} /> Wholesale Channel Breakdown
+                                    </h4>
+                                    <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                            <thead>
+                                                <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                                    <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {Object.values(salesChannelData.wholesale.items).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Wholesale sales records found for this period.</td>
+                                                    </tr>
+                                                ) : (
+                                                    Object.values(salesChannelData.wholesale.items).map((item) => (
+                                                        <React.Fragment key={item.name}>
+                                                            {/* Item Group Row */}
+                                                            <tr style={{ background: 'rgba(59, 130, 246, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
+                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6' }}>{formatCurrency(item.totalRev)}</td>
+                                                            </tr>
+                                                            {/* Gram Sizes Nested Rows */}
+                                                            {Object.values(item.sizes).map((size) => (
+                                                                <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                                    <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Retail Segment */}
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #10b981', paddingBottom: '0.5rem' }}>
+                                        <ShoppingCart size={18} /> Retail Channel Breakdown
+                                    </h4>
+                                    <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                            <thead>
+                                                <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                                    <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {Object.values(salesChannelData.retail.items).length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Retail sales records found for this period.</td>
+                                                    </tr>
+                                                ) : (
+                                                    Object.values(salesChannelData.retail.items).map((item) => (
+                                                        <React.Fragment key={item.name}>
+                                                            {/* Item Group Row */}
+                                                            <tr style={{ background: 'rgba(16, 185, 129, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
+                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{formatCurrency(item.totalRev)}</td>
+                                                            </tr>
+                                                            {/* Gram Sizes Nested Rows */}
+                                                            {Object.values(item.sizes).map((size) => (
+                                                                <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                                    <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                            </div>
                         </div>
                     )}
 

@@ -40,6 +40,30 @@ const getPackWeight = (desc) => {
     return 1; // Default to 1kg if no unit found (bulk/loose/standard)
 };
 
+const getPackSizeLabel = (desc) => {
+    if (!desc) return 'Bulk / Loose';
+    const d = desc.toUpperCase();
+    if (d.includes('1KG') || d.includes('1 KG')) return '1kg Pack';
+    if (d.includes('500 G') || d.includes('500G') || d.includes('500 GRM') || d.includes('500GRM') || d.includes('500 GRM')) return '500g Pack';
+    if (d.includes('250 G') || d.includes('250G') || d.includes('250 GMS') || d.includes('250GMS')) return '250g Pack';
+    if (d.includes('200 G') || d.includes('200G')) return '200g Pack';
+    if (d.includes('50 G') || d.includes('50G')) return '50g Pack';
+    if (d.includes('100 G') || d.includes('100G')) return '100g Pack';
+    if (d.includes('WITHOUT PACK') || d.includes('WITHOUT_PACK') || d.includes('WITHOUT PACK')) return 'Bulk (Loose)';
+    return 'Bulk / Loose';
+};
+
+const getPrettyProductName = (normalizedName) => {
+    const n = normalizedName.toUpperCase();
+    if (n.includes('GINGER') && n.includes('GARLIC') && n.includes('PASTE')) return 'Ginger Garlic Paste';
+    if (n.includes('GINGER') && n.includes('PASTE')) return 'Ginger Paste';
+    if (n.includes('GARLIC') && n.includes('PASTE')) return 'Garlic Paste';
+    if (n.includes('PEELED') && n.includes('GINGER')) return 'Ginger Peeled';
+    if (n.includes('PEELED') && n.includes('GARLIC')) return 'Garlic Peeled';
+    if (n.includes('PEELED') && n.includes('ONION')) return 'Small Onion Peeled';
+    return normalizedName;
+};
+
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
 const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, purchaseData = [], summaryData = [], invoiceDiscounts = [], forceTab = null }) => {
@@ -70,14 +94,16 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
                 // Tables
                 showEfficiencyBench: true,
-                showItemAnalysis: true
+                showItemAnalysis: true,
+                showSalesAnalysis: true
             };
         } catch (e) {
             return {
                 showTotalRev: true, showTotalExp: true, showNetProfit: true, showYtdProd: true,
                 showQuarterly: true, showRecommendations: true, showFinancialTrends: true,
                 showGrowthTrends: true, showUnitEconomics: true, showExpenseComp: true,
-                showProdYield: true, showEfficiencyBench: true, showItemAnalysis: true
+                showProdYield: true, showEfficiencyBench: true, showItemAnalysis: true,
+                showSalesAnalysis: true
             };
         }
     });
@@ -98,6 +124,134 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
     const [ledgerSearchQuery, setLedgerSearchQuery] = React.useState('');
     const [ledgerCurrentPage, setLedgerCurrentPage] = React.useState(1);
+
+    const salesChannelData = useMemo(() => {
+        if (!transactions || transactions.length === 0) {
+            return {
+                wholesale: { items: {}, totalRev: 0, totalVol: 0, count: 0 },
+                retail: { items: {}, totalRev: 0, totalVol: 0, count: 0 },
+                overall: { totalRev: 0, totalVol: 0, wholesalePct: 0, retailPct: 0 },
+                chartData: []
+            };
+        }
+
+        // Filter transactions for the selected year and type
+        const yearSales = transactions.filter(t => {
+            const dateStr = t.parsedDate || '';
+            if (!dateStr.startsWith(selectedYear)) return false;
+
+            const type = String(t.parsedType || '').toLowerCase();
+            if (type === 'sales return' || type === 'invoice total' || type === 'profitsummary') return false;
+            if (!type.includes('sale')) return false;
+
+            // Check if it's a granular item row
+            const desc = String(t.originalDesc || '').toLowerCase();
+            const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
+            if (keywordsToExclude.some(k => desc.includes(k))) return false;
+
+            // Blacklist check
+            const rawName = String(t.originalDesc || '').toUpperCase().trim();
+            const isFinishedPaste = rawName.includes('PASTE') || rawName.includes('G & G') || rawName.includes('G&G') || rawName.includes('PEELED');
+            const isBlacklisted = BLACKLIST_ITEMS.some(b => rawName.includes(b)) ||
+                rawName === 'ITEM' || rawName === 'PRODUCT' ||
+                rawName === 'AMOUNT' || rawName === 'SUBTOTAL' || rawName === 'INVOICE TOTAL' || rawName === 'TOTAL' ||
+                !isFinishedPaste;
+
+            if (isBlacklisted) return false;
+
+            // Month filter if not yearly mode
+            if (analysisViewMode === 'monthly' && selectedAnalysisMonth) {
+                const parts = dateStr.split('-');
+                if (parts.length >= 2) {
+                    const monthIdx = parseInt(parts[1], 10) - 1;
+                    if (monthNames[monthIdx] !== selectedAnalysisMonth) return false;
+                }
+            }
+
+            return true;
+        });
+
+        // Setup channel containers
+        const initChannel = () => ({ items: {}, totalRev: 0, totalVol: 0, count: 0 });
+        const wholesale = initChannel();
+        const retail = initChannel();
+
+        yearSales.forEach(t => {
+            const customer = String(t.customerName || t.customerName || 'cash').toLowerCase().trim();
+            
+            // Classification: NFS Delivery, Cash -> Retail. Otherwise -> Wholesale.
+            const isRetail = customer === 'cash' || customer === 'nfs delivery';
+            const channel = isRetail ? retail : wholesale;
+
+            const amt = Math.abs(parseFloat(t.parsedAmount || 0));
+            const qty = parseFloat(t.parsedQty || 0);
+            const desc = (t.originalDesc || 'Generic Item').trim();
+
+            const coreName = normalizeName(desc);
+            const packWeight = getPackWeight(desc);
+            const sizeLabel = getPackSizeLabel(desc);
+            const weightKg = qty * packWeight;
+
+            // Track detailed nested metrics under: Item -> Gram Size
+            if (!channel.items[coreName]) {
+                channel.items[coreName] = {
+                    name: coreName,
+                    totalRev: 0,
+                    totalVol: 0,
+                    totalQty: 0,
+                    sizes: {}
+                };
+            }
+
+            const itemNode = channel.items[coreName];
+            itemNode.totalRev += amt;
+            itemNode.totalVol += weightKg;
+            itemNode.totalQty += qty;
+
+            if (!itemNode.sizes[sizeLabel]) {
+                itemNode.sizes[sizeLabel] = {
+                    sizeLabel,
+                    qty: 0,
+                    vol: 0,
+                    revenue: 0
+                };
+            }
+
+            const sizeNode = itemNode.sizes[sizeLabel];
+            sizeNode.qty += qty;
+            sizeNode.vol += weightKg;
+            sizeNode.revenue += amt;
+
+            channel.totalRev += amt;
+            channel.totalVol += weightKg;
+            channel.count += qty;
+        });
+
+        // Compute overall metrics
+        const totalRev = wholesale.totalRev + retail.totalRev;
+        const totalVol = wholesale.totalVol + retail.totalVol;
+        const wholesalePct = totalRev > 0 ? (wholesale.totalRev / totalRev) * 100 : 0;
+        const retailPct = totalRev > 0 ? (retail.totalRev / totalRev) * 100 : 0;
+
+        // Build chartData: compare product-level sales by channel
+        const allProducts = Array.from(new Set([
+            ...Object.keys(wholesale.items),
+            ...Object.keys(retail.items)
+        ]));
+
+        const chartData = allProducts.map(prod => ({
+            name: getPrettyProductName(prod),
+            Wholesale: Math.round(wholesale.items[prod]?.totalRev || 0),
+            Retail: Math.round(retail.items[prod]?.totalRev || 0)
+        }));
+
+        return {
+            wholesale,
+            retail,
+            overall: { totalRev, totalVol, wholesalePct, retailPct },
+            chartData
+        };
+    }, [transactions, selectedYear, analysisViewMode, selectedAnalysisMonth]);
 
     React.useEffect(() => {
         setLedgerSearchQuery('');
@@ -1217,6 +1371,9 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                                                             <input type="checkbox" checked={viewSettings.showItemAnalysis} onChange={() => setViewSettings({ ...viewSettings, showItemAnalysis: !viewSettings.showItemAnalysis })} /> Itemized Cost Analysis
                                                         </label>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                            <input type="checkbox" checked={viewSettings.showSalesAnalysis} onChange={() => setViewSettings({ ...viewSettings, showSalesAnalysis: !viewSettings.showSalesAnalysis })} /> Sales Channel Analysis
+                                                        </label>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1921,6 +2078,190 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                 })()}
                                             </tbody>
                                         </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* YTD Sales Channel & Gram-wise Analysis */}
+                            {viewSettings.showSalesAnalysis && (
+                                <div className="glass-panel" style={{
+                                    marginBottom: '2rem',
+                                    padding: '1.5rem',
+                                    background: 'var(--card-bg)',
+                                    border: '1px solid var(--glass-border)',
+                                    boxShadow: '0 10px 30px -10px rgba(0,0,0,0.2)'
+                                }}>
+                                    {/* Header */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                <ShoppingCart size={22} color="#3b82f6" />
+                                                Sales Channel & Pack-Size Analysis ({analysisViewMode === 'monthly' ? selectedAnalysisMonth : selectedYear})
+                                            </h3>
+                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                Breakdown of sales values and volumes by channel and gram packaging
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* KPI Row */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Sales Revenue</span>
+                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>
+                                                {formatCurrency(salesChannelData.overall.totalRev)}
+                                            </h3>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                                Across both channels
+                                            </span>
+                                        </div>
+                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Wholesale Channel</span>
+                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#3b82f6' }}>
+                                                {formatCurrency(salesChannelData.wholesale.totalRev)}
+                                            </h3>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#3b82f6' }}>
+                                                {salesChannelData.overall.wholesalePct.toFixed(1)}% Share
+                                            </span>
+                                        </div>
+                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Retail Channel</span>
+                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#10b981' }}>
+                                                {formatCurrency(salesChannelData.retail.totalRev)}
+                                            </h3>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#10b981' }}>
+                                                {salesChannelData.overall.retailPct.toFixed(1)}% Share
+                                            </span>
+                                        </div>
+                                        <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Volume Sold</span>
+                                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: '#f59e0b' }}>
+                                                {salesChannelData.overall.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg
+                                            </h3>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                                Gross physical output weight
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Visual Chart Comparison */}
+                                    {salesChannelData.chartData.length > 0 && (
+                                        <div style={{ height: '300px', marginBottom: '2rem', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
+                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Sales Value Split by Product & Channel</h4>
+                                            <ResponsiveContainer width="100%" height="90%">
+                                                <BarChart data={salesChannelData.chartData}>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                                    <XAxis dataKey="name" stroke="var(--text-secondary)" fontSize={12} />
+                                                    <YAxis stroke="var(--text-secondary)" fontSize={12} tickFormatter={(v) => `₹${v >= 1000 ? (v/1000) + 'k' : v}`} />
+                                                    <Tooltip 
+                                                        contentStyle={{ background: 'var(--bg-secondary)', borderColor: 'var(--glass-border)' }}
+                                                        formatter={(value) => [formatCurrency(value), '']}
+                                                    />
+                                                    <Legend />
+                                                    <Bar dataKey="Wholesale" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="Retail" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
+
+                                    {/* Detailed Side-by-Side Channels Tables */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '2rem' }}>
+                                        
+                                        {/* Wholesale Segment */}
+                                        <div>
+                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #3b82f6', paddingBottom: '0.5rem' }}>
+                                                <Users size={18} /> Wholesale Channel Breakdown
+                                            </h4>
+                                            <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                                            <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {Object.values(salesChannelData.wholesale.items).length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Wholesale sales records found.</td>
+                                                            </tr>
+                                                        ) : (
+                                                            Object.values(salesChannelData.wholesale.items).map((item) => (
+                                                                <React.Fragment key={item.name}>
+                                                                    {/* Item Group Row */}
+                                                                    <tr style={{ background: 'rgba(59, 130, 246, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
+                                                                        <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6' }}>{formatCurrency(item.totalRev)}</td>
+                                                                    </tr>
+                                                                    {/* Gram Sizes Nested Rows */}
+                                                                    {Object.values(item.sizes).map((size) => (
+                                                                        <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                                            <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </React.Fragment>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        {/* Retail Segment */}
+                                        <div>
+                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '2px solid #10b981', paddingBottom: '0.5rem' }}>
+                                                <ShoppingCart size={18} /> Retail Channel Breakdown
+                                            </h4>
+                                            <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.1)', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                                            <th style={{ padding: '0.75rem' }}>Product & Pack Size</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'center' }}>Qty (pcs)</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Volume (kg)</th>
+                                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Sales Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {Object.values(salesChannelData.retail.items).length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No Retail sales records found.</td>
+                                                            </tr>
+                                                        ) : (
+                                                            Object.values(salesChannelData.retail.items).map((item) => (
+                                                                <React.Fragment key={item.name}>
+                                                                    {/* Item Group Row */}
+                                                                    <tr style={{ background: 'rgba(16, 185, 129, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
+                                                                        <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{formatCurrency(item.totalRev)}</td>
+                                                                    </tr>
+                                                                    {/* Gram Sizes Nested Rows */}
+                                                                    {Object.values(item.sizes).map((size) => (
+                                                                        <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                                            <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </React.Fragment>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 </div>
                             )}

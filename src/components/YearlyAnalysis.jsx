@@ -3160,14 +3160,21 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                         {/* Modal Body / Customer List */}
                         <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             {(() => {
-                                // Extract all unique customers from transactions
-                                const uniqueCusts = new Set();
+                                // Extract all unique customers from transactions and deduplicate case-insensitively
+                                const uniqueCustsMap = new Map();
                                 (transactions || []).forEach(t => {
                                     const name = t.customerName || t.customer_name;
-                                    if (name) uniqueCusts.add(name.trim());
+                                    if (name) {
+                                        const trimmed = name.trim();
+                                        const lower = trimmed.toLowerCase();
+                                        // Prefer uppercase or mixed-case representations to lowercase
+                                        if (!uniqueCustsMap.has(lower) || trimmed !== lower) {
+                                            uniqueCustsMap.set(lower, trimmed);
+                                        }
+                                    }
                                 });
                                 
-                                const filteredList = Array.from(uniqueCusts)
+                                const filteredList = Array.from(uniqueCustsMap.values())
                                     .filter(c => c.toLowerCase().includes(customerFilterQuery.toLowerCase()))
                                     .sort((a, b) => a.localeCompare(b));
 

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
 import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield, ShoppingCart, Truck, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { isRetailTransaction } from '../utils/channelClassification';
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -177,15 +178,15 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         const retail = initChannel();
 
         yearSales.forEach(t => {
-            const customer = String(t.customerName || t.customerName || 'cash').toLowerCase().trim();
+            const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
+            const desc = (t.originalDesc || 'Generic Item').trim();
             
             // Classification: NFS Delivery, Cash -> Retail. Otherwise -> Wholesale.
-            const isRetail = customer === 'cash' || customer === 'nfs delivery';
+            const isRetail = isRetailTransaction(customer, desc);
             const channel = isRetail ? retail : wholesale;
 
             const amt = Math.abs(parseFloat(t.parsedAmount || 0));
             const qty = parseFloat(t.parsedQty || 0);
-            const desc = (t.originalDesc || 'Generic Item').trim();
 
             const coreName = normalizeName(desc);
             const packWeight = getPackWeight(desc);
@@ -484,7 +485,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 finalSales.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const isRetail = customer === 'cash' || customer === 'nfs delivery';
+                    const desc = (t.originalDesc || '').trim();
+                    const isRetail = isRetailTransaction(customer, desc);
                     if (isRetail) retailRev += amt;
                     else wholesaleRev += amt;
                 });
@@ -492,7 +494,8 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 salesReturns.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const isRetail = customer === 'cash' || customer === 'nfs delivery';
+                    const desc = (t.originalDesc || '').trim();
+                    const isRetail = isRetailTransaction(customer, desc);
                     if (isRetail) retailRev = Math.max(0, retailRev - amt);
                     else wholesaleRev = Math.max(0, wholesaleRev - amt);
                 });

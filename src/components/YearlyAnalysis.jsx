@@ -2740,7 +2740,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                             </div>
 
                             {/* KPI Row */}
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(5, 1fr)', gap: '1rem' }}>
                                 <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Sales Revenue</span>
                                     <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0.25rem 0', color: 'var(--text-primary)' }}>
@@ -2749,6 +2749,22 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                                         Across both channels
                                     </span>
+                                </div>
+                                <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Sales Channel Mix</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '0.25rem', marginBottom: '0.5rem' }}>
+                                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#3b82f6' }}>{salesChannelData.overall.wholesalePct.toFixed(1)}% <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 500 }}>WS</span></span>
+                                        <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#10b981' }}>{salesChannelData.overall.retailPct.toFixed(1)}% <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 500 }}>RT</span></span>
+                                    </div>
+                                    {/* Progress Bar */}
+                                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', overflow: 'hidden' }}>
+                                        <div style={{ width: `${salesChannelData.overall.wholesalePct}%`, background: '#3b82f6', height: '100%' }} />
+                                        <div style={{ width: `${salesChannelData.overall.retailPct}%`, background: '#10b981', height: '100%' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                                        <span>Wholesale</span>
+                                        <span>Retail</span>
+                                    </div>
                                 </div>
                                 <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--glass-border)' }}>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Wholesale Channel</span>

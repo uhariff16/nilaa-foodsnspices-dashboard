@@ -169,6 +169,47 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         }
     };
 
+    const [wholesaleWeightLimit, setWholesaleWeightLimit] = React.useState(5);
+
+    const fetchWholesaleLimit = async () => {
+        try {
+            const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'wholesale_weight_limit').maybeSingle();
+            if (!error && data && data.value) {
+                const parsed = parseFloat(data.value);
+                if (!isNaN(parsed)) {
+                    setWholesaleWeightLimit(parsed);
+                }
+            }
+        } catch (err) {
+            console.error("Error loading wholesale limit settings:", err);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchWholesaleLimit();
+    }, [selectedYear]);
+
+    const saveWholesaleLimit = async (limit) => {
+        setWholesaleWeightLimit(limit);
+        try {
+            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'wholesale_weight_limit').maybeSingle();
+            if (existing) {
+                await supabase.from('system_settings').update({
+                    value: String(limit),
+                    updated_at: new Date()
+                }).eq('id', existing.id);
+            } else {
+                await supabase.from('system_settings').insert({
+                    key: 'wholesale_weight_limit',
+                    value: String(limit),
+                    description: 'Invoice weight threshold (kg) above which transactions are treated as Wholesale'
+                });
+            }
+        } catch (err) {
+            console.error("Error saving wholesale limit settings:", err);
+        }
+    };
+
     const salesChannelData = useMemo(() => {
         if (!transactions || transactions.length === 0) {
             return {
@@ -215,6 +256,18 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             return true;
         });
 
+        // Calculate invoice weights first
+        const invoiceWeights = {};
+        yearSales.forEach(t => {
+            const invoiceNo = String(t.invoiceNo || t.invoice_no || '').trim().toUpperCase();
+            if (invoiceNo && !invoiceNo.includes('MISSING')) {
+                const qty = parseFloat(t.parsedQty || 0);
+                const desc = t.originalDesc || '';
+                const packWeight = getPackWeight(desc);
+                invoiceWeights[invoiceNo] = (invoiceWeights[invoiceNo] || 0) + (qty * packWeight);
+            }
+        });
+
         // Setup channel containers
         const initChannel = () => ({ items: {}, totalRev: 0, totalVol: 0, count: 0 });
         const wholesale = initChannel();
@@ -223,9 +276,29 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         yearSales.forEach(t => {
             const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
             const desc = (t.originalDesc || 'Generic Item').trim();
+            const invoiceNo = String(t.invoiceNo || t.invoice_no || '').trim().toUpperCase();
             
-            // Classification: NFS Delivery, Cash -> Retail. Otherwise -> Wholesale.
-            const isRetail = retailCustomersList.includes(customer);
+            // Classification Rule 0: Item Name Designation (WHOLESALE/WS & RETAIL/RT)
+            const uDesc = desc.toUpperCase();
+            const hasExplicitWholesale = uDesc.includes('WHOLESALE') || /\bWS\b/.test(uDesc);
+            const hasExplicitRetail = uDesc.includes('RETAIL') || /\bRT\b/.test(uDesc);
+
+            let isRetail = false;
+            if (hasExplicitWholesale) {
+                isRetail = false;
+            } else if (hasExplicitRetail) {
+                isRetail = true;
+            } else {
+                // Classification Rule 1: Invoice Volume Limit Check
+                const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
+                if (invWeight > wholesaleWeightLimit) {
+                    isRetail = false;
+                } else {
+                    // Classification Rule 2: Fallback to customer mapping
+                    isRetail = retailCustomersList.includes(customer);
+                }
+            }
+
             const channel = isRetail ? retail : wholesale;
 
             const amt = Math.abs(parseFloat(t.parsedAmount || 0));
@@ -295,7 +368,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             overall: { totalRev, totalVol, wholesalePct, retailPct },
             chartData
         };
-    }, [transactions, selectedYear, analysisViewMode, selectedAnalysisMonth]);
+    }, [transactions, selectedYear, analysisViewMode, selectedAnalysisMonth, retailCustomersList, wholesaleWeightLimit]);
 
     React.useEffect(() => {
         setLedgerSearchQuery('');
@@ -523,12 +596,44 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
 
                 revenue = grossRevenue - returnRevenue - discountRevenue;
 
+                // Calculate invoice weights first
+                const invoiceWeights = {};
+                finalSales.forEach(t => {
+                    const invoiceNo = String(t.invoiceNo || t.invoice_no || '').trim().toUpperCase();
+                    if (invoiceNo && !invoiceNo.includes('MISSING')) {
+                        const qty = parseFloat(t.parsedQty || 0);
+                        const desc = t.originalDesc || '';
+                        const packWeight = getPackWeight(desc);
+                        invoiceWeights[invoiceNo] = (invoiceWeights[invoiceNo] || 0) + (qty * packWeight);
+                    }
+                });
+
                 wholesaleRev = 0;
                 retailRev = 0;
                 finalSales.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const isRetail = retailCustomersList.includes(customer);
+                    const desc = (t.originalDesc || 'Generic Item').trim();
+                    const invoiceNo = String(t.invoiceNo || t.invoice_no || '').trim().toUpperCase();
+
+                    const uDesc = desc.toUpperCase();
+                    const hasExplicitWholesale = uDesc.includes('WHOLESALE') || /\bWS\b/.test(uDesc);
+                    const hasExplicitRetail = uDesc.includes('RETAIL') || /\bRT\b/.test(uDesc);
+
+                    let isRetail = false;
+                    if (hasExplicitWholesale) {
+                        isRetail = false;
+                    } else if (hasExplicitRetail) {
+                        isRetail = true;
+                    } else {
+                        const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
+                        if (invWeight > wholesaleWeightLimit) {
+                            isRetail = false;
+                        } else {
+                            isRetail = retailCustomersList.includes(customer);
+                        }
+                    }
+
                     if (isRetail) retailRev += amt;
                     else wholesaleRev += amt;
                 });
@@ -536,7 +641,27 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 salesReturns.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const isRetail = retailCustomersList.includes(customer);
+                    const desc = (t.originalDesc || 'Generic Item').trim();
+                    const invoiceNo = String(t.invoiceNo || t.invoice_no || '').trim().toUpperCase();
+
+                    const uDesc = desc.toUpperCase();
+                    const hasExplicitWholesale = uDesc.includes('WHOLESALE') || /\bWS\b/.test(uDesc);
+                    const hasExplicitRetail = uDesc.includes('RETAIL') || /\bRT\b/.test(uDesc);
+
+                    let isRetail = false;
+                    if (hasExplicitWholesale) {
+                        isRetail = false;
+                    } else if (hasExplicitRetail) {
+                        isRetail = true;
+                    } else {
+                        const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
+                        if (invWeight > wholesaleWeightLimit) {
+                            isRetail = false;
+                        } else {
+                            isRetail = retailCustomersList.includes(customer);
+                        }
+                    }
+
                     if (isRetail) retailRev = Math.max(0, retailRev - amt);
                     else wholesaleRev = Math.max(0, wholesaleRev - amt);
                 });
@@ -835,7 +960,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 }
             };
         });
-    }, [selectedYear, transactions, productionData, invoiceDiscounts, simHistory]);
+    }, [selectedYear, transactions, productionData, invoiceDiscounts, simHistory, retailCustomersList, wholesaleWeightLimit]);
 
     const cumulativeAnalysis = useMemo(() => {
         if (!selectedYear) return { revenue: 0, expenses: 0, profit: 0, actualROI: 0, targetROI: 0, diffYears: 0, isOnTrack: false };
@@ -2957,6 +3082,42 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                     fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1
                                 }}
                             >&times;</button>
+                        </div>
+
+                        {/* Global Classification Rules */}
+                        <div style={{
+                            padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--glass-border)',
+                            background: 'rgba(255,255,255,0.01)', display: 'flex', flexDirection: 'column', gap: '0.75rem'
+                        }}>
+                            <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Global Rules</h4>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div style={{ flex: 1, minWidth: '250px' }}>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Invoice Volume Limit (kg)</span>
+                                    <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                        Invoices with total purchase volume exceeding this weight are automatically classified as Wholesale.
+                                    </p>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <button 
+                                        onClick={() => saveWholesaleLimit(Math.max(1, wholesaleWeightLimit - 1))}
+                                        style={{ width: '32px', height: '32px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.25rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                                    >-</button>
+                                    <input 
+                                        type="number" 
+                                        value={wholesaleWeightLimit}
+                                        onChange={(e) => saveWholesaleLimit(Math.max(1, parseFloat(e.target.value) || 1))}
+                                        style={{ width: '60px', height: '32px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '0.25rem', color: 'var(--text-primary)', textAlign: 'center', fontWeight: 'bold', outline: 'none' }}
+                                    />
+                                    <button 
+                                        onClick={() => saveWholesaleLimit(wholesaleWeightLimit + 1)}
+                                        style={{ width: '32px', height: '32px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.25rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                                    >+</button>
+                                </div>
+                            </div>
+                            <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '0.4rem', border: '1px solid rgba(59, 130, 246, 0.1)', fontSize: '0.7rem', color: '#3b82f6', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <Info size={14} />
+                                <span>Note: Item names containing "WHOLESALE" / "WS" or "RETAIL" / "RT" bypass these rules.</span>
+                            </div>
                         </div>
 
                         {/* Search Filter */}

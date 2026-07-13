@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabaseClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
 import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield, ShoppingCart, Truck, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { isRetailTransaction } from '../utils/channelClassification';
 
 const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-IN', {
@@ -126,6 +125,50 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     const [ledgerSearchQuery, setLedgerSearchQuery] = React.useState('');
     const [ledgerCurrentPage, setLedgerCurrentPage] = React.useState(1);
 
+    const [retailCustomersList, setRetailCustomersList] = React.useState(['cash', 'nfs delivery', 'market shop']);
+    const [customerFilterQuery, setCustomerFilterQuery] = React.useState('');
+    const [showClassificationModal, setShowClassificationModal] = React.useState(false);
+
+    const fetchRetailCustomers = async () => {
+        try {
+            const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'retail_customers').maybeSingle();
+            if (!error && data && data.value) {
+                const parsed = JSON.parse(data.value);
+                if (Array.isArray(parsed)) {
+                    setRetailCustomersList(parsed.map(c => c.toLowerCase().trim()));
+                }
+            }
+        } catch (err) {
+            console.error("Error loading retail settings:", err);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchRetailCustomers();
+    }, [selectedYear]);
+
+    const saveRetailCustomers = async (newList) => {
+        const cleanedList = Array.from(new Set(newList.map(c => c.toLowerCase().trim())));
+        setRetailCustomersList(cleanedList);
+        try {
+            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'retail_customers').maybeSingle();
+            if (existing) {
+                await supabase.from('system_settings').update({
+                    value: JSON.stringify(cleanedList),
+                    updated_at: new Date()
+                }).eq('id', existing.id);
+            } else {
+                await supabase.from('system_settings').insert({
+                    key: 'retail_customers',
+                    value: JSON.stringify(cleanedList),
+                    description: 'JSON list of customer names classified as B2C Retail (all lowercase)'
+                });
+            }
+        } catch (err) {
+            console.error("Error saving retail settings:", err);
+        }
+    };
+
     const salesChannelData = useMemo(() => {
         if (!transactions || transactions.length === 0) {
             return {
@@ -182,7 +225,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
             const desc = (t.originalDesc || 'Generic Item').trim();
             
             // Classification: NFS Delivery, Cash -> Retail. Otherwise -> Wholesale.
-            const isRetail = isRetailTransaction(customer, desc);
+            const isRetail = retailCustomersList.includes(customer);
             const channel = isRetail ? retail : wholesale;
 
             const amt = Math.abs(parseFloat(t.parsedAmount || 0));
@@ -485,8 +528,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 finalSales.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const desc = (t.originalDesc || '').trim();
-                    const isRetail = isRetailTransaction(customer, desc);
+                    const isRetail = retailCustomersList.includes(customer);
                     if (isRetail) retailRev += amt;
                     else wholesaleRev += amt;
                 });
@@ -494,8 +536,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                 salesReturns.forEach(t => {
                     const amt = Math.abs(parseFloat(t.parsedAmount || 0));
                     const customer = String(t.customerName || t.customer_name || 'cash').toLowerCase().trim();
-                    const desc = (t.originalDesc || '').trim();
-                    const isRetail = isRetailTransaction(customer, desc);
+                    const isRetail = retailCustomersList.includes(customer);
                     if (isRetail) retailRev = Math.max(0, retailRev - amt);
                     else wholesaleRev = Math.max(0, wholesaleRev - amt);
                 });
@@ -2499,11 +2540,25 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }} key="sales-view">
                             {/* Monthly Selector & Toggle */}
                             <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                        <ShoppingCart size={22} color="#3b82f6" />
-                                        Sales Channel & Pack-Size Analysis
-                                    </h3>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', width: '100%' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                            <ShoppingCart size={22} color="#3b82f6" />
+                                            Sales Channel & Pack-Size Analysis
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowClassificationModal(true)}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                                background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6',
+                                                border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.35rem 0.75rem',
+                                                borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem',
+                                                fontWeight: 600, transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <Settings size={13} /> Map Customers
+                                        </button>
+                                    </div>
                                     <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
                                         <button
                                             onClick={() => setAnalysisViewMode('monthly')}
@@ -2865,6 +2920,155 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                         </div>
                     )}
                 </>
+            )}
+
+            {/* Customer Channel Classification Modal */}
+            {showClassificationModal && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.75)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+                    backdropFilter: 'blur(5px)', padding: '1rem'
+                }}>
+                    <div className="glass-panel" style={{
+                        width: '100%', maxWidth: '650px', background: 'var(--bg-secondary)',
+                        border: '1px solid var(--glass-border)', borderRadius: '1rem',
+                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden',
+                        display: 'flex', flexDirection: 'column', maxHeight: '90vh'
+                    }}>
+                        {/* Modal Header */}
+                        <div style={{
+                            padding: '1.5rem', borderBottom: '1px solid var(--glass-border)',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        }}>
+                            <div>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    <Settings size={20} color="#3b82f6" />
+                                    Customer Channel Classification Settings
+                                </h3>
+                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                    Toggle customer accounts between Wholesale and Retail. Changes update dashboard metrics in real time.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowClassificationModal(false)}
+                                style={{
+                                    background: 'transparent', border: 'none', color: 'var(--text-secondary)',
+                                    fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1
+                                }}
+                            >&times;</button>
+                        </div>
+
+                        {/* Search Filter */}
+                        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <Search size={16} color="var(--text-secondary)" />
+                            <input
+                                type="text"
+                                placeholder="Search customer accounts..."
+                                value={customerFilterQuery}
+                                onChange={(e) => setCustomerFilterQuery(e.target.value)}
+                                style={{
+                                    width: '100%', background: 'transparent', border: 'none',
+                                    outline: 'none', color: 'var(--text-primary)', fontSize: '0.85rem'
+                                }}
+                            />
+                            {customerFilterQuery && (
+                                <button
+                                    onClick={() => setCustomerFilterQuery('')}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.75rem' }}
+                                >Clear</button>
+                            )}
+                        </div>
+
+                        {/* Modal Body / Customer List */}
+                        <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {(() => {
+                                // Extract all unique customers from transactions
+                                const uniqueCusts = new Set();
+                                (transactions || []).forEach(t => {
+                                    const name = t.customerName || t.customer_name;
+                                    if (name) uniqueCusts.add(name.trim());
+                                });
+                                
+                                const filteredList = Array.from(uniqueCusts)
+                                    .filter(c => c.toLowerCase().includes(customerFilterQuery.toLowerCase()))
+                                    .sort((a, b) => a.localeCompare(b));
+
+                                if (filteredList.length === 0) {
+                                    return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No customers found matching "{customerFilterQuery}".</div>;
+                                }
+
+                                return filteredList.map(custName => {
+                                    const clean = custName.toLowerCase().trim();
+                                    const isRetail = retailCustomersList.includes(clean);
+
+                                    return (
+                                        <div
+                                            key={custName}
+                                            style={{
+                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.02)',
+                                                borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                                                {custName}
+                                            </span>
+                                            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '0.4rem', padding: '2px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <button
+                                                    onClick={() => {
+                                                        if (isRetail) {
+                                                            // Remove from Retail list -> sets to Wholesale
+                                                            saveRetailCustomers(retailCustomersList.filter(c => c !== clean));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        border: 'none', cursor: 'pointer', padding: '0.25rem 0.75rem',
+                                                        fontSize: '0.75rem', borderRadius: '0.3rem', fontWeight: 600,
+                                                        background: !isRetail ? '#3b82f6' : 'transparent',
+                                                        color: !isRetail ? 'white' : 'var(--text-secondary)',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >Wholesale</button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (!isRetail) {
+                                                            // Add to Retail list
+                                                            saveRetailCustomers([...retailCustomersList, clean]);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        border: 'none', cursor: 'pointer', padding: '0.25rem 0.75rem',
+                                                        fontSize: '0.75rem', borderRadius: '0.3rem', fontWeight: 600,
+                                                        background: isRetail ? '#10b981' : 'transparent',
+                                                        color: isRetail ? 'white' : 'var(--text-secondary)',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >Retail</button>
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{
+                            padding: '1rem 1.5rem', borderTop: '1px solid var(--glass-border)',
+                            display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.1)'
+                        }}>
+                            <button
+                                onClick={() => setShowClassificationModal(false)}
+                                style={{
+                                    background: 'var(--accent-primary)', color: 'white', border: 'none',
+                                    padding: '0.5rem 1.5rem', borderRadius: '0.4rem', cursor: 'pointer',
+                                    fontSize: '0.85rem', fontWeight: 600
+                                }}
+                            >Close & Apply</button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
 

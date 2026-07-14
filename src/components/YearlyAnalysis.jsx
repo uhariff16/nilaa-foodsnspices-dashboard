@@ -2833,14 +2833,50 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6' }}>{formatCurrency(item.totalRev)}</td>
                                                             </tr>
                                                             {/* Gram Sizes Nested Rows */}
-                                                            {Object.values(item.sizes).map((size) => (
-                                                                <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                    <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
-                                                                </tr>
-                                                            ))}
+                                                            {(() => {
+                                                                const sizesList = Object.values(item.sizes);
+                                                                const maxWeightRev = Math.max(...sizesList.map(s => s.revenue || 0));
+                                                                const hasMultipleWeights = sizesList.length > 1;
+                                                                
+                                                                return sizesList.map((size) => {
+                                                                    const isTopWeight = size.revenue === maxWeightRev && maxWeightRev > 0 && hasMultipleWeights;
+                                                                    return (
+                                                                        <tr key={size.sizeLabel} style={{ 
+                                                                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                                                            background: isTopWeight ? 'rgba(59, 130, 246, 0.02)' : 'transparent'
+                                                                        }}>
+                                                                            <td style={{ 
+                                                                                padding: '0.5rem 0.5rem 0.5rem 1.5rem', 
+                                                                                color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', 
+                                                                                fontSize: '0.8rem',
+                                                                                fontWeight: isTopWeight ? 600 : 400
+                                                                            }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                                    <span>↳ {size.sizeLabel}</span>
+                                                                                    {isTopWeight && (
+                                                                                        <span style={{
+                                                                                            fontSize: '0.6rem',
+                                                                                            fontWeight: 700,
+                                                                                            background: 'rgba(59, 130, 246, 0.1)',
+                                                                                            color: '#60a5fa',
+                                                                                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                                                                                            padding: '0.05rem 0.3rem',
+                                                                                            borderRadius: '0.2rem',
+                                                                                            marginLeft: '0.4rem',
+                                                                                            display: 'inline-block'
+                                                                                        }}>
+                                                                                            TOP WEIGHT
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{size.qty.toLocaleString()}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: isTopWeight ? '#3b82f6' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{formatCurrency(size.revenue)}</td>
+                                                                        </tr>
+                                                                    );
+                                                                });
+                                                            })()}
                                                         </React.Fragment>
                                                     ))
                                                 )}
@@ -2883,14 +2919,50 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{formatCurrency(item.totalRev)}</td>
                                                             </tr>
                                                             {/* Gram Sizes Nested Rows */}
-                                                            {Object.values(item.sizes).map((size) => (
-                                                                <tr key={size.sizeLabel} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                    <td style={{ padding: '0.5rem 0.5rem 0.5rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>↳ {size.sizeLabel}</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.qty.toLocaleString()}</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
-                                                                    <td style={{ padding: '0.5rem', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{formatCurrency(size.revenue)}</td>
-                                                                </tr>
-                                                            ))}
+                                                            {(() => {
+                                                                const sizesList = Object.values(item.sizes);
+                                                                const maxWeightRev = Math.max(...sizesList.map(s => s.revenue || 0));
+                                                                const hasMultipleWeights = sizesList.length > 1;
+                                                                
+                                                                return sizesList.map((size) => {
+                                                                    const isTopWeight = size.revenue === maxWeightRev && maxWeightRev > 0 && hasMultipleWeights;
+                                                                    return (
+                                                                        <tr key={size.sizeLabel} style={{ 
+                                                                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                                                            background: isTopWeight ? 'rgba(59, 130, 246, 0.02)' : 'transparent'
+                                                                        }}>
+                                                                            <td style={{ 
+                                                                                padding: '0.5rem 0.5rem 0.5rem 1.5rem', 
+                                                                                color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', 
+                                                                                fontSize: '0.8rem',
+                                                                                fontWeight: isTopWeight ? 600 : 400
+                                                                            }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                                                    <span>↳ {size.sizeLabel}</span>
+                                                                                    {isTopWeight && (
+                                                                                        <span style={{
+                                                                                            fontSize: '0.6rem',
+                                                                                            fontWeight: 700,
+                                                                                            background: 'rgba(59, 130, 246, 0.1)',
+                                                                                            color: '#60a5fa',
+                                                                                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                                                                                            padding: '0.05rem 0.3rem',
+                                                                                            borderRadius: '0.2rem',
+                                                                                            marginLeft: '0.4rem',
+                                                                                            display: 'inline-block'
+                                                                                        }}>
+                                                                                            TOP WEIGHT
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'center', color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{size.qty.toLocaleString()}</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: isTopWeight ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{size.vol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
+                                                                            <td style={{ padding: '0.5rem', textAlign: 'right', color: isTopWeight ? '#10b981' : 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: isTopWeight ? 600 : 400 }}>{formatCurrency(size.revenue)}</td>
+                                                                        </tr>
+                                                                    );
+                                                                });
+                                                            })()}
                                                         </React.Fragment>
                                                     ))
                                                 )}

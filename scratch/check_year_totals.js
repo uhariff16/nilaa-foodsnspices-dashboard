@@ -1,0 +1,32 @@
+import { createClient } from '@supabase/supabase-js';
+const SUPABASE_URL = 'https://eegihrxwtyxdzsiabvtw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlZ2locnh3dHl4ZHpzaWFidnR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxMzE4MTksImV4cCI6MjA4MjcwNzgxOX0.BgcIotQB7aiXcHvAwS91AJHnY9-rhLS4T_G5mk1c2yQ';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function main() {
+    const { data: txns } = await supabase.from('transactions').select('*');
+    
+    // Group profits and counts by year
+    const years = {};
+    txns.forEach(t => {
+        if (t.date) {
+            const yr = t.date.substring(0, 4);
+            if (!years[yr]) {
+                years[yr] = { revenue: 0, expense: 0, profit: 0 };
+            }
+            const amt = parseFloat(t.amount || 0);
+            if (t.payment_mode === 'Sales') {
+                years[yr].revenue += amt;
+            } else if (t.payment_mode === 'Expense') {
+                years[yr].expense += amt;
+            } else if (t.payment_mode === 'ProfitSummary') {
+                // Wait, profit summaries
+            }
+        }
+    });
+    
+    console.log(years);
+}
+
+main();

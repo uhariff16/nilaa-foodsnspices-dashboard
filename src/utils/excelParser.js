@@ -214,7 +214,11 @@ export const parseExcelFile = (files) => {
 
 
                     // --- TYPE 3: SALES SUMMARY (Invoicewise) ---
-                    else if ((contentString.includes('particulars') || contentString.includes('description')) && contentString.includes('amount') && !contentString.includes('supplier')) {
+                    else if ((contentString.includes('particulars') || contentString.includes('description')) && 
+                             contentString.includes('amount') && 
+                             !contentString.includes('supplier') &&
+                             !fileNameClean.includes('itemwise') &&
+                             !sheetName.toLowerCase().includes('itemwise')) {
                         debugLog.push("Matched Type 3 (Sales Summary)");
                         let headerRowIdx = -1;
                         let amountColIdx = -1;

@@ -163,7 +163,8 @@ const Dashboard = (props) => {
         alert_stock_ginger_paste_enabled: 'true',
         alert_stock_ginger_paste_threshold: '20',
         alert_stock_garlic_paste_enabled: 'true',
-        alert_stock_garlic_paste_threshold: '20'
+        alert_stock_garlic_paste_threshold: '20',
+        alert_invoice_gaps_enabled: 'true'
     });
     const [alertsDismissed, setAlertsDismissed] = useState(false);
 
@@ -204,7 +205,8 @@ const Dashboard = (props) => {
                     alert_stock_ginger_paste_enabled: 'true',
                     alert_stock_ginger_paste_threshold: '20',
                     alert_stock_garlic_paste_enabled: 'true',
-                    alert_stock_garlic_paste_threshold: '20'
+                    alert_stock_garlic_paste_threshold: '20',
+                    alert_invoice_gaps_enabled: 'true'
                 };
                 settingsRes.data.forEach(item => {
                     mapped[item.key] = item.value;
@@ -2110,6 +2112,46 @@ const Dashboard = (props) => {
                                         });
                                     }
                                 });
+                            }
+
+                            // 7. Invoice Sequence Gaps Alert
+                            if (alertSettings.alert_invoice_gaps_enabled === 'true') {
+                                const uniqueInvoiceNums = [];
+                                const rawPrefixes = new Set();
+                                (salesTransactions || []).forEach(t => {
+                                    if (!t.invoiceNo) return;
+                                    const invStr = String(t.invoiceNo).trim().toUpperCase();
+                                    if (invStr.includes('MISSING')) return;
+                                    const match = invStr.match(/(\d+)/);
+                                    if (match) {
+                                        const num = parseInt(match[1], 10);
+                                        uniqueInvoiceNums.push(num);
+                                        const prefix = invStr.split(match[1])[0] || 'INV-';
+                                        rawPrefixes.add(prefix);
+                                    }
+                                });
+                                
+                                if (uniqueInvoiceNums.length > 0) {
+                                    const min = Math.min(...uniqueInvoiceNums);
+                                    const max = Math.max(...uniqueInvoiceNums);
+                                    const uniqueSorted = Array.from(new Set(uniqueInvoiceNums)).sort((a,b) => a - b);
+                                    const missing = [];
+                                    const defaultPrefix = Array.from(rawPrefixes)[0] || 'INV-';
+                                    for (let i = min; i <= max; i++) {
+                                        if (!uniqueSorted.includes(i)) {
+                                            missing.push(`${defaultPrefix}${i}`);
+                                        }
+                                    }
+                                    if (missing.length > 0) {
+                                        alerts.push({
+                                            id: 'invoice-gaps',
+                                            type: 'warning',
+                                            title: 'Missing Invoice Sequence Gaps Detected',
+                                            desc: `Found ${missing.length} missing invoice gap(s) (e.g. ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}) between range ${defaultPrefix}${min} and ${defaultPrefix}${max} in the ${selectedMonth} ledger.`,
+                                            action: 'Open Sales -> Invoices sub-view and click "Find Gaps" to inspect the full list of missing records.'
+                                        });
+                                    }
+                                }
                             }
 
                             if (alertSettings.alert_system_enabled !== 'true') return null;

@@ -35,7 +35,8 @@ const AdminSystemSettings = () => {
         alert_stock_ginger_paste_enabled: 'true',
         alert_stock_ginger_paste_threshold: '20',
         alert_stock_garlic_paste_enabled: 'true',
-        alert_stock_garlic_paste_threshold: '20'
+        alert_stock_garlic_paste_threshold: '20',
+        alert_invoice_gaps_enabled: 'true'
     });
 
     useEffect(() => {
@@ -536,6 +537,21 @@ const AdminSystemSettings = () => {
                                 )}
                                 {renderToggleSwitch('alert_partner_debt_enabled', settings.alert_partner_debt_enabled)}
                             </div>
+                        </div>
+
+                        <hr style={{ border: 'none', borderTop: '1px solid var(--glass-border)', margin: 0 }} />
+
+                        {/* Alert 7: Invoice Sequence Gaps */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem' }}>
+                            <div>
+                                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0 0 0.25rem 0' }}>
+                                    Invoice Sequence Gaps Alert
+                                </h4>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                                    Triggers when invoice numbers have sequence gaps in the selected month's ledger.
+                                </p>
+                            </div>
+                            {renderToggleSwitch('alert_invoice_gaps_enabled', settings.alert_invoice_gaps_enabled)}
                         </div>
                     </div>
                 </div>

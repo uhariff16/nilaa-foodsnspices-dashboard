@@ -177,6 +177,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
     };
 
     const [wholesaleWeightLimit, setWholesaleWeightLimit] = React.useState(5);
+    const [enableWeightLimit, setEnableWeightLimit] = React.useState(true);
 
     const fetchWholesaleLimit = async () => {
         try {
@@ -192,8 +193,20 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
         }
     };
 
+    const fetchWeightLimitSettings = async () => {
+        try {
+            const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'enable_wholesale_weight_limit').maybeSingle();
+            if (!error && data && data.value) {
+                setEnableWeightLimit(data.value === 'true');
+            }
+        } catch (err) {
+            console.error("Error loading weight limit settings:", err);
+        }
+    };
+
     React.useEffect(() => {
         fetchWholesaleLimit();
+        fetchWeightLimitSettings();
     }, [selectedYear]);
 
     const saveWholesaleLimit = async (limit) => {
@@ -214,6 +227,27 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
             }
         } catch (err) {
             console.error("Error saving wholesale limit settings:", err);
+        }
+    };
+
+    const saveEnableWeightLimit = async (enabled) => {
+        setEnableWeightLimit(enabled);
+        try {
+            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'enable_wholesale_weight_limit').maybeSingle();
+            if (existing) {
+                await supabase.from('system_settings').update({
+                    value: String(enabled),
+                    updated_at: new Date()
+                }).eq('id', existing.id);
+            } else {
+                await supabase.from('system_settings').insert({
+                    key: 'enable_wholesale_weight_limit',
+                    value: String(enabled),
+                    description: 'Boolean flag indicating if the invoice volume limit rule is enabled'
+                });
+            }
+        } catch (err) {
+            console.error("Error saving weight limit enablement:", err);
         }
     };
 
@@ -298,7 +332,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
             } else {
                 // Classification Rule 1: Invoice Volume Limit Check
                 const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
-                if (invWeight > wholesaleWeightLimit) {
+                if (enableWeightLimit && invWeight > wholesaleWeightLimit) {
                     isRetail = false;
                 } else {
                     // Classification Rule 2: Fallback to customer mapping
@@ -634,7 +668,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                         isRetail = true;
                     } else {
                         const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
-                        if (invWeight > wholesaleWeightLimit) {
+                        if (enableWeightLimit && invWeight > wholesaleWeightLimit) {
                             isRetail = false;
                         } else {
                             isRetail = retailCustomersList.includes(customer);
@@ -662,7 +696,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                         isRetail = true;
                     } else {
                         const invWeight = invoiceNo ? (invoiceWeights[invoiceNo] || 0) : 0;
-                        if (invWeight > wholesaleWeightLimit) {
+                        if (enableWeightLimit && invWeight > wholesaleWeightLimit) {
                             isRetail = false;
                         } else {
                             isRetail = retailCustomersList.includes(customer);
@@ -3005,12 +3039,20 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                             <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Global Rules</h4>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
                                 <div style={{ flex: 1, minWidth: '250px' }}>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Invoice Volume Limit (kg)</span>
-                                    <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={enableWeightLimit}
+                                            onChange={(e) => saveEnableWeightLimit(e.target.checked)}
+                                            style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                                        />
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Invoice Volume Limit (kg)</span>
+                                    </div>
+                                    <p style={{ margin: '0.15rem 0 0 1.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
                                         Invoices with total purchase volume exceeding this weight are automatically classified as Wholesale.
                                     </p>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: enableWeightLimit ? 1 : 0.5, pointerEvents: enableWeightLimit ? 'auto' : 'none' }}>
                                     <button 
                                         onClick={() => saveWholesaleLimit(Math.max(1, wholesaleWeightLimit - 1))}
                                         style={{ width: '32px', height: '32px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', borderRadius: '0.25rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}

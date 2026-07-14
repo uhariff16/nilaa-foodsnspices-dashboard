@@ -66,7 +66,7 @@ const getPrettyProductName = (normalizedName) => {
 
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
-const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, purchaseData = [], summaryData = [], invoiceDiscounts = [], forceTab = null }) => {
+const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions = [], productionData = {}, purchaseData = [], summaryData = [], invoiceDiscounts = [], forceTab = null }) => {
     const { hasPermission } = useAuth();
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -109,8 +109,15 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
     });
 
     const [showSettingsDropdown, setShowSettingsDropdown] = React.useState(false);
-    const [analysisViewMode, setAnalysisViewMode] = React.useState('monthly'); // 'monthly' | 'yearly'
-    const [selectedAnalysisMonth, setSelectedAnalysisMonth] = React.useState(''); // e.g., 'Jan'
+    
+    // Derive monthly/yearly filters from master dashboard settings
+    const { analysisViewMode, selectedAnalysisMonth } = React.useMemo(() => {
+        if (!selectedMonth || selectedMonth === 'Overall') {
+            return { analysisViewMode: 'yearly', selectedAnalysisMonth: '' };
+        }
+        const parts = selectedMonth.split(' ');
+        return { analysisViewMode: 'monthly', selectedAnalysisMonth: parts[0] };
+    }, [selectedMonth]);
 
     const [profitStakeholders, setProfitStakeholders] = React.useState([]);
     const [profitPayouts, setProfitPayouts] = React.useState([]);
@@ -1054,15 +1061,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
         };
     }, [selectedYear, transactions, invoiceDiscounts, totalInvestedCapital]);
 
-    // Set default analysis month to the latest active month
-    React.useEffect(() => {
-        if (!selectedAnalysisMonth && yearlyData.length > 0) {
-            const activeMonths = yearlyData.filter(d => d.isActive);
-            if (activeMonths.length > 0) {
-                setSelectedAnalysisMonth(activeMonths[activeMonths.length - 1].name);
-            }
-        }
-    }, [yearlyData, selectedAnalysisMonth]);
+
 
     const quarterlyData = useMemo(() => {
         const quarters = [
@@ -2016,55 +2015,7 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                                                 <Factory size={isMobile ? 18 : 22} color="#f59e0b" />
                                                 {isMobile ? 'Production Analysis' : `Production Cost & Margin Analysis ${analysisViewMode === 'monthly' ? `- ${selectedAnalysisMonth}` : `(${selectedYear})`}`}
                                             </h3>
-
-                                            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                                <button
-                                                    onClick={() => setAnalysisViewMode('monthly')}
-                                                    style={{
-                                                        padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
-                                                        background: analysisViewMode === 'monthly' ? '#3b82f6' : 'transparent',
-                                                        color: analysisViewMode === 'monthly' ? 'white' : 'var(--text-secondary)',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >Monthly</button>
-                                                <button
-                                                    onClick={() => setAnalysisViewMode('yearly')}
-                                                    style={{
-                                                        padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
-                                                        background: analysisViewMode === 'yearly' ? '#3b82f6' : 'transparent',
-                                                        color: analysisViewMode === 'yearly' ? 'white' : 'var(--text-secondary)',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >Yearly</button>
-                                            </div>
                                         </div>
-
-                                        {analysisViewMode === 'monthly' && (
-                                            <div style={{ 
-                                                display: 'flex', 
-                                                gap: '0.4rem', 
-                                                overflowX: 'auto', 
-                                                maxWidth: isMobile ? '100%' : '400px', 
-                                                paddingBottom: '5px',
-                                                msOverflowStyle: 'none',
-                                                scrollbarWidth: 'none'
-                                            }}>
-                                                {yearlyData.filter(m => m.isActive).map(m => (
-                                                    <button
-                                                        key={m.name}
-                                                        onClick={() => setSelectedAnalysisMonth(m.name)}
-                                                        style={{
-                                                            padding: '0.35rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.5rem',
-                                                            border: `1px solid ${selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--glass-border)'}`,
-                                                            background: selectedAnalysisMonth === m.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
-                                                            color: selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--text-secondary)',
-                                                            cursor: 'pointer', whiteSpace: 'nowrap',
-                                                            fontWeight: selectedAnalysisMonth === m.name ? 700 : 400
-                                                        }}
-                                                    >{m.name}</button>
-                                                ))}
-                                            </div>
-                                        )}
                                     </div>
                                     <div style={{ overflowX: 'auto', background: 'var(--glass-highlight)', borderRadius: '12px', border: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '1400px', tableLayout: 'auto' }}>
@@ -2664,79 +2615,25 @@ const YearlyAnalysis = ({ selectedYear, transactions = [], productionData = {}, 
                     {activeAnalysisSubTab === 'sales' && (
                         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }} key="sales-view">
                             {/* Monthly Selector & Toggle */}
-                            <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', width: '100%' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                            <ShoppingCart size={22} color="#3b82f6" />
-                                            Sales Channel & Pack-Size Analysis
-                                        </h3>
-                                        <button
-                                            onClick={() => setShowClassificationModal(true)}
-                                            style={{
-                                                display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                                background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6',
-                                                border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.35rem 0.75rem',
-                                                borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem',
-                                                fontWeight: 600, transition: 'all 0.2s'
-                                            }}
-                                        >
-                                            <Settings size={13} /> Map Customers
-                                        </button>
-                                    </div>
-                                    <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '2px', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                        <button
-                                            onClick={() => setAnalysisViewMode('monthly')}
-                                            style={{
-                                                padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
-                                                background: analysisViewMode === 'monthly' ? '#3b82f6' : 'transparent',
-                                                color: analysisViewMode === 'monthly' ? 'white' : 'var(--text-secondary)',
-                                                transition: 'all 0.2s'
-                                            }}
-                                        >Monthly</button>
-                                        <button
-                                            onClick={() => setAnalysisViewMode('yearly')}
-                                            style={{
-                                                padding: '0.3rem 0.75rem', fontSize: '0.75rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer',
-                                                background: analysisViewMode === 'yearly' ? '#3b82f6' : 'transparent',
-                                                color: analysisViewMode === 'yearly' ? 'white' : 'var(--text-secondary)',
-                                                transition: 'all 0.2s'
-                                            }}
-                                        >Yearly (Aggregated)</button>
-                                    </div>
+                            <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        <ShoppingCart size={22} color="#3b82f6" />
+                                        Sales Channel & Pack-Size Analysis
+                                    </h3>
+                                    <button
+                                        onClick={() => setShowClassificationModal(true)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                            background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6',
+                                            border: '1px solid rgba(59, 130, 246, 0.25)', padding: '0.35rem 0.75rem',
+                                            borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem',
+                                            fontWeight: 600, transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <Settings size={13} /> Map Customers
+                                    </button>
                                 </div>
-
-                                {analysisViewMode === 'monthly' && (
-                                    <div style={{ 
-                                        display: 'flex', 
-                                        gap: '0.4rem', 
-                                        overflowX: 'auto', 
-                                        paddingBottom: '5px',
-                                        msOverflowStyle: 'none',
-                                        scrollbarWidth: 'none'
-                                    }}>
-                                        {yearlyData.filter(m => m.isActive).map(m => (
-                                            <button
-                                                key={m.name}
-                                                onClick={() => setSelectedAnalysisMonth(m.name)}
-                                                style={{
-                                                    padding: '0.4rem 1rem',
-                                                    fontSize: '0.8rem',
-                                                    borderRadius: '0.4rem',
-                                                    border: `1px solid ${selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--glass-border)'}`,
-                                                    background: selectedAnalysisMonth === m.name ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.05)',
-                                                    color: selectedAnalysisMonth === m.name ? '#3b82f6' : 'var(--text-secondary)',
-                                                    cursor: 'pointer',
-                                                    fontWeight: selectedAnalysisMonth === m.name ? 700 : 400,
-                                                    transition: 'all 0.2s',
-                                                    whiteSpace: 'nowrap'
-                                                }}
-                                            >
-                                                {m.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
                             </div>
 
                             {/* KPI Row */}

@@ -3709,6 +3709,7 @@ const Dashboard = (props) => {
                 activeTab === 'ytd' && (isAdmin || hasPermission('dashboard.ytd')) && (
                     <YearlyAnalysis
                         selectedYear={selectedYear}
+                        selectedMonth={selectedMonth}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
                         purchaseData={props.purchaseData || []}
@@ -3723,6 +3724,7 @@ const Dashboard = (props) => {
                 activeTab === 'profitHub' && (isAdmin || hasPermission('dashboard.profitHub')) && (
                     <YearlyAnalysis
                         selectedYear={selectedYear}
+                        selectedMonth={selectedMonth}
                         transactions={data?.transactions || []}
                         productionData={props.productionData}
                         purchaseData={props.purchaseData || []}

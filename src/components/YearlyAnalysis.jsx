@@ -64,6 +64,55 @@ const getPrettyProductName = (normalizedName) => {
     return normalizedName;
 };
 
+const renderSalesBadge = (itemRevenue, itemsList) => {
+    if (!itemsList || itemsList.length === 0) return null;
+    const revenues = itemsList.map(it => it.totalRev || 0);
+    const maxRev = Math.max(...revenues);
+    if (maxRev <= 0) return null;
+    
+    let badgeText = '';
+    let badgeStyle = {};
+    
+    if (itemRevenue >= maxRev * 0.50) {
+        badgeText = 'TOP';
+        badgeStyle = {
+            background: 'rgba(16, 185, 129, 0.12)',
+            color: '#10b981',
+            border: '1px solid rgba(16, 185, 129, 0.25)'
+        };
+    } else if (itemRevenue >= maxRev * 0.10) {
+        badgeText = 'MED';
+        badgeStyle = {
+            background: 'rgba(245, 158, 11, 0.12)',
+            color: '#f59e0b',
+            border: '1px solid rgba(245, 158, 11, 0.25)'
+        };
+    } else {
+        badgeText = 'LOW';
+        badgeStyle = {
+            background: 'rgba(239, 68, 68, 0.12)',
+            color: '#f87171',
+            border: '1px solid rgba(239, 68, 68, 0.25)'
+        };
+    }
+    
+    return (
+        <span style={{
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            padding: '0.15rem 0.4rem',
+            borderRadius: '0.25rem',
+            marginLeft: '0.5rem',
+            verticalAlign: 'middle',
+            display: 'inline-block',
+            letterSpacing: '0.5px',
+            ...badgeStyle
+        }}>
+            {badgeText}
+        </span>
+    );
+};
+
 const BLACKLIST_ITEMS = ['TOTAL', 'GRAND TOTAL', 'WAGES', 'SALARY', 'EXPENSE', 'RENT', 'BILL', 'TAX', 'GST', 'PROFIT', 'SUMMARY'];
 
 const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions = [], productionData = {}, purchaseData = [], summaryData = [], invoiceDiscounts = [], forceTab = null }) => {
@@ -2775,7 +2824,10 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                         <React.Fragment key={item.name}>
                                                             {/* Item Group Row */}
                                                             <tr style={{ background: 'rgba(59, 130, 246, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
-                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
+                                                                    {getPrettyProductName(item.name)}
+                                                                    {renderSalesBadge(item.totalRev, Object.values(salesChannelData.wholesale.items))}
+                                                                </td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right', color: '#3b82f6' }}>{formatCurrency(item.totalRev)}</td>
@@ -2822,7 +2874,10 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                         <React.Fragment key={item.name}>
                                                             {/* Item Group Row */}
                                                             <tr style={{ background: 'rgba(16, 185, 129, 0.05)', fontWeight: 'bold', borderBottom: '1px solid var(--glass-border)' }}>
-                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)' }}>{getPrettyProductName(item.name)}</td>
+                                                                <td style={{ padding: '0.75rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
+                                                                    {getPrettyProductName(item.name)}
+                                                                    {renderSalesBadge(item.totalRev, Object.values(salesChannelData.retail.items))}
+                                                                </td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.totalQty.toLocaleString()}</td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.totalVol.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg</td>
                                                                 <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{formatCurrency(item.totalRev)}</td>

@@ -284,6 +284,7 @@ const Dashboard = (props) => {
     const [invoiceSort, setInvoiceSort] = useState('date_desc'); // [NEW] Sort invoices
 
     const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState(null); // [NEW] Modal State for Sales Returns / Invoices
+    const [showGapModal, setShowGapModal] = React.useState(false); // [NEW] Gap Analysis Modal State
 
     // [NEW] Invoice Discounts State
     const [invoiceDiscounts, setInvoiceDiscounts] = useState([]);
@@ -2692,7 +2693,30 @@ const Dashboard = (props) => {
                         {salesViewMode === 'invoices' && (
                             <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '2rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-                                    <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>All Invoices</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>All Invoices</h3>
+                                        <button 
+                                            onClick={() => setShowGapModal(true)}
+                                            style={{
+                                                background: 'rgba(245, 158, 11, 0.1)',
+                                                border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                color: '#f59e0b',
+                                                padding: '0.35rem 0.75rem',
+                                                borderRadius: '0.375rem',
+                                                cursor: 'pointer',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.4rem',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.18)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.1)'}
+                                        >
+                                            🔍 Find Gaps
+                                        </button>
+                                    </div>
                                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                         <input 
                                             type="text" 
@@ -3742,6 +3766,104 @@ const Dashboard = (props) => {
                 )
             }
 
+            {showGapModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setShowGapModal(false)}>
+                    <div className="glass-panel" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', maxWidth: '550px', width: '100%', maxHeight: '75vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ color: '#f59e0b' }}>⚠️</span> Invoice Sequence Gaps
+                            </h3>
+                            <button onClick={() => setShowGapModal(false)} style={{ background: 'var(--glass-border)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '1.25rem', width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
+                        </div>
+                        
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 1.5rem 0', lineHeight: 1.4 }}>
+                            Analyzing invoice number sequence gaps for the active period: <strong>{selectedMonth}</strong>. Gaps indicate invoice numbers that are missing in the sequence.
+                        </p>
+                        
+                        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                            {(() => {
+                                const uniqueInvoiceNums = [];
+                                const numToPrefix = {};
+                                const rawPrefixes = new Set();
+                                
+                                (salesTransactions || []).forEach(t => {
+                                    if (!t.invoiceNo) return;
+                                    const invStr = String(t.invoiceNo).trim().toUpperCase();
+                                    if (invStr.includes('MISSING')) return;
+                                    const match = invStr.match(/(\d+)/);
+                                    if (match) {
+                                        const num = parseInt(match[1], 10);
+                                        uniqueInvoiceNums.push(num);
+                                        const prefix = invStr.split(match[1])[0] || 'INV-';
+                                        numToPrefix[num] = prefix;
+                                        rawPrefixes.add(prefix);
+                                    }
+                                });
+                                
+                                if (uniqueInvoiceNums.length === 0) {
+                                    return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No invoices found in this period to analyze.</div>;
+                                }
+                                
+                                const min = Math.min(...uniqueInvoiceNums);
+                                const max = Math.max(...uniqueInvoiceNums);
+                                const uniqueSorted = Array.from(new Set(uniqueInvoiceNums)).sort((a,b) => a - b);
+                                
+                                const missing = [];
+                                const defaultPrefix = Array.from(rawPrefixes)[0] || 'INV-';
+                                for (let i = min; i <= max; i++) {
+                                    if (!uniqueSorted.includes(i)) {
+                                        const prefix = numToPrefix[i] || defaultPrefix;
+                                        missing.push(`${prefix}${i}`);
+                                    }
+                                }
+                                
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Invoice Range</div>
+                                                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.15rem' }}>
+                                                    {defaultPrefix}{min} - {defaultPrefix}{max}
+                                                </div>
+                                            </div>
+                                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</div>
+                                                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: missing.length > 0 ? '#ef4444' : '#10b981', marginTop: '0.15rem' }}>
+                                                    {missing.length > 0 ? `${missing.length} Missing Gaps` : 'All Sequence Intact'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {missing.length > 0 ? (
+                                            <div>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Missing Invoice Numbers:</div>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '0.5rem' }}>
+                                                    {missing.map((inv, idx) => (
+                                                        <span key={idx} style={{ padding: '0.25rem 0.5rem', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 500 }}>
+                                                            {inv}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: '0.5rem', gap: '0.5rem', textAlign: 'center' }}>
+                                                <span style={{ fontSize: '1.5rem' }}>✅</span>
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#10b981' }}>No gaps found in sequence!</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Every invoice number from {min} to {max} is accounted for in your ledger.</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                        
+                        <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+                            <button onClick={() => setShowGapModal(false)} style={{ background: 'var(--glass-highlight)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)', padding: '0.5rem 1.5rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 500 }}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             {selectedInvoiceDetails && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setSelectedInvoiceDetails(null)}>
                     <div className="glass-panel" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', maxWidth: '600px', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Users, UserPlus, Trash2, Mail, Shield, AlertCircle, CheckCircle, RefreshCw, X, Eye, Crown, Activity, DollarSign, LayoutDashboard, ChevronDown, ChevronRight, Lock, Unlock, Settings, Factory, ShoppingCart, Layers, Users as UsersIcon, Calculator, TrendingUp, Target, Clock, Wallet, Edit, Edit2, Save, Briefcase } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Shield, AlertCircle, CheckCircle, RefreshCw, X, Eye, Crown, Activity, DollarSign, LayoutDashboard, ChevronDown, ChevronRight, Lock, Unlock, Settings, Factory, ShoppingCart, Layers, Users as UsersIcon, Calculator, TrendingUp, Target, Clock, Wallet, Edit, Edit2, Save, Briefcase, Plus, Package } from 'lucide-react';
 
 const initialPermissions = {
     dashboard: {

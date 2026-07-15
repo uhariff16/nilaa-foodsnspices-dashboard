@@ -22,7 +22,13 @@ const initialPermissions = {
         salaries: { read: false, write: false, delete: false },
         salaryCalculator: false
     },
-    payouts: false
+    payouts: false,
+    batch: {
+        view: false,
+        create: false,
+        approve_qc: false,
+        package: false
+    }
 };
 
 const getRolePermissions = (role) => {
@@ -43,6 +49,9 @@ const getRolePermissions = (role) => {
             }
         });
         p.payouts = true;
+        Object.keys(p.batch).forEach(k => {
+            p.batch[k] = true;
+        });
     } else if (role === 'executive') {
         p.dashboard.overview = true;
         p.dashboard.sales = true;
@@ -139,7 +148,8 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
         ...initialPermissions,
         ...permissions,
         dashboard: { ...initialPermissions.dashboard, ...(permissions?.dashboard || {}) },
-        attendance: { ...initialPermissions.attendance, ...(permissions?.attendance || {}) }
+        attendance: { ...initialPermissions.attendance, ...(permissions?.attendance || {}) },
+        batch: { ...initialPermissions.batch, ...(permissions?.batch || {}) }
     };
 
     return (
@@ -258,6 +268,32 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                                     </div>
                                 )}
                             </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Batch Management Section */}
+            <div style={sectionStyle}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Batch Management Permissions</div>
+                <div style={gridStyle}>
+                    {[
+                        { id: 'view', label: 'View Registry', icon: <Layers size={14} /> },
+                        { id: 'create', label: 'Create Batch', icon: <Plus size={14} /> },
+                        { id: 'approve_qc', label: 'Approve QC', icon: <Shield size={14} /> },
+                        { id: 'package', label: 'Package Lots', icon: <Package size={14} /> }
+                    ].map(perm => {
+                        const isActive = !!mergedPerms.batch?.[perm.id];
+                        return (
+                            <button
+                                key={perm.id}
+                                type="button"
+                                onClick={() => toggle('batch', perm.id)}
+                                style={toggleBtnStyle(isActive)}
+                            >
+                                {perm.icon}
+                                {perm.label}
+                            </button>
                         );
                     })}
                 </div>

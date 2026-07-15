@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
 import YearlyAnalysis from './YearlyAnalysis';
+import BatchManager from './BatchManager';
 import logo from '../assets/logo.png'; // Import logo
 import MobileDashboard from './mobile/MobileDashboard';
 import { supabase } from '../lib/supabaseClient';
@@ -310,6 +311,54 @@ const Dashboard = (props) => {
             
         return () => { supabase.removeChannel(channel); };
     }, []);
+
+    // [NEW] Batch Operations Summary States & Fetch Hook
+    const [batchSummary, setBatchSummary] = useState({
+        inProduction: 0,
+        pendingQc: 0,
+        releasedCount: 0,
+        blockedCount: 0,
+        avgYield: 0,
+        recentBatches: []
+    });
+
+    const fetchBatchSummary = async () => {
+        try {
+            const { data, error } = await supabase.from('batch_master').select('*').order('created_at', { ascending: false });
+            if (!error && data) {
+                const inProd = data.filter(b => b.status === 'In Production').length;
+                const pendQc = data.filter(b => b.quality_status === 'Pending').length;
+                const rel = data.filter(b => b.status === 'Released' || b.status === 'Completed').length;
+                const blk = data.filter(b => b.status === 'Blocked').length;
+                
+                const yieldVals = data.filter(b => b.yield_pct > 0).map(b => parseFloat(b.yield_pct));
+                const avgYld = yieldVals.length > 0 ? (yieldVals.reduce((a, b) => a + b, 0) / yieldVals.length) : 0;
+                
+                setBatchSummary({
+                    inProduction: inProd,
+                    pendingQc: pendQc,
+                    releasedCount: rel,
+                    blockedCount: blk,
+                    avgYield: avgYld,
+                    recentBatches: data.slice(0, 5)
+                });
+            }
+        } catch (err) {
+            console.error("Error loading batch summary:", err);
+        }
+    };
+
+    useEffect(() => {
+        if (isAdmin || hasPermission('batch.view')) {
+            fetchBatchSummary();
+            const channel = supabase.channel('public:batch_master')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'batch_master' }, () => {
+                    fetchBatchSummary();
+                }).subscribe();
+                
+            return () => { supabase.removeChannel(channel); };
+        }
+    }, [userRole]);
 
 
 
@@ -1853,6 +1902,20 @@ const Dashboard = (props) => {
                         Production
                     </button>
                 )}
+                {(isAdmin || hasPermission('batch.view')) && (
+                    <button
+                        onClick={() => setActiveTab('batch_management')}
+                        style={{
+                            background: 'none', border: 'none', padding: isMobile ? '0.5rem 0.25rem' : '0.5rem 0',
+                            color: activeTab === 'batch_management' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            borderBottom: activeTab === 'batch_management' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                            cursor: 'pointer', fontSize: '1rem', fontWeight: activeTab === 'batch_management' ? 600 : 400
+                        }}
+                    >
+                        <Layers size={18} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+                        Batch ERP
+                    </button>
+                )}
                 {hasPermission('dashboard.insights') && (
                     <button
                         onClick={() => setActiveTab('insights')}
@@ -2254,6 +2317,72 @@ const Dashboard = (props) => {
                                 </div>
                             );
                         })()}
+
+                        {/* Batch Operations Summary Section */}
+                        {(isAdmin || hasPermission('batch.view')) && (
+                            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Layers size={20} color="#a78bfa" />
+                                        Batch Operations & Traceability Summary
+                                    </h3>
+                                    <button 
+                                        onClick={() => setActiveTab('batch_management')}
+                                        className="btn-primary"
+                                        style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                    >
+                                        Open Batch ERP <ChevronRight size={14} />
+                                    </button>
+                                </div>
+
+                                <div className="responsive-grid-4" style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>In Production</span>
+                                        <strong style={{ fontSize: '1.5rem', color: '#60a5fa' }}>{batchSummary.inProduction}</strong>
+                                    </div>
+                                    <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>QC Clearance Pending</span>
+                                        <strong style={{ fontSize: '1.5rem', color: '#fbbf24' }}>{batchSummary.pendingQc}</strong>
+                                    </div>
+                                    <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Released Batches</span>
+                                        <strong style={{ fontSize: '1.5rem', color: '#34d399' }}>{batchSummary.releasedCount}</strong>
+                                    </div>
+                                    <div style={{ background: 'var(--glass-highlight)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Average Yield %</span>
+                                        <strong style={{ fontSize: '1.5rem', color: '#a78bfa' }}>{batchSummary.avgYield ? `${batchSummary.avgYield.toFixed(1)}%` : 'N/A'}</strong>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Active Manufacturing Batches</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {batchSummary.recentBatches.length === 0 ? (
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '1rem 0' }}>No active batches registered. Click "Open Batch ERP" to generate one.</div>
+                                        ) : (
+                                            batchSummary.recentBatches.map(b => (
+                                                <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.6rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', fontSize: '0.825rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        <strong style={{ color: 'var(--text-primary)' }}>{b.batch_number}</strong>
+                                                        <span style={{ color: 'var(--text-secondary)' }}>Product: {b.product_code}</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(b.manufacturing_date).toLocaleDateString()}</span>
+                                                        <span style={{
+                                                            fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem',
+                                                            background: b.quality_status === 'Passed' ? 'rgba(16, 185, 129, 0.1)' : (b.quality_status === 'Rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                            color: b.quality_status === 'Passed' ? '#10b981' : (b.quality_status === 'Rejected' ? '#ef4444' : '#f59e0b')
+                                                        }}>
+                                                            {b.quality_status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Material Flow Analysis Section */}
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', position: 'relative', zIndex: 20 }}>
@@ -3767,6 +3896,13 @@ const Dashboard = (props) => {
                         previousMonthStats={previousMonthStats}
                         selectedMonth={selectedMonth}
                     />
+                )
+            }
+
+            {/* [NEW] Batch Management ERP Module */}
+            {
+                activeTab === 'batch_management' && (isAdmin || hasPermission('batch.view')) && (
+                    <BatchManager onBack={() => setActiveTab('overview')} />
                 )
             }
 

@@ -358,7 +358,7 @@ const Dashboard = (props) => {
                 
             return () => { supabase.removeChannel(channel); };
         }
-    }, [userRole]);
+    }, [role]);
 
 
 

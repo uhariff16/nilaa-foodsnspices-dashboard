@@ -13,7 +13,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown, AlertTriangle, AlertCircle, X, ShieldAlert, Sparkles, Info } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown, ChevronRight, AlertTriangle, AlertCircle, X, ShieldAlert, Sparkles, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]

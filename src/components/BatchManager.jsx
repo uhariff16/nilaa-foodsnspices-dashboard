@@ -93,9 +93,13 @@ const BatchManager = ({ onBack }) => {
     // Form inputs: New Recipe Version
     const [recipeForm, setRecipeForm] = useState({
         product_code: 'GGP',
-        version_label: '',
-        ingredients_list: '[{"item": "GINGER", "qty_kg": 150}, {"item": "GARLIC", "qty_kg": 150}, {"item": "SALT", "qty_kg": 10}]'
+        version_label: ''
     });
+    const [recipeIngredients, setRecipeIngredients] = useState([
+        { item: 'GINGER', qty_kg: 150 },
+        { item: 'GARLIC', qty_kg: 150 },
+        { item: 'SALT', qty_kg: 10 }
+    ]);
 
     // Filtered operators and supervisors from employee list
     const operators = useMemo(() => {
@@ -347,19 +351,10 @@ const BatchManager = ({ onBack }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            let parsedIngredients;
-            try {
-                parsedIngredients = JSON.parse(recipeForm.ingredients_list);
-            } catch (jsonErr) {
-                alert("Ingredients list must be a valid JSON array of objects. Example: [{\"item\": \"GINGER\", \"qty_kg\": 150}]");
-                setLoading(false);
-                return;
-            }
-
             const { error } = await supabase.from('recipe_versions').insert([{
                 product_code: recipeForm.product_code,
                 version_label: recipeForm.version_label,
-                ingredients_list: parsedIngredients,
+                ingredients_list: recipeIngredients,
                 is_active: true
             }]);
 
@@ -367,9 +362,13 @@ const BatchManager = ({ onBack }) => {
             setShowCreateRecipeModal(false);
             setRecipeForm({
                 product_code: 'GGP',
-                version_label: '',
-                ingredients_list: '[{"item": "GINGER", "qty_kg": 150}, {"item": "GARLIC", "qty_kg": 150}, {"item": "SALT", "qty_kg": 10}]'
+                version_label: ''
             });
+            setRecipeIngredients([
+                { item: 'GINGER', qty_kg: 150 },
+                { item: 'GARLIC', qty_kg: 150 },
+                { item: 'SALT', qty_kg: 10 }
+            ]);
             loadData();
         } catch (err) {
             console.error("Create Recipe Error:", err);
@@ -1544,14 +1543,58 @@ const BatchManager = ({ onBack }) => {
                         </div>
 
                         <div className="input-group">
-                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Ingredients List (JSON Array)</label>
-                            <textarea 
-                                required
-                                value={recipeForm.ingredients_list}
-                                onChange={(e) => setRecipeForm(prev => ({ ...prev, ingredients_list: e.target.value }))}
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
-                            />
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>Format: JSON list containing items and quantities (kg).</span>
+                            <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Ingredients List</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                                {recipeIngredients.map((ing, index) => (
+                                    <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <select
+                                            value={ing.item}
+                                            onChange={(e) => {
+                                                const next = [...recipeIngredients];
+                                                next[index].item = e.target.value;
+                                                setRecipeIngredients(next);
+                                            }}
+                                            style={{ flex: 2, padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
+                                        >
+                                            <option value="GINGER">Ginger (Raw)</option>
+                                            <option value="GARLIC">Garlic (Raw)</option>
+                                            <option value="SALT">Salt</option>
+                                            <option value="OIL">Oil</option>
+                                            <option value="WATER">Water</option>
+                                        </select>
+                                        <input
+                                            required
+                                            type="number"
+                                            placeholder="Qty (kg)"
+                                            value={ing.qty_kg}
+                                            onChange={(e) => {
+                                                const next = [...recipeIngredients];
+                                                next[index].qty_kg = parseFloat(e.target.value) || 0;
+                                                setRecipeIngredients(next);
+                                            }}
+                                            style={{ flex: 1, padding: '0.4rem', borderRadius: '0.25rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setRecipeIngredients(recipeIngredients.filter((_, idx) => idx !== index));
+                                            }}
+                                            style={{ padding: '0.4rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '0.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setRecipeIngredients([...recipeIngredients, { item: 'GINGER', qty_kg: 0 }]);
+                                }}
+                                style={{ marginTop: '0.5rem', padding: '0.35rem 0.75rem', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', width: 'fit-content' }}
+                            >
+                                <Plus size={12} /> Add Ingredient
+                            </button>
                         </div>
 
                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>

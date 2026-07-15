@@ -131,6 +131,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
     const [recordToRequest, setRecordToRequest] = useState(null);
     const [paymentData, setPaymentData] = useState([]);
     const [isPayslipOpen, setIsPayslipOpen] = useState(false);
+    
+    // Ledger States
+    const [yearlyPayments, setYearlyPayments] = useState([]);
+    const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
+    const [drillDownCell, setDrillDownCell] = useState(null);
 
     // Initial Load from DB
     useEffect(() => {
@@ -308,12 +313,37 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         }
     };
 
+    const fetchYearlyPayments = async () => {
+        try {
+            const startDate = `${ledgerYear}-01-01`;
+            const endDate = `${ledgerYear}-12-31`;
+            const { data, error } = await supabase
+                .from('employee_payments')
+                .select('*')
+                .gte('date', startDate)
+                .lte('date', endDate)
+                .order('date', { ascending: true });
+
+            if (error) throw error;
+            if (data) setYearlyPayments(data);
+        } catch (err) {
+            console.error("Fetch Yearly Payments Error:", err);
+        }
+    };
+
+    useEffect(() => {
+        if (employees.length > 0) {
+            fetchYearlyPayments();
+        }
+    }, [ledgerYear, employees]);
+
     const deletePayment = async (id) => {
         if (!window.confirm("Are you sure you want to delete this payment record?")) return;
         try {
             const { error } = await supabase.from('employee_payments').delete().eq('id', id);
             if (error) throw error;
             fetchPayments();
+            fetchYearlyPayments();
         } catch (err) {
             console.error("Delete Payment Error:", err);
             alert("Failed to delete record: " + err.message);
@@ -722,6 +752,61 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
         return balances;
     }, [attendanceData, paymentData, payrollConfig]);
+
+    // Memoized matrix data for the Salary Ledger Tab
+    const ledgerMatrix = useMemo(() => {
+        const matrix = {};
+        
+        // Initialize for all active employees
+        employees.forEach(emp => {
+            matrix[emp.emp_id] = {
+                emp_id: emp.emp_id,
+                name: emp.name,
+                role: emp.role,
+                months: Array(12).fill(0), // 0 to 11 for Jan-Dec
+                row_total: 0
+            };
+        });
+
+        // Populate with payments from yearlyPayments
+        yearlyPayments.forEach(p => {
+            const amt = parseFloat(p.amount) || 0;
+            if (!p.date) return;
+            const monthVal = new Date(p.date).getMonth(); // 0-11
+            
+            // If employee exists in active roster
+            if (matrix[p.emp_id]) {
+                matrix[p.emp_id].months[monthVal] += amt;
+                matrix[p.emp_id].row_total += amt;
+            } else {
+                // Fallback for employees who are no longer active but have payments this year
+                matrix[p.emp_id] = {
+                    emp_id: p.emp_id,
+                    name: p.emp_name || 'Former Employee',
+                    role: 'Inactive',
+                    months: Array(12).fill(0),
+                    row_total: amt
+                };
+                matrix[p.emp_id].months[monthVal] = amt;
+            }
+        });
+
+        // Compute Column Totals
+        const column_totals = Array(12).fill(0);
+        let grand_total = 0;
+        Object.values(matrix).forEach(emp => {
+            emp.months.forEach((mVal, mIdx) => {
+                column_totals[mIdx] += mVal;
+            });
+            grand_total += emp.row_total;
+        });
+
+        return {
+            matrix_list: Object.values(matrix),
+            column_totals,
+            grand_total
+        };
+    }, [yearlyPayments, employees]);
 
     // Stats
     const stats = useMemo(() => {
@@ -1352,6 +1437,23 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                         }}
                     >
                         Salaries & Advances
+                    </button>
+                )}
+                {hasPermission('attendance.salaries') && (
+                    <button
+                        onClick={() => setActiveTab('ledger')}
+                        style={{
+                            padding: '0.75rem 1.5rem',
+                            background: activeTab === 'ledger' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            border: 'none',
+                            borderBottom: activeTab === 'ledger' ? '2px solid #a855f7' : 'none',
+                            color: activeTab === 'ledger' ? '#a855f7' : 'var(--text-secondary)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Salary Ledger
                     </button>
                 )}
                 {canViewCalculator && (
@@ -2195,12 +2297,220 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     </div>
                 </>
             )}
+            {activeTab === 'ledger' && (
+                <>
+                    {/* Ledger Dashboard Header Controls */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                            <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Select Year:</label>
+                            <select
+                                value={ledgerYear}
+                                onChange={(e) => setLedgerYear(parseInt(e.target.value))}
+                                style={{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
+                            >
+                                {[2024, 2025, 2026, 2027, 2028].map(yr => (
+                                    <option key={yr} value={yr}>{yr}</option>
+                                ))}
+                            </select>
+                            <div style={{ position: 'relative', width: '250px' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Search Employee..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    style={{ width: '100%', padding: '0.5rem 1rem 0.5rem 2rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                                />
+                                <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>🔍</span>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                const headers = ["Employee ID", "Employee Name", "Role", ...monthNames, "Row Total"];
+                                const rows = ledgerMatrix.matrix_list
+                                    .filter(emp => emp.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) || emp.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                    .map(emp => [
+                                        emp.emp_id,
+                                        emp.name,
+                                        emp.role || 'N/A',
+                                        ...emp.months,
+                                        emp.row_total
+                                    ]);
+                                
+                                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                                const wb = XLSX.utils.book_new();
+                                XLSX.utils.book_append_sheet(wb, ws, `Salary Ledger ${ledgerYear}`);
+                                XLSX.writeFile(wb, `Salary_Ledger_${ledgerYear}.xlsx`);
+                            }}
+                            className="btn-primary"
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
+                        >
+                            <Download size={16} /> Export Yearly Ledger
+                        </button>
+                    </div>
+
+                    {/* Summary Metrics */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                        <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)', background: 'rgba(168, 85, 247, 0.05)', borderRadius: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Yearly Outflow ({ledgerYear})</span>
+                                <span style={{ color: '#a855f7', fontSize: '1.25rem' }}>💰</span>
+                            </div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {formatCurrency(ledgerMatrix.grand_total)}
+                            </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Average Monthly Outflow</span>
+                                <span style={{ color: '#3b82f6', fontSize: '1.25rem' }}>📈</span>
+                            </div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {formatCurrency(ledgerMatrix.grand_total / 12)}
+                            </div>
+                        </div>
+
+                        <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--glass-border)', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Active Recipients</span>
+                                <span style={{ color: '#10b981', fontSize: '1.25rem' }}>👥</span>
+                            </div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {ledgerMatrix.matrix_list.filter(e => e.row_total > 0).length}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Matrix Grid Panel */}
+                    <div className="glass-panel" style={{ border: '1px solid var(--glass-border)', overflowX: 'auto', borderRadius: '0.75rem', padding: '1rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-secondary)', textAlign: 'left', fontWeight: 'bold' }}>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Employee ID</th>
+                                    <th style={{ padding: '0.75rem 1rem' }}>Name</th>
+                                    {monthNames.map(mName => (
+                                        <th key={mName} style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{mName.substring(0,3)}</th>
+                                    ))}
+                                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--text-primary)', background: 'rgba(255,255,255,0.02)' }}>Total Paid</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {ledgerMatrix.matrix_list
+                                    .filter(emp => emp.emp_id.toLowerCase().includes(searchTerm.toLowerCase()) || emp.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                    .map(emp => (
+                                        <tr key={emp.emp_id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{emp.emp_id}</td>
+                                            <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                                                <div style={{ fontWeight: 500 }}>{emp.name}</div>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{emp.role || 'N/A'}</div>
+                                            </td>
+                                            {emp.months.map((mVal, mIdx) => (
+                                                <td
+                                                    key={mIdx}
+                                                    onClick={() => {
+                                                        if (mVal > 0) {
+                                                            const cellPayments = yearlyPayments.filter(p => p.emp_id === emp.emp_id && new Date(p.date).getMonth() === mIdx);
+                                                            setDrillDownCell({
+                                                                emp_id: emp.emp_id,
+                                                                name: emp.name,
+                                                                month: mIdx,
+                                                                year: ledgerYear,
+                                                                payments: cellPayments
+                                                            });
+                                                        }
+                                                    }}
+                                                    style={{ 
+                                                        padding: '0.75rem 0.5rem', 
+                                                        textAlign: 'right', 
+                                                        color: mVal > 0 ? '#3b82f6' : 'var(--text-secondary)',
+                                                        fontWeight: mVal > 0 ? 600 : 400,
+                                                        cursor: mVal > 0 ? 'pointer' : 'default',
+                                                        textDecoration: mVal > 0 ? 'underline dashed' : 'none'
+                                                    }}
+                                                >
+                                                    {mVal > 0 ? formatCurrency(mVal).replace('₹', '') : '-'}
+                                                </td>
+                                            ))}
+                                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', background: 'rgba(16, 185, 129, 0.05)' }}>
+                                                {formatCurrency(emp.row_total)}
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                {/* Column Totals Row */}
+                                <tr style={{ borderTop: '2px solid var(--glass-border)', background: 'rgba(255,255,255,0.02)', fontWeight: 'bold' }}>
+                                    <td colSpan={2} style={{ padding: '1rem', color: 'var(--text-primary)' }}>Monthly Total Outflow</td>
+                                    {ledgerMatrix.column_totals.map((colSum, mIdx) => (
+                                        <td key={mIdx} style={{ padding: '1rem 0.5rem', textAlign: 'right', color: '#a855f7' }}>
+                                            {colSum > 0 ? formatCurrency(colSum).replace('₹', '') : '-'}
+                                        </td>
+                                    ))}
+                                    <td style={{ padding: '1rem', textAlign: 'right', color: '#a855f7', background: 'rgba(168, 85, 247, 0.1)' }}>
+                                        {formatCurrency(ledgerMatrix.grand_total)}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+
+            {/* Drill Down Payments Modal */}
+            {drillDownCell && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(5px)' }} onClick={() => setDrillDownCell(null)}>
+                    <div className="glass-panel" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', maxWidth: '600px', width: '100%', display: 'flex', flexDirection: 'column', gap: '1.25rem' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Payout History</h3>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{drillDownCell.name} ({drillDownCell.emp_id}) — {monthNames[drillDownCell.month]} {drillDownCell.year}</div>
+                            </div>
+                            <button onClick={() => setDrillDownCell(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+                        </div>
+
+                        <div style={{ border: '1px solid var(--glass-border)', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                        <th style={{ padding: '0.75rem' }}>Date</th>
+                                        <th style={{ padding: '0.75rem' }}>Type</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Amount</th>
+                                        <th style={{ padding: '0.75rem' }}>Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {drillDownCell.payments.map((p, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                            <td style={{ padding: '0.75rem' }}>{new Date(p.date).toLocaleDateString()}</td>
+                                            <td style={{ padding: '0.75rem' }}>
+                                                <span style={{
+                                                    padding: '0.15rem 0.4rem', borderRadius: '0.5rem', fontSize: '0.7rem', fontWeight: 600,
+                                                    background: p.type === 'Salary' ? 'rgba(59, 130, 246, 0.1)' : (p.type === 'Advance' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
+                                                    color: p.type === 'Salary' ? '#3b82f6' : (p.type === 'Advance' ? '#f59e0b' : '#10b981')
+                                                }}>
+                                                    {p.type}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(p.amount)}</td>
+                                            <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{p.remarks || '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setDrillDownCell(null)} className="btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Manual Entry Modal */}
             {(showManualEntry || editingRecord) && (
                 <ManualEntryModal
                     onClose={() => { setShowManualEntry(false); setEditingRecord(null); }}
-                    onSave={() => { fetchAttendance(); fetchEmployees(); fetchPayments(); }}
+                    onSave={() => { fetchAttendance(); fetchEmployees(); fetchPayments(); fetchYearlyPayments(); }}
                     config={payrollConfig}
                     employees={employees}
                     initialData={editingRecord}

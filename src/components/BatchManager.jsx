@@ -29,6 +29,8 @@ const BatchManager = ({ onBack }) => {
     const [batches, setBatches] = useState([]);
     const [rmBatches, setRmBatches] = useState([]);
     const [recipes, setRecipes] = useState([]);
+    const [allRecipes, setAllRecipes] = useState([]);
+    const [employees, setEmployees] = useState([]);
     
     // Traceability States
     const [traceQuery, setTraceQuery] = useState('');
@@ -39,6 +41,7 @@ const BatchManager = ({ onBack }) => {
     const [showCreateRmModal, setShowCreateRmModal] = useState(false);
     const [showQcModal, setShowQcModal] = useState(false);
     const [showPackModal, setShowPackModal] = useState(false);
+    const [showCreateRecipeModal, setShowCreateRecipeModal] = useState(false);
     const [selectedBatch, setSelectedBatch] = useState(null);
     const [printLabelBatch, setPrintLabelBatch] = useState(null);
 
@@ -87,18 +90,47 @@ const BatchManager = ({ onBack }) => {
         qr_code: ''
     });
 
+    // Form inputs: New Recipe Version
+    const [recipeForm, setRecipeForm] = useState({
+        product_code: 'GGP',
+        version_label: '',
+        ingredients_list: '[{"item": "GINGER", "qty_kg": 150}, {"item": "GARLIC", "qty_kg": 150}, {"item": "SALT", "qty_kg": 10}]'
+    });
+
+    // Filtered operators and supervisors from employee list
+    const operators = useMemo(() => {
+        return employees.filter(e => (e.role || '').toLowerCase().includes('operator') || (e.role || '').toLowerCase().includes('opeator'));
+    }, [employees]);
+
+    const supervisors = useMemo(() => {
+        const filtered = employees.filter(e => (e.role || '').toLowerCase().includes('supervisor') || (e.role || '').toLowerCase().includes('manager'));
+        if (filtered.length === 0) {
+            // Fallback to active non-operators
+            return employees.filter(e => !((e.role || '').toLowerCase().includes('operator') || (e.role || '').toLowerCase().includes('opeator')));
+        }
+        return filtered;
+    }, [employees]);
+
     // Load initial data
     const loadData = async () => {
         setLoading(true);
         try {
-            const [batchesRes, rmRes, recipesRes] = await Promise.all([
+            const [batchesRes, rmRes, recipesRes, employeesRes, allRecipesRes] = await Promise.all([
                 supabase.from('batch_master').select('*, recipe_versions(version_label, ingredients_list)').order('created_at', { ascending: false }),
                 supabase.from('raw_material_batches').select('*').order('created_at', { ascending: false }),
-                supabase.from('recipe_versions').select('*').eq('is_active', true)
+                supabase.from('recipe_versions').select('*').eq('is_active', true),
+                supabase.from('employees').select('emp_id, name, role, department').eq('is_active', true),
+                supabase.from('recipe_versions').select('*').order('created_at', { ascending: false })
             ]);
 
             if (batchesRes.data) setBatches(batchesRes.data);
             if (rmRes.data) setRmBatches(rmRes.data);
+            if (employeesRes.data) {
+                setEmployees(employeesRes.data);
+            }
+            if (allRecipesRes.data) {
+                setAllRecipes(allRecipesRes.data);
+            }
             if (recipesRes.data) {
                 setRecipes(recipesRes.data);
                 if (recipesRes.data.length > 0 && !batchForm.recipe_version_id) {
@@ -117,6 +149,17 @@ const BatchManager = ({ onBack }) => {
             loadData();
         }
     }, [isAuthorized]);
+
+    // Pre-populate defaults for operator and supervisor
+    useEffect(() => {
+        if (showCreateBatchModal) {
+            setBatchForm(prev => ({
+                ...prev,
+                operator_name: prev.operator_name || operators[0]?.name || '',
+                supervisor_name: prev.supervisor_name || supervisors[0]?.name || ''
+            }));
+        }
+    }, [showCreateBatchModal, operators, supervisors]);
 
     // Handle Production Batch creation
     const handleCreateBatch = async (e) => {
@@ -294,6 +337,58 @@ const BatchManager = ({ onBack }) => {
         } catch (err) {
             console.error("QC Inspection Error:", err);
             alert("Failed to save quality results: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle Recipe Version creation
+    const handleCreateRecipe = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            let parsedIngredients;
+            try {
+                parsedIngredients = JSON.parse(recipeForm.ingredients_list);
+            } catch (jsonErr) {
+                alert("Ingredients list must be a valid JSON array of objects. Example: [{\"item\": \"GINGER\", \"qty_kg\": 150}]");
+                setLoading(false);
+                return;
+            }
+
+            const { error } = await supabase.from('recipe_versions').insert([{
+                product_code: recipeForm.product_code,
+                version_label: recipeForm.version_label,
+                ingredients_list: parsedIngredients,
+                is_active: true
+            }]);
+
+            if (error) throw error;
+            setShowCreateRecipeModal(false);
+            setRecipeForm({
+                product_code: 'GGP',
+                version_label: '',
+                ingredients_list: '[{"item": "GINGER", "qty_kg": 150}, {"item": "GARLIC", "qty_kg": 150}, {"item": "SALT", "qty_kg": 10}]'
+            });
+            loadData();
+        } catch (err) {
+            console.error("Create Recipe Error:", err);
+            alert("Failed to create recipe version: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleRecipeActive = async (id, currentStatus) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('recipe_versions').update({
+                is_active: !currentStatus
+            }).eq('id', id);
+            if (error) throw error;
+            loadData();
+        } catch (err) {
+            console.error("Toggle Recipe Status error:", err);
         } finally {
             setLoading(false);
         }
@@ -484,6 +579,11 @@ const BatchManager = ({ onBack }) => {
                             <Plus size={16} /> Log RM Delivery
                         </button>
                     )}
+                    {activeTab === 'recipes' && (
+                        <button onClick={() => setShowCreateRecipeModal(true)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem' }}>
+                            <Plus size={16} /> Add Recipe Version
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -493,6 +593,7 @@ const BatchManager = ({ onBack }) => {
                     { id: 'registry', label: 'Manufacturing Batches', icon: <Factory size={16} /> },
                     { id: 'raw_material', label: 'Raw Material Ledger', icon: <Package size={16} /> },
                     { id: 'qc', label: 'Quality Control Inspections', icon: <Shield size={16} /> },
+                    { id: 'recipes', label: 'Recipe Configurator', icon: <Settings size={16} /> },
                     { id: 'traceability', label: 'Recall & Traceability', icon: <ArrowLeftRight size={16} /> },
                     { id: 'expiry', label: 'Expiry Management', icon: <Calendar size={16} /> }
                 ].map(tab => (
@@ -737,6 +838,87 @@ const BatchManager = ({ onBack }) => {
                                                 }}>
                                                     {b.quality_status === 'Passed' ? 'PASSED & RELEASED' : 'REJECTED / BLOCKED'}
                                                 </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Recipe Configurator Tab */}
+            {activeTab === 'recipes' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative', width: '100%', maxWidth: '350px' }}>
+                            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                            <input 
+                                type="text"
+                                placeholder="Search product code or version..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{ width: '100%', padding: '0.5rem 1rem 0.5rem 2.25rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="glass-panel" style={{ border: '1px solid var(--glass-border)', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                            <thead>
+                                <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem' }}>Product Code</th>
+                                    <th style={{ padding: '1rem' }}>Version Label</th>
+                                    <th style={{ padding: '1rem' }}>Ingredients List</th>
+                                    <th style={{ padding: '1rem', textAlign: 'center' }}>Active Status</th>
+                                    <th style={{ padding: '1rem', textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allRecipes.filter(r => {
+                                    const s = searchQuery.toLowerCase();
+                                    return r.product_code.toLowerCase().includes(s) || r.version_label.toLowerCase().includes(s);
+                                }).length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No recipe versions registered.</td>
+                                    </tr>
+                                ) : (
+                                    allRecipes.filter(r => {
+                                        const s = searchQuery.toLowerCase();
+                                        return r.product_code.toLowerCase().includes(s) || r.version_label.toLowerCase().includes(s);
+                                    }).map((r) => (
+                                        <tr key={r.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                                            <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{r.product_code}</td>
+                                            <td style={{ padding: '1rem' }}>{r.version_label}</td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>
+                                                {Array.isArray(r.ingredients_list) 
+                                                    ? r.ingredients_list.map(ing => `${ing.item}: ${ing.qty_kg}kg`).join(', ') 
+                                                    : JSON.stringify(r.ingredients_list)}
+                                            </td>
+                                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                                <span style={{
+                                                    fontSize: '0.75rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '1rem',
+                                                    background: r.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                                                    color: r.is_active ? '#10b981' : 'var(--text-secondary)'
+                                                }}>
+                                                    {r.is_active ? 'ACTIVE' : 'INACTIVE'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                <button 
+                                                    onClick={() => toggleRecipeActive(r.id, r.is_active)}
+                                                    className="btn-primary" 
+                                                    style={{ 
+                                                        padding: '0.25rem 0.50rem', 
+                                                        fontSize: '0.75rem', 
+                                                        background: r.is_active ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                                                        color: r.is_active ? '#ef4444' : '#10b981', 
+                                                        border: r.is_active ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                                    }}
+                                                >
+                                                    {r.is_active ? 'Deactivate' : 'Activate'}
+                                                </button>
                                             </td>
                                         </tr>
                                     ))
@@ -1040,23 +1222,27 @@ const BatchManager = ({ onBack }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="input-group">
                                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Operator Name</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g. Anand"
+                                <select 
                                     value={batchForm.operator_name}
                                     onChange={(e) => setBatchForm(prev => ({ ...prev, operator_name: e.target.value }))}
                                     style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                                />
+                                >
+                                    {operators.map(op => (
+                                        <option key={op.emp_id} value={op.name}>{op.name} ({op.role})</option>
+                                    ))}
+                                </select>
                             </div>
                             <div className="input-group">
                                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Supervisor</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="e.g. Rajesh"
+                                <select 
                                     value={batchForm.supervisor_name}
                                     onChange={(e) => setBatchForm(prev => ({ ...prev, supervisor_name: e.target.value }))}
                                     style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                                />
+                                >
+                                    {supervisors.map(sv => (
+                                        <option key={sv.emp_id} value={sv.name}>{sv.name} ({sv.role || 'Supervisor'})</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
@@ -1315,6 +1501,62 @@ const BatchManager = ({ onBack }) => {
                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
                             <button type="button" onClick={() => { setShowPackModal(false); setSelectedBatch(null); }} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>Cancel</button>
                             <button type="submit" disabled={loading} className="btn-primary">Package Lot</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* Create Recipe Version Modal */}
+            {showCreateRecipeModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(5px)' }} onClick={() => setShowCreateRecipeModal(false)}>
+                    <form onSubmit={handleCreateRecipe} className="glass-panel" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '1rem', border: '1px solid var(--glass-border)', maxWidth: '500px', width: '100%', display: 'flex', flexDirection: 'column', gap: '1.25rem' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Add New Recipe Version</h3>
+                            <button type="button" onClick={() => setShowCreateRecipeModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="input-group">
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Product Code</label>
+                                <select 
+                                    value={recipeForm.product_code}
+                                    onChange={(e) => setRecipeForm(prev => ({ ...prev, product_code: e.target.value }))}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                >
+                                    <option value="GGP">GGP (G&G Paste)</option>
+                                    <option value="GP">GP (Ginger Paste)</option>
+                                    <option value="GAR">GAR (Garlic Paste)</option>
+                                    <option value="PE-GI">PE-GI (Peeled Ginger)</option>
+                                    <option value="PE-GA">PE-GA (Peeled Garlic)</option>
+                                </select>
+                            </div>
+                            <div className="input-group">
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Version Label</label>
+                                <input 
+                                    required
+                                    type="text" 
+                                    placeholder="e.g. Version 1.0"
+                                    value={recipeForm.version_label}
+                                    onChange={(e) => setRecipeForm(prev => ({ ...prev, version_label: e.target.value }))}
+                                    style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="input-group">
+                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Ingredients List (JSON Array)</label>
+                            <textarea 
+                                required
+                                value={recipeForm.ingredients_list}
+                                onChange={(e) => setRecipeForm(prev => ({ ...prev, ingredients_list: e.target.value }))}
+                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.4rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
+                            />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>Format: JSON list containing items and quantities (kg).</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                            <button type="button" onClick={() => setShowCreateRecipeModal(false)} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>Cancel</button>
+                            <button type="submit" disabled={loading} className="btn-primary">Create Version</button>
                         </div>
                     </form>
                 </div>

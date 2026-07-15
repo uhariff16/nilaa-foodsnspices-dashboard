@@ -102,3 +102,12 @@ CREATE TABLE IF NOT EXISTS batch_inventory (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_batch_inv_composite ON batch_inventory(batch_number, item_name, pack_size);
+
+-- Disable Row Level Security (RLS) on all Batch tables to allow direct client queries
+ALTER TABLE recipe_versions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_master DISABLE ROW LEVEL SECURITY;
+ALTER TABLE raw_material_batches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_consumption DISABLE ROW LEVEL SECURITY;
+ALTER TABLE packaging_transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_quality_inspection DISABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_inventory DISABLE ROW LEVEL SECURITY;

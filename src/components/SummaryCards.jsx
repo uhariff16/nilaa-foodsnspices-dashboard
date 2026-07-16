@@ -46,6 +46,7 @@ const SummaryCards = ({
     serviceRevenue = 0,
     customerBalance = 0,
     paidProfitDistributions = 0,
+    unpaidProfitDistributions = 0,
     currentMonthProfit = 0,
     prevMonthProfit = 0
 }) => {
@@ -164,8 +165,8 @@ const SummaryCards = ({
     const bankFundBalance = (prevMonthProfit + currentMonthProfit) - customerBalance - paidProfitDistributions;
 
     const bankSubtext = (
-        <span style={{ fontSize: '0.725rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none' }}>
-            Profits: ({formatCurrency(prevMonthProfit)} + {formatCurrency(currentMonthProfit)}) | Rec: -{formatCurrency(customerBalance)} | Dist: -{formatCurrency(paidProfitDistributions)}
+        <span style={{ fontSize: '0.675rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none' }}>
+            Profits: ({formatCurrency(prevMonthProfit)} + {formatCurrency(currentMonthProfit)}) | Rec: -{formatCurrency(customerBalance)} | Paid Dist: -{formatCurrency(paidProfitDistributions)} | Unpaid Dist: {formatCurrency(unpaidProfitDistributions)}
         </span>
     );
 

@@ -291,7 +291,8 @@ const Dashboard = (props) => {
 
     // [NEW] Bank Reconciliation States & Loader
     const [customerBalanceTotal, setCustomerBalanceTotal] = useState(0);
-    const [paidProfitDistributionsTotal, setPaidProfitDistributionsTotal] = useState(0);
+    const [profitStakeholders, setProfitStakeholders] = useState([]);
+    const [profitPayouts, setProfitPayouts] = useState([]);
 
     const fetchBankReconciliationData = async () => {
         try {
@@ -302,11 +303,16 @@ const Dashboard = (props) => {
                 setCustomerBalanceTotal(totalRec);
             }
 
-            // 2. Fetch Paid Distributions
-            const { data: payData, error: payError } = await supabase.from('profit_payouts').select('amount').eq('status', 'paid');
-            if (!payError && payData) {
-                const totalDist = payData.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-                setPaidProfitDistributionsTotal(totalDist);
+            // 2. Fetch Profit Stakeholders
+            const { data: stakeholdersData } = await supabase.from('profit_stakeholders').select('*');
+            if (stakeholdersData) {
+                setProfitStakeholders(stakeholdersData);
+            }
+
+            // 3. Fetch Profit Payouts
+            const { data: payoutsData } = await supabase.from('profit_payouts').select('*');
+            if (payoutsData) {
+                setProfitPayouts(payoutsData);
             }
         } catch (err) {
             console.error("Error fetching bank reconciliation data:", err);
@@ -749,8 +755,75 @@ const Dashboard = (props) => {
     const totalManual = manualSalaryCalc + manualDailyCalc;
     const grandTotalExpenses = recordedExpenses + totalManual;
 
+    // [NEW] Shared calculation helper for dynamic Net Profit of any month, matching all deduplication and exclusions
+    const calculateMonthProfitHelper = React.useCallback((monthStr) => {
+        if (!monthStr || monthStr === 'Overall') return 0;
+        
+        const [mName, yName] = monthStr.split(' ');
+        const mIdx = monthNames.indexOf(mName);
+        const targetPrefix = `${yName}-${String(mIdx + 1).padStart(2, '0')}`;
+
+        // Filter transactions for target month
+        const monthTxs = (data.transactions || []).filter(t => 
+            t.parsedDate && t.parsedDate.startsWith(targetPrefix)
+        );
+
+        // Content-based deduplication matching App.jsx logic
+        const uniqueTxnsMap = new Map();
+        monthTxs.forEach(t => {
+            const key = `${t.parsedDate}-${t.invoiceNo}-${Number(t.parsedAmount).toFixed(2)}-${Number(t.parsedQty || 0)}-${t.customerName}-${t.name}`;
+            if (!uniqueTxnsMap.has(key)) {
+                uniqueTxnsMap.set(key, t);
+            }
+        });
+        const uniqueTxs = Array.from(uniqueTxnsMap.values());
+
+        // 1. Calculate salesRevenue
+        const allSales = uniqueTxs.filter(t => 
+            String(t.parsedType).toLowerCase().includes('sale') &&
+            !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+        );
+
+        const salesAppearsGran = allSales.filter(t => {
+            const type = String(t.parsedType || '').toLowerCase();
+            const desc = String(t.originalDesc || '').toLowerCase();
+            if (type === 'sales summary' || type === 'profitsummary' || type === 'invoice total') return false;
+            const keywordsToExclude = ['subtotal', 'sub total', 'taxable', 'net amount', 'gross amount', 'round off', 'rounded off', 'roundoff', 'gst', 'total'];
+            const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
+            if (isCreditNote) return true;
+            if (keywordsToExclude.some(k => desc.includes(k))) return false;
+            return true;
+        });
+
+        const grossSalesRev = salesAppearsGran.reduce((sum, t) => {
+            const amt = parseFloat(t.parsedAmount) || 0;
+            return sum + Math.abs(amt);
+        }, 0);
+
+        const monthReturns = uniqueTxs.filter(t => t.parsedType === 'Sales Return');
+        const totalRet = monthReturns.reduce((sum, t) => sum + (parseFloat(t.parsedAmount) || 0), 0);
+
+        const monthDiscounts = (invoiceDiscounts || []).filter(d => 
+            d.discount_date && d.discount_date.startsWith(targetPrefix)
+        );
+        const totalDisc = monthDiscounts.reduce((sum, d) => sum + parseFloat(d.discount_amount || 0), 0);
+
+        const netSales = grossSalesRev - totalRet - totalDisc;
+
+        // 2. Calculate expenses
+        const expensesTxs = uniqueTxs.filter(t => String(t.parsedType).toLowerCase().includes('expense') || t.parsedType === 'Purchase');
+        const recordedExp = expensesTxs.reduce((sum, t) => sum + (parseFloat(t.parsedAmount) || 0), 0);
+
+        const totalExpenses = recordedExp + manualSalaryCalc + manualDailyCalc;
+
+        return netSales - totalExpenses;
+    }, [data.transactions, invoiceDiscounts, manualSalaryCalc, manualDailyCalc]);
+
     // [NEW] Calculate Previous Month and Current Month Profit for Bank Reconciliation
-    const currentMonthProfit = salesRevenue - grandTotalExpenses;
+    const currentMonthProfit = React.useMemo(() => {
+        if (selectedMonth === 'Overall') return salesRevenue - grandTotalExpenses;
+        return calculateMonthProfitHelper(selectedMonth);
+    }, [selectedMonth, salesRevenue, grandTotalExpenses, calculateMonthProfitHelper]);
 
     const prevMonthProfit = React.useMemo(() => {
         if (!selectedMonth || selectedMonth === 'Overall') {
@@ -764,42 +837,56 @@ const Dashboard = (props) => {
             const targetMonthStr = monthNames[d.getMonth()] + ' ' + d.getFullYear();
             return calculateMonthProfitHelper(targetMonthStr);
         }
+    }, [selectedMonth, calculateMonthProfitHelper]);
 
-        function calculateMonthProfitHelper(monthStr) {
-            let grossSales = 0;
-            let returnsAmt = 0;
-            let parsedExpenses = 0;
-            let discountsAmt = 0;
+    // [NEW] Calculate Paid and Unpaid Profit Distributions matching YearlyAnalysis Profit Command Center
+    const profitDistributionStats = React.useMemo(() => {
+        let totalPaid = 0;
+        let totalPending = 0;
+        if (!profitStakeholders.length) return { totalPaid, totalPending };
 
-            const [mName, yName] = monthStr.split(' ');
-            const mIdx = monthNames.indexOf(mName);
-            const targetPrefix = `${yName}-${String(mIdx + 1).padStart(2, '0')}`;
-
-            (data.transactions || []).forEach(t => {
-                if (!t.parsedDate || !t.parsedDate.startsWith(targetPrefix)) return;
-                const type = String(t.parsedType || t.Type || '').toLowerCase();
-                const amt = parseFloat(t.parsedAmount || t.Amount || 0);
-
-                if (type === 'sales return') {
-                    returnsAmt += amt;
-                } else if (type.includes('sale') || type.includes('invoice total')) {
-                    grossSales += Math.abs(amt);
-                } else if (type.includes('expense') || type.includes('cost') || type.includes('purchase')) {
-                    parsedExpenses += amt;
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        
+        // Loop over months of selectedYear
+        monthNames.forEach(mName => {
+            const monthStr = `${mName} ${selectedYear}`;
+            
+            // Verify if the month is active in database transactions
+            const hasTx = (data.transactions || []).some(t => {
+                if (!t.parsedDate || !t.parsedDate.startsWith(selectedYear)) return false;
+                let tMonthYear = '';
+                if (t.parsedDate.includes('-')) {
+                    const parts = t.parsedDate.split('-');
+                    if (parts.length >= 3) {
+                        const year = parts[0];
+                        const monthIndex = parseInt(parts[1], 10) - 1;
+                        if (monthNames[monthIndex]) {
+                            tMonthYear = monthNames[monthIndex] + ' ' + year;
+                        }
+                    }
                 }
+                return tMonthYear === monthStr;
             });
 
-            const monthDiscounts = (invoiceDiscounts || []).filter(d => 
-                d.discount_date && d.discount_date.startsWith(targetPrefix)
-            );
-            discountsAmt = monthDiscounts.reduce((sum, d) => sum + parseFloat(d.discount_amount || 0), 0);
+            if (!hasTx) return;
 
-            const netSales = grossSales - returnsAmt - discountsAmt;
-            const totalExpenses = parsedExpenses + manualSalaryCalc + manualDailyCalc;
+            const mProfit = calculateMonthProfitHelper(monthStr);
 
-            return netSales - totalExpenses;
-        }
-    }, [data.transactions, invoiceDiscounts, selectedMonth, selectedYear, manualSalaryCalc, manualDailyCalc]);
+            profitStakeholders.forEach(s => {
+                const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === monthStr);
+                const status = p?.status || 'pending';
+                const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
+
+                if (status === 'paid') {
+                    totalPaid += share;
+                } else {
+                    totalPending += share;
+                }
+            });
+        });
+
+        return { totalPaid, totalPending };
+    }, [profitStakeholders, profitPayouts, data.transactions, selectedYear, calculateMonthProfitHelper]);
 
     // [NEW] Prepare Chart Data
     const expenseChartData = [
@@ -2170,7 +2257,8 @@ const Dashboard = (props) => {
                             totalReturns={totalReturns}
                             serviceRevenue={serviceRevenue}
                             customerBalance={customerBalanceTotal}
-                            paidProfitDistributions={paidProfitDistributionsTotal}
+                            paidProfitDistributions={profitDistributionStats.totalPaid}
+                            unpaidProfitDistributions={profitDistributionStats.totalPending}
                             currentMonthProfit={currentMonthProfit}
                             prevMonthProfit={prevMonthProfit}
                         />

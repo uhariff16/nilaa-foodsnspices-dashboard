@@ -839,54 +839,23 @@ const Dashboard = (props) => {
         }
     }, [selectedMonth, calculateMonthProfitHelper]);
 
-    // [NEW] Calculate Paid and Unpaid Profit Distributions matching YearlyAnalysis Profit Command Center
-    const profitDistributionStats = React.useMemo(() => {
-        let totalPaid = 0;
-        let totalPending = 0;
-        if (!profitStakeholders.length) return { totalPaid, totalPending };
-
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // [NEW] Calculate Last Month Paid Profit matching previous month's paid profit payouts
+    const lastMonthPaidProfit = React.useMemo(() => {
+        if (!profitPayouts.length || !selectedMonth || selectedMonth === 'Overall') return 0;
         
-        // Loop over months of selectedYear
-        monthNames.forEach(mName => {
-            const monthStr = `${mName} ${selectedYear}`;
-            
-            // Verify if the month is active in database transactions
-            const hasTx = (data.transactions || []).some(t => {
-                if (!t.parsedDate || !t.parsedDate.startsWith(selectedYear)) return false;
-                let tMonthYear = '';
-                if (t.parsedDate.includes('-')) {
-                    const parts = t.parsedDate.split('-');
-                    if (parts.length >= 3) {
-                        const year = parts[0];
-                        const monthIndex = parseInt(parts[1], 10) - 1;
-                        if (monthNames[monthIndex]) {
-                            tMonthYear = monthNames[monthIndex] + ' ' + year;
-                        }
-                    }
-                }
-                return tMonthYear === monthStr;
-            });
+        const [mStr, yStr] = selectedMonth.split(' ');
+        const mIdx = monthNames.indexOf(mStr);
+        const y = parseInt(yStr);
+        const d = new Date(y, mIdx - 1, 1);
+        const prevMonthStr = monthNames[d.getMonth()] + ' ' + d.getFullYear();
 
-            if (!hasTx) return;
+        // Sum paid payouts for the previous month
+        const filtered = profitPayouts.filter(p => p.month_year === prevMonthStr && p.status === 'paid');
+        return filtered.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    }, [profitPayouts, selectedMonth]);
 
-            const mProfit = calculateMonthProfitHelper(monthStr);
-
-            profitStakeholders.forEach(s => {
-                const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === monthStr);
-                const status = p?.status || 'pending';
-                const share = (mProfit * (parseFloat(s.default_percent) || 0)) / 100;
-
-                if (status === 'paid') {
-                    totalPaid += share;
-                } else {
-                    totalPending += share;
-                }
-            });
-        });
-
-        return { totalPaid, totalPending };
-    }, [profitStakeholders, profitPayouts, data.transactions, selectedYear, calculateMonthProfitHelper]);
+    // [NEW] Provision for Pending Supplier Payments (initialized to 0, ready for future integration)
+    const pendingSupplierPayments = 0;
 
     // [NEW] Prepare Chart Data
     const expenseChartData = [
@@ -2257,8 +2226,8 @@ const Dashboard = (props) => {
                             totalReturns={totalReturns}
                             serviceRevenue={serviceRevenue}
                             customerBalance={customerBalanceTotal}
-                            paidProfitDistributions={profitDistributionStats.totalPaid}
-                            unpaidProfitDistributions={profitDistributionStats.totalPending}
+                            lastMonthPaidProfit={lastMonthPaidProfit}
+                            pendingSupplierPayments={pendingSupplierPayments}
                             currentMonthProfit={currentMonthProfit}
                             prevMonthProfit={prevMonthProfit}
                         />

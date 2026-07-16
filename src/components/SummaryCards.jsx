@@ -37,7 +37,18 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
     </div>
 );
 
-const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, overrideSales, overrideInvoiceCount, totalReturns = 0, serviceRevenue = 0 }) => {
+const SummaryCards = ({ 
+    data, 
+    manualExpenses = { salary: 0, daily: 0 }, 
+    overrideSales, 
+    overrideInvoiceCount, 
+    totalReturns = 0, 
+    serviceRevenue = 0,
+    customerBalance = 0,
+    paidProfitDistributions = 0,
+    currentMonthProfit = 0,
+    prevMonthProfit = 0
+}) => {
     const stats = useMemo(() => {
         let summarySales = 0;
         let summaryProfit = 0;
@@ -84,17 +95,6 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, override
                 const isCreditNote = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || desc.includes('cn');
 
                 if (isCreditNote || !keywordsToExclude.some(k => desc.includes(k))) {
-                    // [ADJUSTMENT] Treat all as positive additions (Gross Sales)
-                    /*
-                    const isReturn = desc.includes('credit note') || desc.includes('return') || desc.includes('refund') || 
-                                     (item.invoiceNo && String(item.invoiceNo).toLowerCase().startsWith('cn-'));
-
-                    if (isReturn) {
-                        sales -= Math.abs(amt);
-                    } else {
-                        sales += amt;
-                    }
-                    */
                     sales += Math.abs(amt);
 
                     if (item.invoiceNo) {
@@ -135,14 +135,8 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, override
         }
 
         let netProfit = sales - expenses;
-        // [FIX] Override with Summary PROFIT only.
-        // User Logic: Total Sales should be from INVOICES (calculated above in 'sales' var).
-        // Total Profit should be from PROFIT FILE (summaryProfit).
-        // Expenses need to be derived to balance: Sales - Expenses = Profit  =>  Expenses = Sales - Profit.
         if (summarySales > 0) {
             // [FIX] User Request: Net Profit MUST be (Sales - Expenses).
-            // We no longer override it with the file's profit.
-            // netProfit = summaryProfit; 
         }
 
         const margin = sales > 0 ? (netProfit / sales) * 100 : 0;
@@ -167,13 +161,22 @@ const SummaryCards = ({ data, manualExpenses = { salary: 0, daily: 0 }, override
         `${stats.invoiceCount} Invoices`
     );
 
+    const bankFundBalance = (prevMonthProfit + currentMonthProfit) - customerBalance - paidProfitDistributions;
+
+    const bankSubtext = (
+        <span style={{ fontSize: '0.725rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none' }}>
+            Profits: ({formatCurrency(prevMonthProfit)} + {formatCurrency(currentMonthProfit)}) | Rec: -{formatCurrency(customerBalance)} | Dist: -{formatCurrency(paidProfitDistributions)}
+        </span>
+    );
+
     return (
-        <div className="responsive-grid-5" style={{ marginBottom: '2rem' }}>
+        <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
             <Card title="Total Sales" value={stats.sales} subtext={salesSubtext} icon={IndianRupee} color="59, 130, 246" type="sales" />
             <Card title="Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
             <Card title="Total Expenses" value={stats.expenses} icon={Wallet} color="239, 68, 68" type="expense" />
             <Card title="Net Profit" value={stats.netProfit} icon={TrendingUp} color="16, 185, 129" type="profit" />
             <Card title="Profit Margin" value={stats.margin} icon={TrendingDown} color="245, 158, 11" isPercentage type="margin" />
+            <Card title="Fund balance on Bank" value={bankFundBalance} subtext={bankSubtext} icon={Wallet} color="168, 85, 247" type="profit" />
         </div>
     );
 };

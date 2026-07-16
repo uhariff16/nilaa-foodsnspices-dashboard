@@ -289,6 +289,48 @@ const Dashboard = (props) => {
     const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState(null); // [NEW] Modal State for Sales Returns / Invoices
     const [showGapModal, setShowGapModal] = React.useState(false); // [NEW] Gap Analysis Modal State
 
+    // [NEW] Bank Reconciliation States & Loader
+    const [customerBalanceTotal, setCustomerBalanceTotal] = useState(0);
+    const [paidProfitDistributionsTotal, setPaidProfitDistributionsTotal] = useState(0);
+
+    const fetchBankReconciliationData = async () => {
+        try {
+            // 1. Fetch Customer Receivables
+            const { data: recData, error: recError } = await supabase.from('customer_receivables').select('balance_due');
+            if (!recError && recData) {
+                const totalRec = recData.reduce((sum, r) => sum + (parseFloat(r.balance_due) || 0), 0);
+                setCustomerBalanceTotal(totalRec);
+            }
+
+            // 2. Fetch Paid Distributions
+            const { data: payData, error: payError } = await supabase.from('profit_payouts').select('amount').eq('status', 'paid');
+            if (!payError && payData) {
+                const totalDist = payData.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+                setPaidProfitDistributionsTotal(totalDist);
+            }
+        } catch (err) {
+            console.error("Error fetching bank reconciliation data:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchBankReconciliationData();
+        const channel1 = supabase.channel('public:customer_receivables')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_receivables' }, () => {
+                fetchBankReconciliationData();
+            }).subscribe();
+
+        const channel2 = supabase.channel('public:profit_payouts')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profit_payouts' }, () => {
+                fetchBankReconciliationData();
+            }).subscribe();
+
+        return () => {
+            supabase.removeChannel(channel1);
+            supabase.removeChannel(channel2);
+        };
+    }, []);
+
     // [NEW] Invoice Discounts State
     const [invoiceDiscounts, setInvoiceDiscounts] = useState([]);
     const [discountForm, setDiscountForm] = useState({ invoice_no: '', discount_amount: '', discount_date: new Date().toISOString().split('T')[0], remarks: '' });
@@ -706,6 +748,58 @@ const Dashboard = (props) => {
 
     const totalManual = manualSalaryCalc + manualDailyCalc;
     const grandTotalExpenses = recordedExpenses + totalManual;
+
+    // [NEW] Calculate Previous Month and Current Month Profit for Bank Reconciliation
+    const currentMonthProfit = salesRevenue - grandTotalExpenses;
+
+    const prevMonthProfit = React.useMemo(() => {
+        if (!selectedMonth || selectedMonth === 'Overall') {
+            // Default to June 2026 (prior to July 2026 context)
+            return calculateMonthProfitHelper('Jun 2026');
+        } else {
+            const [mStr, yStr] = selectedMonth.split(' ');
+            const mIdx = monthNames.indexOf(mStr);
+            const y = parseInt(yStr);
+            const d = new Date(y, mIdx - 1, 1);
+            const targetMonthStr = monthNames[d.getMonth()] + ' ' + d.getFullYear();
+            return calculateMonthProfitHelper(targetMonthStr);
+        }
+
+        function calculateMonthProfitHelper(monthStr) {
+            let grossSales = 0;
+            let returnsAmt = 0;
+            let parsedExpenses = 0;
+            let discountsAmt = 0;
+
+            const [mName, yName] = monthStr.split(' ');
+            const mIdx = monthNames.indexOf(mName);
+            const targetPrefix = `${yName}-${String(mIdx + 1).padStart(2, '0')}`;
+
+            (data.transactions || []).forEach(t => {
+                if (!t.parsedDate || !t.parsedDate.startsWith(targetPrefix)) return;
+                const type = String(t.parsedType || t.Type || '').toLowerCase();
+                const amt = parseFloat(t.parsedAmount || t.Amount || 0);
+
+                if (type === 'sales return') {
+                    returnsAmt += amt;
+                } else if (type.includes('sale') || type.includes('invoice total')) {
+                    grossSales += Math.abs(amt);
+                } else if (type.includes('expense') || type.includes('cost') || type.includes('purchase')) {
+                    parsedExpenses += amt;
+                }
+            });
+
+            const monthDiscounts = (invoiceDiscounts || []).filter(d => 
+                d.discount_date && d.discount_date.startsWith(targetPrefix)
+            );
+            discountsAmt = monthDiscounts.reduce((sum, d) => sum + parseFloat(d.discount_amount || 0), 0);
+
+            const netSales = grossSales - returnsAmt - discountsAmt;
+            const totalExpenses = parsedExpenses + manualSalaryCalc + manualDailyCalc;
+
+            return netSales - totalExpenses;
+        }
+    }, [data.transactions, invoiceDiscounts, selectedMonth, selectedYear, manualSalaryCalc, manualDailyCalc]);
 
     // [NEW] Prepare Chart Data
     const expenseChartData = [
@@ -2075,6 +2169,10 @@ const Dashboard = (props) => {
                             overrideInvoiceCount={salesCount}
                             totalReturns={totalReturns}
                             serviceRevenue={serviceRevenue}
+                            customerBalance={customerBalanceTotal}
+                            paidProfitDistributions={paidProfitDistributionsTotal}
+                            currentMonthProfit={currentMonthProfit}
+                            prevMonthProfit={prevMonthProfit}
                         />
 
                         {(() => {

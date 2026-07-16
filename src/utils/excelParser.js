@@ -559,6 +559,39 @@ export const parseExcelFile = (files) => {
                     }
 
 
+                    // --- TYPE 9: SUPPLIER PAYMENT HISTORY ---
+                    else if (contentString.includes('supplier name') && contentString.includes('amount') && (contentString.includes('payment remarks') || contentString.includes('mode'))) {
+                        debugLog.push("Matched Type 9 (Supplier Payment History)");
+                        const dateIdx = headerRow.findIndex(h => /date/i.test(h));
+                        const nameIdx = headerRow.findIndex(h => /supplier name/i.test(h));
+                        const amountIdx = headerRow.findIndex(h => /amount/i.test(h));
+                        const modeIdx = headerRow.findIndex(h => /mode/i.test(h));
+                        const remarksIdx = headerRow.findIndex(h => /payment remarks|remarks/i.test(h));
+
+                        if (dateIdx !== -1 && nameIdx !== -1 && amountIdx !== -1) {
+                            jsonData.slice(1).forEach((row, index) => {
+                                if (!row || !row[nameIdx]) return;
+                                const amount = parseFloat(String(row[amountIdx] || 0).replace(/,/g, ''));
+                                if (!isNaN(amount) && amount > 0) {
+                                    const pDate = (row[dateIdx] ? normalizeDate(row[dateIdx]) : null) || effectiveDate;
+                                    const supplier = String(row[nameIdx] || '').toUpperCase().trim();
+                                    const mode = modeIdx !== -1 ? String(row[modeIdx] || '') : '';
+                                    const remarks = remarksIdx !== -1 ? String(row[remarksIdx] || '') : '';
+
+                                    mergedData.transactions.push({
+                                        id: `sup-pay-${pDate}-${amount}-${supplier}-${index}`,
+                                        parsedDate: pDate,
+                                        parsedAmount: amount,
+                                        parsedQty: 1,
+                                        parsedType: 'Supplier_Payment',
+                                        originalDesc: `Payment - ${mode}${remarks ? ' (' + remarks + ')' : ''}`,
+                                        customerName: supplier,
+                                        invoiceNo: `PAY-${index}`
+                                    });
+                                }
+                            });
+                        }
+                    }
                     else {
                         debugLog.push(`NO MATCH (Skipped). Content: ${contentString.substring(0, 50)}...`);
                     }

@@ -104,6 +104,7 @@ const DashboardLayout = () => {
     const [data, setData] = useState({ transactions: [], items: [], attendance: [] });
     const [productionData, setProductionData] = useState({ stockIn: [], preProduction: [], postProduction: [] });
     const [purchaseData, setPurchaseData] = useState([]);
+    const [supplierPayments, setSupplierPayments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [debugError, setDebugError] = useState(null);
@@ -213,6 +214,7 @@ const DashboardLayout = () => {
             }));
             setProductionData(newProdData);
             setPurchaseData(mappedTransactions.filter(t => t.parsedType === 'Expense' || t.parsedType === 'Purchase'));
+            setSupplierPayments(mappedTransactions.filter(t => t.parsedType === 'Supplier_Payment'));
 
         } catch (error) {
             console.error("Supabase Load Error:", error);
@@ -272,6 +274,7 @@ const DashboardLayout = () => {
             onAppendData={handleAppendData}
             onProductionData={handleProductionData}
             purchaseData={purchaseData}
+            supplierPayments={supplierPayments}
             onSync={handleSync}
             isSyncing={isSyncing}
             debugError={debugError}

@@ -14,7 +14,9 @@ const initialPermissions = {
         simulator: false,
         ytd: false,
         profitHub: false,
-        investments: { read: false, write: false }
+        investments: { read: false, write: false },
+        bank_balance: false,
+        supplier_balances: false
     },
     attendance: {
         tracking: { read: false, write: false, delete: false, bulk: false },
@@ -173,7 +175,9 @@ const PermissionMatrix = ({ permissions, onChange, disabled = false }) => {
                         { id: 'simulator', label: 'Simulator', icon: <Calculator size={14} /> },
                         { id: 'ytd', label: 'YTD Analysis', icon: <TrendingUp size={14} /> },
                         { id: 'profitHub', label: 'Profit Hub', icon: <Target size={14} /> },
-                        { id: 'investments', label: 'Investments', icon: <Briefcase size={14} />, sub: ['read', 'write'] }
+                        { id: 'investments', label: 'Investments', icon: <Briefcase size={14} />, sub: ['read', 'write'] },
+                        { id: 'bank_balance', label: 'Bank Balance', icon: <Wallet size={14} /> },
+                        { id: 'supplier_balances', label: 'Supplier Balances', icon: <Users size={14} /> }
                     ].map(tab => {
                         const isActive = typeof mergedPerms.dashboard?.[tab.id] === 'object' 
                             ? Object.values(mergedPerms.dashboard[tab.id]).some(v => v) 

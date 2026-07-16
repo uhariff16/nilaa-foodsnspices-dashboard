@@ -37,19 +37,7 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
     </div>
 );
 
-const SummaryCards = ({ 
-    data, 
-    manualExpenses = { salary: 0, daily: 0 }, 
-    overrideSales, 
-    overrideInvoiceCount, 
-    totalReturns = 0, 
-    serviceRevenue = 0,
-    customerBalance = 0,
-    lastMonthPaidProfit = 0,
-    pendingSupplierPayments = 0,
-    currentMonthProfit = 0,
-    prevMonthProfit = 0
-}) => {
+const SummaryCards = ({ data = [], manualExpenses = {}, overrideSales, overrideInvoiceCount, totalReturns = 0, serviceRevenue = 0, customerBalance = 0, pendingSupplierPayments = 0, totalPaidToSuppliers = 0, prevMonthProfit = 0, currentMonthProfit = 0, lastMonthPaidProfit = 0, isAdmin = false, isOverall = false }) => {
     const stats = useMemo(() => {
         let summarySales = 0;
         let summaryProfit = 0;
@@ -162,22 +150,26 @@ const SummaryCards = ({
         `${stats.invoiceCount} Invoices`
     );
 
-    const bankFundBalance = (prevMonthProfit + currentMonthProfit) - customerBalance - lastMonthPaidProfit - pendingSupplierPayments;
+    const bankFundBalance = (prevMonthProfit + currentMonthProfit) - customerBalance - lastMonthPaidProfit;
 
-    const bankSubtext = (
-        <span style={{ fontSize: '0.675rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none' }}>
-            Profits: ({formatCurrency(prevMonthProfit)} + {formatCurrency(currentMonthProfit)}) | Rec: -{formatCurrency(customerBalance)} | Last Month Paid: -{formatCurrency(lastMonthPaidProfit)} | Suppliers: -{formatCurrency(pendingSupplierPayments)}
+    const bankSubtext = isOverall ? (
+        <span style={{ fontSize: '0.675rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none', lineHeight: '1.4' }}>
+            All-Time Profits: {formatCurrency(currentMonthProfit)} | Rec: -{formatCurrency(customerBalance)} | Total Paid Profits: -{formatCurrency(lastMonthPaidProfit)}
+        </span>
+    ) : (
+        <span style={{ fontSize: '0.675rem', whiteSpace: 'nowrap', display: 'block', textTransform: 'none', lineHeight: '1.4' }}>
+            Profits: ({formatCurrency(prevMonthProfit)} + {formatCurrency(currentMonthProfit)}) | Rec: -{formatCurrency(customerBalance)} | Last Month Paid: -{formatCurrency(lastMonthPaidProfit)}
         </span>
     );
 
     return (
-        <div className="responsive-grid-3" style={{ marginBottom: '2rem' }}>
+        <div className="responsive-grid-6" style={{ marginBottom: '2rem' }}>
             <Card title="Total Sales" value={stats.sales} subtext={salesSubtext} icon={IndianRupee} color="59, 130, 246" type="sales" />
             <Card title="Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
             <Card title="Total Expenses" value={stats.expenses} icon={Wallet} color="239, 68, 68" type="expense" />
             <Card title="Net Profit" value={stats.netProfit} icon={TrendingUp} color="16, 185, 129" type="profit" />
             <Card title="Profit Margin" value={stats.margin} icon={TrendingDown} color="245, 158, 11" isPercentage type="margin" />
-            <Card title="Fund balance on Bank" value={bankFundBalance} subtext={bankSubtext} icon={Wallet} color="168, 85, 247" type="profit" />
+            {isAdmin && isOverall && <Card title="Fund balance on Bank" value={bankFundBalance} subtext={bankSubtext} icon={Wallet} color="168, 85, 247" type="profit" />}
         </div>
     );
 };

@@ -191,7 +191,8 @@ h3 {
 .responsive-grid-2,
 .responsive-grid-3,
 .responsive-grid-4,
-.responsive-grid-5 {
+.responsive-grid-5,
+.responsive-grid-6 {
   display: grid;
   gap: 1.5rem;
 }
@@ -213,11 +214,16 @@ h3 {
   grid-template-columns: repeat(5, 1fr);
 }
 
+.responsive-grid-6 {
+  grid-template-columns: repeat(6, 1fr);
+}
+
 /* Tablet (max-width: 1024px) */
 @media (max-width: 1024px) {
   .responsive-grid-4,
-  .responsive-grid-5 {
-    grid-template-columns: repeat(2, 1fr);
+  .responsive-grid-5,
+  .responsive-grid-6 {
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .responsive-grid-3 {
@@ -231,7 +237,8 @@ h3 {
   .responsive-grid-2,
   .responsive-grid-3,
   .responsive-grid-4,
-  .responsive-grid-5 {
+  .responsive-grid-5,
+  .responsive-grid-6 {
     grid-template-columns: 1fr;
     /* Stack everything */
     gap: 1rem;

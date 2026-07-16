@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import SummaryCards, { Card } from './SummaryCards';
@@ -827,8 +827,7 @@ const Dashboard = (props) => {
 
     const prevMonthProfit = React.useMemo(() => {
         if (!selectedMonth || selectedMonth === 'Overall') {
-            // Default to June 2026 (prior to July 2026 context)
-            return calculateMonthProfitHelper('Jun 2026');
+            return 0; // In Overall mode, currentMonthProfit contains the total all-time profit.
         } else {
             const [mStr, yStr] = selectedMonth.split(' ');
             const mIdx = monthNames.indexOf(mStr);
@@ -841,8 +840,14 @@ const Dashboard = (props) => {
 
     // [NEW] Calculate Last Month Paid Profit matching previous month's paid profit payouts
     const lastMonthPaidProfit = React.useMemo(() => {
-        if (!profitPayouts.length || !selectedMonth || selectedMonth === 'Overall') return 0;
+        if (!profitPayouts.length || !selectedMonth) return 0;
         
+        if (selectedMonth === 'Overall') {
+            // Sum ALL paid payouts for the selected year
+            const filtered = profitPayouts.filter(p => p.status === 'paid' && p.month_year && p.month_year.includes(selectedYear));
+            return filtered.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        }
+
         const [mStr, yStr] = selectedMonth.split(' ');
         const mIdx = monthNames.indexOf(mStr);
         const y = parseInt(yStr);
@@ -855,7 +860,52 @@ const Dashboard = (props) => {
     }, [profitPayouts, selectedMonth]);
 
     // [NEW] Provision for Pending Supplier Payments (initialized to 0, ready for future integration)
-    const pendingSupplierPayments = 0;
+    // Compute Supplier Payments & Pending
+    const totalPaidToSuppliers = (props.supplierPayments || []).reduce((acc, pay) => acc + (pay.parsedAmount || 0), 0);
+    
+    // Extracted purchase filtering logic for reuse
+    const getPurchasePurchases = () => {
+        return (props.purchaseData || []).filter(item => {
+            const inv = String(item.invoice_no || item.invoiceNo || '').trim().toUpperCase();
+            const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
+            if (inv.startsWith('P')) return true;
+            const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
+            if (isExpense) return false;
+            return isPurchaseKeyword;
+        });
+    };
+
+    const totalPurchasesAllTime = getPurchasePurchases().reduce((acc, curr) => acc + (curr.parsedAmount || curr.amount || 0), 0);
+    const pendingSupplierPayments = totalPurchasesAllTime - totalPaidToSuppliers;
+
+    const globalSupplierSummary = useMemo(() => {
+        const summary = getPurchasePurchases().reduce((acc, curr) => {
+            const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
+            if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
+            acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
+            
+            const invNo = String(curr.invoice_no || curr.invoiceNo || '').trim();
+            if (invNo) acc[sName].invoiceSet.add(invNo);
+            
+            return acc;
+        }, {});
+
+        // Add Payments
+        (props.supplierPayments || []).forEach(pay => {
+            const sName = (pay.customerName || 'Unknown').toUpperCase();
+            if (!summary[sName]) summary[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
+            summary[sName].paid += (pay.parsedAmount || 0);
+        });
+
+        // Calculate Balance
+        Object.keys(summary).forEach(k => {
+            summary[k].balance = summary[k].amount - summary[k].paid;
+            summary[k].count = summary[k].invoiceSet.size;
+        });
+
+        return Object.entries(summary).sort((a, b) => b[1].amount - a[1].amount);
+    }, [props.purchaseData, props.supplierPayments]);
 
     // [NEW] Prepare Chart Data
     const expenseChartData = [
@@ -2228,8 +2278,11 @@ const Dashboard = (props) => {
                             customerBalance={customerBalanceTotal}
                             lastMonthPaidProfit={lastMonthPaidProfit}
                             pendingSupplierPayments={pendingSupplierPayments}
+                            totalPaidToSuppliers={totalPaidToSuppliers}
                             currentMonthProfit={currentMonthProfit}
                             prevMonthProfit={prevMonthProfit}
+                            isAdmin={isAdmin || hasPermission('dashboard.bank_balance')}
+                            isOverall={selectedMonth === 'Overall'}
                         />
 
                         {(() => {
@@ -2538,6 +2591,8 @@ const Dashboard = (props) => {
                                 </div>
                             </div>
                         )}
+
+
 
                         {/* Material Flow Analysis Section */}
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', position: 'relative', zIndex: 20 }}>
@@ -4037,6 +4092,7 @@ const Dashboard = (props) => {
                         stockIn={props.productionData?.stockIn || []}
                         purchases={props.purchaseData || []}
                         summaryData={props.summaryData || []}
+                        supplierPayments={props.supplierPayments || []}
                         selectedMonth={selectedMonth}
                         selectedYear={selectedYear}
                     />

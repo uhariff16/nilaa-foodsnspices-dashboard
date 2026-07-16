@@ -82,7 +82,7 @@ const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, custo
     </div>
 );
 
-const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], selectedMonth, selectedYear }) => {
+const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], supplierPayments = [], selectedMonth, selectedYear }) => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
     useEffect(() => {
@@ -263,18 +263,47 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         return stats;
     }, [filteredPurchases, materialGroups]);
 
-    // Supplier Summary Data
+    // Supplier Summary Data (ALL-TIME for accurate balances)
+    // We must use 'purchases' (all-time), not 'filteredPurchases' (monthly) to get a true ledger balance.
+    const allTimePurchases = useMemo(() => {
+        return (purchases || []).filter(item => {
+            const inv = String(item.invoice_no || item.invoiceNo || '').trim().toUpperCase();
+            const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
+            if (inv.startsWith('P')) return true;
+            const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
+            if (isExpense) return false;
+            return isPurchaseKeyword;
+        });
+    }, [purchases]);
+
     const supplierSummary = useMemo(() => {
-        const summary = filteredPurchases.reduce((acc, curr) => {
-            // Use 'customerName' (parsed from Billwise Summary)
+        const summary = allTimePurchases.reduce((acc, curr) => {
             const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
-            if (!acc[sName]) acc[sName] = { amount: 0, count: 0 };
+            if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
             acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
-            acc[sName].count += 1;
+            
+            const invNo = String(curr.invoice_no || curr.invoiceNo || '').trim();
+            if (invNo) acc[sName].invoiceSet.add(invNo);
+            
             return acc;
         }, {});
+
+        // Add Payments (All Time)
+        (supplierPayments || []).forEach(pay => {
+            const sName = (pay.customerName || 'Unknown').toUpperCase();
+            if (!summary[sName]) summary[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
+            summary[sName].paid += (pay.parsedAmount || 0);
+        });
+
+        // Calculate Balance
+        Object.keys(summary).forEach(k => {
+            summary[k].balance = summary[k].amount - summary[k].paid;
+            summary[k].count = summary[k].invoiceSet.size; // Set unique bills count
+        });
+
         return Object.entries(summary).sort((a, b) => b[1].amount - a[1].amount);
-    }, [filteredPurchases]);
+    }, [allTimePurchases, supplierPayments]);
 
 
     // Helpers
@@ -460,20 +489,28 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     height: isMobile ? 'auto' : '450px',
                     maxHeight: isMobile ? '400px' : '450px'
                 }}>
-                    <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8' }}>
-                        Supplier Payments
+                    <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Supplier Payments & Balances</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', padding: '0.5rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                        <div>Supplier</div>
+                        <div style={{ textAlign: 'right' }}>Billed</div>
+                        <div style={{ textAlign: 'right' }}>Paid</div>
+                        <div style={{ textAlign: 'right' }}>Balance</div>
                     </div>
                     <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                         {supplierSummary.map(([supplier, stats], index) => (
                             <div key={index} style={{
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)'
+                                display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', alignItems: 'center',
+                                padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', gap: '0.5rem'
                             }}>
-                                <div>
-                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '1rem' }}>{supplier}</div>
-                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplier}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
                                 </div>
-                                <div style={{ fontWeight: 700, color: '#34D399', fontSize: '1rem' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
+                                <div style={{ fontWeight: 600, color: '#38bdf8', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
+                                <div style={{ fontWeight: 600, color: '#34D399', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.paid.toLocaleString('en-IN')}</div>
+                                <div style={{ fontWeight: 700, color: stats.balance > 0 ? '#f43f5e' : (stats.balance < 0 ? '#34D399' : 'var(--text-secondary)'), fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.balance.toLocaleString('en-IN')}</div>
                             </div>
                         ))}
                     </div>

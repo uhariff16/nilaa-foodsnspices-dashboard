@@ -55,6 +55,7 @@ const AdminDataIngestion = () => {
         'expenses', 'receivable',
         'purchase', 'billwise',
         'stock in', 'pre prod', 'pre production', 'post prod', 'post production', 'usage', 'production',
+        'payment', 'supplier',
         'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'summary'
     ];
 
@@ -818,10 +819,11 @@ const AdminDataIngestion = () => {
             const workbook = XLSX.read(arrayBuffer, { type: 'array', bookSheets: true });
             const sheetNames = workbook.SheetNames || [];
 
+            const lowerFileName = file.name.toLowerCase();
             const isGenuine = sheetNames.some(name => {
                 const lowerName = name.toLowerCase();
                 return whitelistKeywords.some(kw => lowerName.includes(kw.toLowerCase().trim()));
-            });
+            }) || whitelistKeywords.some(kw => lowerFileName.includes(kw.toLowerCase().trim()));
 
             if (!isGenuine) {
                 return {

@@ -84,6 +84,12 @@ const MetricCard = ({ title, value, subtext, icon: Icon, color, iconColor, custo
 
 const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], supplierPayments = [], selectedMonth, selectedYear }) => {
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+    
+    const [supplierSearch, setSupplierSearch] = useState('');
+    const [ledgerSearch, setLedgerSearch] = useState('');
+    const [supplierSort, setSupplierSort] = useState({ key: 'balance', direction: 'desc' });
+    const [ledgerSort, setLedgerSort] = useState({ key: 'date', direction: 'desc' });
+    const [expandedSupplier, setExpandedSupplier] = useState(null);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -215,7 +221,34 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     // 2. Process Financials
     // Use 'parsedAmount' and 'parsedDate' from App.jsx mapping
     const totalSpent = filteredPurchases.reduce((sum, i) => sum + (i.parsedAmount || i.amount || 0), 0);
-    const sortedPurchases = [...filteredPurchases].sort((a, b) => (b.parsedDate || b.date).localeCompare(a.parsedDate || a.date));
+    const sortedPurchases = useMemo(() => {
+        let result = [...filteredPurchases];
+        if (ledgerSearch) {
+            const ls = ledgerSearch.toLowerCase();
+            result = result.filter(p => 
+                (p.supplier || p.customerName || '').toLowerCase().includes(ls) ||
+                (p.originalDesc || p.item_name || '').toLowerCase().includes(ls) ||
+                (p.invoiceNo || p.invoice_no || '').toLowerCase().includes(ls)
+            );
+        }
+        result.sort((a, b) => {
+            let valA, valB;
+            if (ledgerSort.key === 'date') {
+                valA = a.parsedDate || a.date || '';
+                valB = b.parsedDate || b.date || '';
+            } else if (ledgerSort.key === 'amount') {
+                valA = a.parsedAmount || a.amount || 0;
+                valB = b.parsedAmount || b.amount || 0;
+            } else if (ledgerSort.key === 'supplier') {
+                valA = (a.supplier || a.customerName || '').toLowerCase();
+                valB = (b.supplier || b.customerName || '').toLowerCase();
+            }
+            if (valA < valB) return ledgerSort.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return ledgerSort.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return result;
+    }, [filteredPurchases, ledgerSearch, ledgerSort]);
 
     // Calculate Cost & Count per Material (Heuristic)
     const materialStats = useMemo(() => {
@@ -280,7 +313,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
     const supplierSummary = useMemo(() => {
         const summary = allTimePurchases.reduce((acc, curr) => {
             const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
-            if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
+            if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0, payments: [] };
             acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
             
             const invNo = String(curr.invoice_no || curr.invoiceNo || '').trim();
@@ -292,8 +325,10 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         // Add Payments (All Time)
         (supplierPayments || []).forEach(pay => {
             const sName = (pay.customerName || 'Unknown').toUpperCase();
-            if (!summary[sName]) summary[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0 };
+            if (!summary[sName]) summary[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0, payments: [] };
             summary[sName].paid += (pay.parsedAmount || 0);
+            if (!summary[sName].payments) summary[sName].payments = [];
+            summary[sName].payments.push(pay);
         });
 
         // Calculate Balance
@@ -302,8 +337,37 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             summary[k].count = summary[k].invoiceSet.size; // Set unique bills count
         });
 
-        return Object.entries(summary).sort((a, b) => b[1].amount - a[1].amount);
-    }, [allTimePurchases, supplierPayments]);
+        let result = Object.entries(summary);
+        if (supplierSearch) {
+            const ss = supplierSearch.toLowerCase();
+            result = result.filter(([supplier, _]) => supplier.toLowerCase().includes(ss));
+        }
+        result.sort((a, b) => {
+            const statsA = a[1];
+            const statsB = b[1];
+            let valA, valB;
+            if (supplierSort.key === 'supplier') {
+                valA = a[0].toLowerCase();
+                valB = b[0].toLowerCase();
+            } else if (supplierSort.key === 'billed') {
+                valA = statsA.amount;
+                valB = statsB.amount;
+            } else if (supplierSort.key === 'paid') {
+                valA = statsA.paid;
+                valB = statsB.paid;
+            } else if (supplierSort.key === 'balance') {
+                valA = statsA.balance;
+                valB = statsB.balance;
+            } else {
+                valA = statsA.amount;
+                valB = statsB.amount;
+            }
+            if (valA < valB) return supplierSort.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return supplierSort.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return result;
+    }, [allTimePurchases, supplierPayments, supplierSearch, supplierSort]);
 
 
     // Helpers
@@ -489,28 +553,62 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     height: isMobile ? 'auto' : '450px',
                     maxHeight: isMobile ? '400px' : '450px'
                 }}>
-                    <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8', display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ padding: '1rem', background: 'rgba(56, 189, 248, 0.1)', borderBottom: '1px solid rgba(56, 189, 248, 0.2)', fontWeight: 600, color: '#38bdf8', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <span>Supplier Payments & Balances</span>
+                        <input 
+                            type="text" 
+                            placeholder="Search supplier..." 
+                            value={supplierSearch} 
+                            onChange={e => setSupplierSearch(e.target.value)}
+                            style={{ padding: '0.3rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                        />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', padding: '0.5rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                        <div>Supplier</div>
-                        <div style={{ textAlign: 'right' }}>Billed</div>
-                        <div style={{ textAlign: 'right' }}>Paid</div>
-                        <div style={{ textAlign: 'right' }}>Balance</div>
+                        <div style={{ cursor: 'pointer' }} onClick={() => setSupplierSort({ key: 'supplier', direction: supplierSort.key === 'supplier' && supplierSort.direction === 'asc' ? 'desc' : 'asc' })}>Supplier {supplierSort.key === 'supplier' ? (supplierSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
+                        <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setSupplierSort({ key: 'billed', direction: supplierSort.key === 'billed' && supplierSort.direction === 'asc' ? 'desc' : 'asc' })}>Billed {supplierSort.key === 'billed' ? (supplierSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
+                        <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setSupplierSort({ key: 'paid', direction: supplierSort.key === 'paid' && supplierSort.direction === 'asc' ? 'desc' : 'asc' })}>Paid {supplierSort.key === 'paid' ? (supplierSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
+                        <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setSupplierSort({ key: 'balance', direction: supplierSort.key === 'balance' && supplierSort.direction === 'asc' ? 'desc' : 'asc' })}>Balance {supplierSort.key === 'balance' ? (supplierSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
                     </div>
                     <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1 }}>
                         {supplierSummary.map(([supplier, stats], index) => (
-                            <div key={index} style={{
-                                display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', alignItems: 'center',
-                                padding: '0.75rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', gap: '0.5rem'
-                            }}>
-                                <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplier}</div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
+                            <div key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div 
+                                    style={{
+                                        display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', alignItems: 'center',
+                                        padding: '0.75rem 1rem', gap: '0.5rem', cursor: 'pointer',
+                                        background: expandedSupplier === supplier ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                        transition: 'background 0.2s ease'
+                                    }}
+                                    onClick={() => setExpandedSupplier(expandedSupplier === supplier ? null : supplier)}
+                                >
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{supplier}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{stats.count} Bills</div>
+                                    </div>
+                                    <div style={{ fontWeight: 600, color: '#38bdf8', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
+                                    <div style={{ fontWeight: 600, color: '#34D399', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.paid.toLocaleString('en-IN')}</div>
+                                    <div style={{ fontWeight: 700, color: stats.balance > 0 ? '#f43f5e' : (stats.balance < 0 ? '#34D399' : 'var(--text-secondary)'), fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.balance.toLocaleString('en-IN')}</div>
                                 </div>
-                                <div style={{ fontWeight: 600, color: '#38bdf8', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.amount.toLocaleString('en-IN')}</div>
-                                <div style={{ fontWeight: 600, color: '#34D399', fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.paid.toLocaleString('en-IN')}</div>
-                                <div style={{ fontWeight: 700, color: stats.balance > 0 ? '#f43f5e' : (stats.balance < 0 ? '#34D399' : 'var(--text-secondary)'), fontSize: '0.9rem', textAlign: 'right' }}>₹{stats.balance.toLocaleString('en-IN')}</div>
+                                
+                                {/* Expanded Payment History */}
+                                {expandedSupplier === supplier && (
+                                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(0,0,0,0.2)', fontSize: '0.75rem' }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', paddingBottom: '0.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Payment History</span>
+                                            <span>Date</span>
+                                        </div>
+                                        {(!stats.payments || stats.payments.length === 0) ? (
+                                            <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0.5rem 0' }}>No payments found.</div>
+                                        ) : (
+                                            stats.payments.sort((a, b) => (b.parsedDate || b.date).localeCompare(a.parsedDate || a.date)).map((pay, i) => (
+                                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', color: 'var(--text-secondary)', borderBottom: i < stats.payments.length - 1 ? '1px dashed rgba(255,255,255,0.05)' : 'none' }}>
+                                                    <span style={{ color: '#34D399', fontWeight: 600 }}>₹{(pay.parsedAmount || 0).toLocaleString('en-IN')}</span>
+                                                    <span>{formatDate(pay.parsedDate || pay.date)}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -526,9 +624,16 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     display: 'flex', flexDirection: 'column',
                     height: '450px'
                 }}>
-                    <div style={{ padding: '1rem', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid rgba(51, 65, 85, 0.5)', fontWeight: 600, color: '#f43f5e', display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ padding: '1rem', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid rgba(51, 65, 85, 0.5)', fontWeight: 600, color: '#f43f5e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <span>Supplier Ledger</span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input 
+                                type="text" 
+                                placeholder="Search ledger..." 
+                                value={ledgerSearch} 
+                                onChange={e => setLedgerSearch(e.target.value)}
+                                style={{ padding: '0.3rem 0.6rem', borderRadius: '0.5rem', border: '1px solid rgba(244, 63, 94, 0.3)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                            />
                             <span style={{ fontSize: '0.85rem', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '0.1rem 0.5rem', borderRadius: '0.25rem', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                 {new Set(sortedPurchases.map(p => p.invoiceNo || p.invoice_no)).size} Bills
                             </span>
@@ -539,13 +644,13 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '80px 70px 150px 120px 60px 80px 100px' : '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', minWidth: isMobile ? '640px' : 'auto' }}>
-                            <div>Date</div>
+                            <div style={{ cursor: 'pointer' }} onClick={() => setLedgerSort({ key: 'date', direction: ledgerSort.key === 'date' && ledgerSort.direction === 'desc' ? 'asc' : 'desc' })}>Date {ledgerSort.key === 'date' ? (ledgerSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
                             <div>Bill No</div>
                             <div>Item Name</div>
-                            <div>Supplier</div>
+                            <div style={{ cursor: 'pointer' }} onClick={() => setLedgerSort({ key: 'supplier', direction: ledgerSort.key === 'supplier' && ledgerSort.direction === 'asc' ? 'desc' : 'asc' })}>Supplier {ledgerSort.key === 'supplier' ? (ledgerSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
                             <div style={{ textAlign: 'right' }}>Qty</div>
                             <div style={{ textAlign: 'right' }}>Unit Price</div>
-                            <div style={{ textAlign: 'right' }}>Amount</div>
+                            <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setLedgerSort({ key: 'amount', direction: ledgerSort.key === 'amount' && ledgerSort.direction === 'asc' ? 'desc' : 'asc' })}>Amount {ledgerSort.key === 'amount' ? (ledgerSort.direction === 'asc' ? '↑' : '↓') : ''}</div>
                         </div>
                         <div className="custom-scrollbar" style={{ overflowY: 'auto', flex: 1, maxHeight: '350px' }}>
                             {sortedPurchases.map((item, i) => {

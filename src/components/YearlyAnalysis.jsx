@@ -182,6 +182,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
     const [ledgerCurrentPage, setLedgerCurrentPage] = React.useState(1);
 
     const [retailCustomersList, setRetailCustomersList] = React.useState(['cash', 'nfs delivery', 'market shop']);
+    const [cogsEnabled, setCogsEnabled] = React.useState(false);
     const [customerFilterQuery, setCustomerFilterQuery] = React.useState('');
     const [showClassificationModal, setShowClassificationModal] = React.useState(false);
 
@@ -194,8 +195,12 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                     setRetailCustomersList(parsed.map(c => c.toLowerCase().trim()));
                 }
             }
+            const { data: cogsData } = await supabase.from('system_settings').select('value').eq('key', 'financial_model_cogs_enabled').maybeSingle();
+            if (cogsData) {
+                setCogsEnabled(cogsData.value === 'true');
+            }
         } catch (err) {
-            console.error("Error loading retail settings:", err);
+            console.error("Error loading system settings:", err);
         }
     };
 
@@ -624,6 +629,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
             let other = 0;
             let itemProduction = {}; // { itemName: weight }
             let itemSalesData = {}; // { itemName: { revenue: 0, qty: 0 } }
+            let dailyInputAllocation = {}; // { itemName: { ginger: 0, garlic: 0, water: 0 } }
 
             let salesKg = 0;
             let productionKgValue = 0; // Final Paste
@@ -876,6 +882,69 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                     }
                 });
             }
+            if (productionData?.preProduction && productionData?.postProduction) {
+                // Group by date to allocate daily inputs to daily outputs
+                const days = new Set([
+                    ...productionData.preProduction.map(i => i.date).filter(d => d && d.startsWith(targetPrefix)),
+                    ...productionData.postProduction.map(i => i.date).filter(d => d && d.startsWith(targetPrefix))
+                ]);
+
+                days.forEach(day => {
+                    const dailyPre = productionData.preProduction.filter(i => i.date === day);
+                    const dailyPost = productionData.postProduction.filter(i => i.date === day);
+
+                    let dailyGingerIn = 0;
+                    let dailyGarlicIn = 0;
+                    let dailyWaterIn = 0;
+
+                    dailyPre.forEach(item => {
+                        const mat = String(item.material || '').toLowerCase();
+                        const weight = parseFloat(item.weight || 0);
+                        if (mat.includes('ginger')) dailyGingerIn += weight;
+                        else if (mat.includes('garlic')) dailyGarlicIn += weight;
+                        else if (mat.includes('water')) dailyWaterIn += weight;
+                    });
+
+                    let reqGingerWeight = 0;
+                    let reqGarlicWeight = 0;
+                    let reqWaterWeight = 0;
+
+                    dailyPost.forEach(item => {
+                        const matLower = String(item.material || '').toLowerCase();
+                        const outWeight = parseFloat(item.weight || 0);
+                        const isPaste = matLower.includes('paste') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+                        const needsGinger = matLower.includes('ginger') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+                        const needsGarlic = matLower.includes('garlic') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+
+                        if (needsGinger) reqGingerWeight += outWeight;
+                        if (needsGarlic) reqGarlicWeight += outWeight;
+                        if (isPaste) reqWaterWeight += outWeight;
+                    });
+
+                    dailyPost.forEach(item => {
+                        const name = (item.material || 'Generic Product').trim().toUpperCase();
+                        const matLower = name.toLowerCase();
+                        const outWeight = parseFloat(item.weight || 0);
+                        
+                        const isPaste = matLower.includes('paste') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+                        const needsGinger = matLower.includes('ginger') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+                        const needsGarlic = matLower.includes('garlic') || matLower.includes('gg') || matLower.includes('g&g') || matLower.includes('g & g');
+
+                        if (!dailyInputAllocation[name]) dailyInputAllocation[name] = { ginger: 0, garlic: 0, water: 0 };
+
+                        if (needsGinger && reqGingerWeight > 0) {
+                            dailyInputAllocation[name].ginger += dailyGingerIn * (outWeight / reqGingerWeight);
+                        }
+                        if (needsGarlic && reqGarlicWeight > 0) {
+                            dailyInputAllocation[name].garlic += dailyGarlicIn * (outWeight / reqGarlicWeight);
+                        }
+                        if (isPaste && reqWaterWeight > 0) {
+                            dailyInputAllocation[name].water += dailyWaterIn * (outWeight / reqWaterWeight);
+                        }
+                    });
+                });
+            }
+
             if (productionData?.preProduction) {
                 productionData.preProduction.forEach(item => {
                     if (item.date && item.date.startsWith(targetPrefix)) {
@@ -904,7 +973,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                 });
             }
 
-            const effectiveOutput = Math.max(productionKgValue, salesKg);
+            const effectiveOutput = productionKgValue;
             const netProfit = revenue - totalExpenses;
             const costPerKg = effectiveOutput > 0 ? (totalExpenses / effectiveOutput) : 0;
             const revenuePerKg = effectiveOutput > 0 ? (revenue / effectiveOutput) : 0; // ASP
@@ -927,6 +996,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                 peeledKg: productionInputKgValue,
                 gingerInputKg: productionGingerInputKg,
                 garlicInputKg: productionGarlicInputKg,
+                inputBreakdown: dailyInputAllocation,
                 productionKg: effectiveOutput,
                 itemBreakdown: (() => {
                     const breakdown = [];
@@ -1036,8 +1106,34 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
             };
         });
 
+        let finalizedAggregated = aggregated;
+        
+        // Pass 2: COGS Model Calculation if enabled
+        if (cogsEnabled) {
+            const globalMaterialCost = aggregated.reduce((acc, m) => acc + m.materials, 0);
+            const globalPurchasesKg = aggregated.reduce((acc, m) => acc + m.purchasesKg, 0);
+            const ytdAvgPrice = globalPurchasesKg > 0 ? (globalMaterialCost / globalPurchasesKg) : 100; // Fallback ₹100/kg
+
+            finalizedAggregated = aggregated.map(m => {
+                const consumedMaterialCost = m.peeledKg * ytdAvgPrice;
+                const newTotalExpenses = (m.expenses - m.materials) + consumedMaterialCost;
+                const newNetProfit = m.revenue - newTotalExpenses;
+                const newCostPerKg = m.productionKg > 0 ? (newTotalExpenses / m.productionKg) : 0;
+                const newMargin = m.revenue > 0 ? (newNetProfit / m.revenue) * 100 : 0;
+                
+                return {
+                    ...m,
+                    expenses: newTotalExpenses,
+                    materials: consumedMaterialCost,
+                    netProfit: newNetProfit,
+                    costPerKg: newCostPerKg,
+                    margin: newMargin
+                };
+            });
+        }
+
         // Add MoM Growth and Unit Economics Trends
-        return aggregated.map((curr, idx, arr) => {
+        return finalizedAggregated.map((curr, idx, arr) => {
             const prev = idx > 0 ? arr[idx - 1] : null;
             const hasPrev = prev && prev.isActive;
 
@@ -2401,17 +2497,37 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                 <td colSpan={13} style={{ textAlign: 'left', padding: '1rem 0.5rem 0.4rem 0.5rem', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Operational Performance</td>
                                             </tr>
                                             <tr>
-                                                <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Production Input (kg)</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.peeledKg > 0 ? m.peeledKg.toLocaleString() : '-'}</td>)}
+                                                <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Total Production Input (kg)</td>
+                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.peeledKg > 0 ? m.peeledKg.toLocaleString(undefined, {maximumFractionDigits:1}) : '-'}</td>)}
                                             </tr>
-                                            <tr>
-                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Ginger Input (kg)</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.gingerInputKg > 0 ? m.gingerInputKg.toLocaleString() : '-'}</td>)}
-                                            </tr>
-                                            <tr>
-                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• Garlic Input (kg)</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.garlicInputKg > 0 ? m.garlicInputKg.toLocaleString() : '-'}</td>)}
-                                            </tr>
+                                            {/* Extract all unique products across all months */}
+                                            {Array.from(new Set(yearlyData.flatMap(m => Object.keys(m.inputBreakdown || {})))).sort().map(productName => {
+                                                const hasGinger = yearlyData.some(m => m.inputBreakdown?.[productName]?.ginger > 0);
+                                                const hasGarlic = yearlyData.some(m => m.inputBreakdown?.[productName]?.garlic > 0);
+                                                const hasWater = yearlyData.some(m => m.inputBreakdown?.[productName]?.water > 0);
+                                                return (
+                                                    <React.Fragment key={productName}>
+                                                        {hasGinger && (
+                                                            <tr>
+                                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• {productName} - Ginger (kg)</td>
+                                                                {yearlyData.map(m => <td key={m.name + 'ging'} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.inputBreakdown?.[productName]?.ginger > 0 ? m.inputBreakdown[productName].ginger.toLocaleString(undefined, {maximumFractionDigits:1}) : '-'}</td>)}
+                                                            </tr>
+                                                        )}
+                                                        {hasGarlic && (
+                                                            <tr>
+                                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• {productName} - Garlic (kg)</td>
+                                                                {yearlyData.map(m => <td key={m.name + 'garl'} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.inputBreakdown?.[productName]?.garlic > 0 ? m.inputBreakdown[productName].garlic.toLocaleString(undefined, {maximumFractionDigits:1}) : '-'}</td>)}
+                                                            </tr>
+                                                        )}
+                                                        {hasWater && (
+                                                            <tr>
+                                                                <td style={{ textAlign: 'left', padding: '0.5rem 0.5rem 0.5rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>• {productName} - Water (kg)</td>
+                                                                {yearlyData.map(m => <td key={m.name + 'wat'} style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{m.inputBreakdown?.[productName]?.water > 0 ? m.inputBreakdown[productName].water.toLocaleString(undefined, {maximumFractionDigits:1}) : '-'}</td>)}
+                                                            </tr>
+                                                        )}
+                                                    </React.Fragment>
+                                                );
+                                            })}
                                             <tr>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Finished Output (Paste/Peeled) (kg)</td>
                                                 {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.productionKg > 0 ? m.productionKg.toLocaleString() : '-'}</td>)}

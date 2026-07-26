@@ -35,8 +35,10 @@ const AdminSystemSettings = () => {
         alert_stock_ginger_paste_enabled: 'true',
         alert_stock_ginger_paste_threshold: '20',
         alert_stock_garlic_paste_enabled: 'true',
+        alert_stock_garlic_paste_enabled: 'true',
         alert_stock_garlic_paste_threshold: '20',
-        alert_invoice_gaps_enabled: 'true'
+        alert_invoice_gaps_enabled: 'true',
+        financial_model_cogs_enabled: 'false'
     });
 
     useEffect(() => {
@@ -174,6 +176,39 @@ const AdminSystemSettings = () => {
                             </p>
                         </div>
                         {renderToggleSwitch('mobile_layout_enabled', settings.mobile_layout_enabled)}
+                    </div>
+                </div>
+
+                {/* Section 1.5: Financial Logic Settings */}
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Coins size={20} color="#3b82f6" />
+                        Financial Reporting Logic
+                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2rem' }}>
+                        <div>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0 0 0.25rem 0' }}>Cost of Goods Sold (COGS) Model</h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 0.75rem 0' }}>
+                                Toggle how production cost and profit margins are calculated globally across the system.
+                            </p>
+                            <div style={{ 
+                                background: settings.financial_model_cogs_enabled === 'true' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                border: `1px solid ${settings.financial_model_cogs_enabled === 'true' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                                padding: '1rem',
+                                borderRadius: '0.5rem'
+                            }}>
+                                <strong style={{ color: settings.financial_model_cogs_enabled === 'true' ? '#10b981' : '#ef4444', fontSize: '0.9rem', display: 'block', marginBottom: '0.25rem' }}>
+                                    {settings.financial_model_cogs_enabled === 'true' ? 'Current: COGS Model' : 'Current: Cash Flow Model'}
+                                </strong>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {settings.financial_model_cogs_enabled === 'true' 
+                                        ? "Production Cost is calculated by matching the exact volume of raw material consumed this month against the Year-to-Date average purchase price. Ideal for tracking true operational profitability."
+                                        : "Production Cost is calculated using total expenses paid this month, including all bulk raw material purchases regardless of how much was actually consumed. Ideal for tracking absolute cash position."
+                                    }
+                                </span>
+                            </div>
+                        </div>
+                        {renderToggleSwitch('financial_model_cogs_enabled', settings.financial_model_cogs_enabled)}
                     </div>
                 </div>
 

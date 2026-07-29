@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import OperationalAnalysisModal from './OperationalAnalysisModal';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, ComposedChart, Line, Cell, LineChart, PieChart, Pie } from 'recharts';
 import { Calendar, TrendingUp, DollarSign, Activity, Wheat, Target, AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, Settings, Eye, EyeOff, ChevronDown, ChevronUp, Factory, Users, Plus, Trash2, Wallet, Shield, ShoppingCart, Truck, IndianRupee, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -185,6 +186,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
     const [cogsEnabled, setCogsEnabled] = React.useState(false);
     const [customerFilterQuery, setCustomerFilterQuery] = React.useState('');
     const [showClassificationModal, setShowClassificationModal] = React.useState(false);
+    const [showOperationalAnalysisModal, setShowOperationalAnalysisModal] = React.useState(false);
 
     const fetchRetailCustomers = async () => {
         try {
@@ -1142,7 +1144,10 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                 growth: {
                     revenue: hasPrev && prev.revenue > 0 ? ((curr.revenue - prev.revenue) / prev.revenue) * 100 : 0,
                     production: hasPrev && prev.productionKg > 0 ? ((curr.productionKg - prev.productionKg) / prev.productionKg) * 100 : 0,
-                    profit: hasPrev && Math.abs(prev.netProfit) > 0 ? ((curr.netProfit - prev.netProfit) / Math.abs(prev.netProfit)) * 100 : 0
+                    profit: hasPrev && Math.abs(prev.netProfit) > 0 ? ((curr.netProfit - prev.netProfit) / Math.abs(prev.netProfit)) * 100 : 0,
+                    yieldDiff: hasPrev ? (curr.yieldPercent - prev.yieldPercent) : 0,
+                    costDiff: hasPrev ? (curr.costPerKg - prev.costPerKg) : 0,
+                    marginDiff: hasPrev ? (curr.margin - prev.margin) : 0
                 }
             };
         });
@@ -2195,6 +2200,16 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                 {isMobile ? 'Production Analysis' : `Production Cost & Margin Analysis ${analysisViewMode === 'monthly' ? `- ${selectedAnalysisMonth}` : `(${selectedYear})`}`}
                                             </h3>
                                         </div>
+                                        <button 
+                                            onClick={() => setShowOperationalAnalysisModal(true)} 
+                                            style={{ 
+                                                background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', 
+                                                border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.5rem 1rem', 
+                                                borderRadius: '0.5rem', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' 
+                                            }}
+                                        >
+                                            Detailed Operational Analysis
+                                        </button>
                                     </div>
                                     <div style={{ overflowX: 'auto', background: 'var(--glass-highlight)', borderRadius: '12px', border: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '1400px', tableLayout: 'auto' }}>
@@ -2494,7 +2509,21 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
 
                                             {/* OPERATIONS */}
                                             <tr>
-                                                <td colSpan={13} style={{ textAlign: 'left', padding: '1rem 0.5rem 0.4rem 0.5rem', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Operational Performance</td>
+                                                <td colSpan={13} style={{ padding: '1rem 0.5rem 0.4rem 0.5rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Operational Performance</span>
+                                                        <button 
+                                                            onClick={() => setShowOperationalAnalysisModal(true)} 
+                                                            style={{ 
+                                                                background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', 
+                                                                border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.35rem 0.75rem', 
+                                                                borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' 
+                                                            }}
+                                                        >
+                                                            Detailed Analysis
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Total Production Input (kg)</td>
@@ -2534,15 +2563,54 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                             </tr>
                                             <tr style={{ background: 'rgba(59, 130, 246, 0.05)' }}>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontWeight: 600, color: '#3b82f6', fontSize: '0.85rem' }}>Recovery / Yield %</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: '#3b82f6', fontSize: '0.85rem' }}>{m.yieldPercent > 0 ? `${m.yieldPercent.toFixed(1)}%` : '-'}</td>)}
+                                                {yearlyData.map(m => (
+                                                    <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: '#3b82f6', fontSize: '0.85rem' }}>
+                                                        {m.yieldPercent > 0 ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                                                                {m.yieldPercent.toFixed(1)}%
+                                                                {m.growth?.yieldDiff !== 0 && m.name !== yearlyData[0]?.name && (
+                                                                    <span style={{ fontSize: '0.7rem', color: m.growth.yieldDiff > 0 ? '#10b981' : '#ef4444' }}>
+                                                                        ({m.growth.yieldDiff > 0 ? '+' : ''}{m.growth.yieldDiff.toFixed(1)}%)
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : '-'}
+                                                    </td>
+                                                ))}
                                             </tr>
                                             <tr>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Production Cost / kg</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>{m.costPerKg > 0 ? `₹${m.costPerKg.toFixed(1)}` : '-'}</td>)}
+                                                {yearlyData.map(m => (
+                                                    <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>
+                                                        {m.costPerKg > 0 ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                                                                ₹{m.costPerKg.toFixed(1)}
+                                                                {m.growth?.costDiff !== 0 && m.name !== yearlyData[0]?.name && (
+                                                                    <span style={{ fontSize: '0.7rem', color: m.growth.costDiff < 0 ? '#10b981' : '#ef4444' }}>
+                                                                        ({m.growth.costDiff > 0 ? '+' : ''}₹{m.growth.costDiff.toFixed(1)})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : '-'}
+                                                    </td>
+                                                ))}
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
                                                 <td style={{ textAlign: 'left', padding: '0.6rem 0.5rem', fontSize: '0.85rem' }}>Profit Margin %</td>
-                                                {yearlyData.map(m => <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: m.margin > 15 ? '#10b981' : (m.margin > 0 ? '#f59e0b' : 'var(--text-secondary)'), fontSize: '0.85rem' }}>{m.isActive ? `${m.margin.toFixed(1)}%` : '-'}</td>)}
+                                                {yearlyData.map(m => (
+                                                    <td key={m.name} style={{ padding: '0.6rem 0.5rem', fontWeight: 600, color: m.margin > 15 ? '#10b981' : (m.margin > 0 ? '#f59e0b' : 'var(--text-secondary)'), fontSize: '0.85rem' }}>
+                                                        {m.isActive ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                                                                {m.margin.toFixed(1)}%
+                                                                {m.growth?.marginDiff !== 0 && m.name !== yearlyData[0]?.name && (
+                                                                    <span style={{ fontSize: '0.7rem', color: m.growth.marginDiff > 0 ? '#10b981' : '#ef4444' }}>
+                                                                        ({m.growth.marginDiff > 0 ? '+' : ''}{m.growth.marginDiff.toFixed(1)}%)
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : '-'}
+                                                    </td>
+                                                ))}
                                             </tr>
 
                                             {/* PROCUREMENT SECTION */}
@@ -3436,6 +3504,12 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                     </div>
                 </div>
             )}
+            <OperationalAnalysisModal 
+                isOpen={showOperationalAnalysisModal}
+                onClose={() => setShowOperationalAnalysisModal(false)}
+                yearlyData={yearlyData}
+                selectedYear={selectedYear}
+            />
         </div>
 
     );

@@ -237,9 +237,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                             }
                         }
                     } else if (hoursWorked > 0) {
-                        // Force-Fix for Special Days if they were saved with regular hours before
+                        // Force-Fix for Special Days if they were saved incorrectly
                         const isSpecial = isSpecialDay(item.date, payrollConfig.national_holidays);
-                        if (isSpecial && regularHours > 0) {
+                        if (isSpecial && otHours !== hoursWorked) {
                             regularHours = 0;
                             otHours = hoursWorked;
                             const r = parseFloat(item.rate || payrollConfig.default_hourly_rate);
@@ -2744,8 +2744,8 @@ const ManualEntryModal = ({ onClose, onSave, config, employees, initialData, act
                     totalH += extra;
                 }
 
-                // Strictly no OT for Half Day shifts
-                if (isHalfDay) {
+                // Strictly no OT for Half Day shifts on regular working days
+                if (isHalfDay && !isSpecial) {
                     otH = 0;
                 }
 

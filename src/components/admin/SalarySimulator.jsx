@@ -45,6 +45,7 @@ const SalarySimulator = () => {
     const [otMultiplier, setOtMultiplier] = useState(1.5);
     const [selectedEmp, setSelectedEmp] = useState('');
     const [employees, setEmployees] = useState([]);
+    const [absentDays, setAbsentDays] = useState(0);
 
     useEffect(() => {
         fetchData();
@@ -106,7 +107,9 @@ const SalarySimulator = () => {
         const hourlyRate = totalFixedHours > 0 ? monthlySalary / totalFixedHours : 0;
         const otRate = hourlyRate * otMultiplier;
         const otPay = projectedOT * otRate;
-        const totalPayout = monthlySalary + otPay;
+        const dailyRate = hourlyRate * dailyHours;
+        const absentDeduction = absentDays * dailyRate;
+        const totalPayout = monthlySalary + otPay - absentDeduction;
 
         return {
             workingDays,
@@ -114,11 +117,13 @@ const SalarySimulator = () => {
             hourlyRate,
             otRate,
             otPay,
+            dailyRate,
+            absentDeduction,
             totalPayout,
             holidayList,
             monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' })
         };
-    }, [monthlySalary, month, year, projectedOT, dailyHours, otMultiplier, config]);
+    }, [monthlySalary, month, year, projectedOT, dailyHours, otMultiplier, config, absentDays]);
 
     return (
         <div className="animate-slide-up" style={{ color: 'var(--text-primary)' }}>
@@ -242,6 +247,31 @@ const SalarySimulator = () => {
                                     <span>300h+ (Manual input allowed)</span>
                                 </div>
                             </div>
+
+                            <div style={{ padding: '1.25rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '1rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600 }}>Absent Days</label>
+                                    <input
+                                        type="number"
+                                        value={absentDays}
+                                        onChange={(e) => setAbsentDays(parseFloat(e.target.value) || 0)}
+                                        style={{ width: '80px', padding: '0.3rem 0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '0.4rem', color: '#ef4444', fontWeight: 700, textAlign: 'center', outline: 'none' }}
+                                    />
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={results?.workingDays || 31}
+                                    step="0.5"
+                                    value={absentDays > (results?.workingDays || 31) ? (results?.workingDays || 31) : absentDays}
+                                    onChange={(e) => setAbsentDays(parseFloat(e.target.value))}
+                                    style={{ width: '100%', cursor: 'pointer', accentColor: '#ef4444' }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                                    <span>0 Days</span>
+                                    <span>Max {results?.workingDays || 31} Days</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -357,6 +387,12 @@ const SalarySimulator = () => {
                                 <span style={{ color: 'var(--text-secondary)' }}>Projected OT Pay ({projectedOT} hrs)</span>
                                 <span style={{ fontWeight: 600, color: '#10b981' }}>+ {formatCurrency(results.otPay)}</span>
                             </div>
+                            {absentDays > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Absent Deduction ({absentDays} days)</span>
+                                    <span style={{ fontWeight: 600, color: '#ef4444' }}>- {formatCurrency(results.absentDeduction)}</span>
+                                </div>
+                            )}
                             <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', marginBottom: '1.5rem' }}></div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Total Monthly Payout</span>

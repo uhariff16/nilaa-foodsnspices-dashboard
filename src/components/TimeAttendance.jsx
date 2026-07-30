@@ -862,6 +862,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
                 if (status === 'Present') {
                     displayPresentCount += units;
+                    if (units === 0.5) displayAbsentCount += 0.5;
                     if (emp?.staff_type === 'Temporary') displayTempPresentCount += units;
                 } else if (status === 'Absent') {
                     displayAbsentCount += 1;
@@ -916,6 +917,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
             if (isPresent) {
                 presentCount += units;
+                if (units === 0.5) absentCount += 0.5;
             }
             else if (d.attendance_status === 'Absent') absentCount++;
             else if (d.attendance_status?.toLowerCase().includes('leave')) leaveCount++;

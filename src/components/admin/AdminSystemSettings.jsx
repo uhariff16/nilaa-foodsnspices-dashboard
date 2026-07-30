@@ -35,7 +35,6 @@ const AdminSystemSettings = () => {
         alert_stock_ginger_paste_enabled: 'true',
         alert_stock_ginger_paste_threshold: '20',
         alert_stock_garlic_paste_enabled: 'true',
-        alert_stock_garlic_paste_enabled: 'true',
         alert_stock_garlic_paste_threshold: '20',
         alert_invoice_gaps_enabled: 'true',
         financial_model_cogs_enabled: 'false'

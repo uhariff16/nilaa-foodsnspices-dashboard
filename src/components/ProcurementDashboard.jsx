@@ -312,7 +312,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
     const supplierSummary = useMemo(() => {
         const summary = allTimePurchases.reduce((acc, curr) => {
-            const sName = (curr.customerName || curr.originalDesc || curr.supplier || 'Unknown').toUpperCase();
+            const sName = String(curr.customerName || curr.supplier || 'Unknown').toUpperCase().trim();
             if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0, payments: [] };
             acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
             
@@ -324,7 +324,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
         // Add Payments (All Time)
         (supplierPayments || []).forEach(pay => {
-            const sName = (pay.customerName || 'Unknown').toUpperCase();
+            const sName = String(pay.customerName || pay.supplier || 'Unknown').toUpperCase().trim();
             if (!summary[sName]) summary[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0, payments: [] };
             summary[sName].paid += (pay.parsedAmount || 0);
             if (!summary[sName].payments) summary[sName].payments = [];

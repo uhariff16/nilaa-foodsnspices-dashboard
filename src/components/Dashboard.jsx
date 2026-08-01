@@ -28,7 +28,24 @@ import InvestmentsDashboard from './InvestmentsDashboard';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-
+const extractKgFromItemName = (name) => {
+    if (!name) return 1;
+    const lowerName = name.toLowerCase();
+    
+    const kgMatch = lowerName.match(/([\d.]+)\s*kg/);
+    if (kgMatch) return parseFloat(kgMatch[1]);
+    
+    const gmMatch = lowerName.match(/([\d.]+)\s*g(?:m|rams?)?\b/);
+    if (gmMatch) return parseFloat(gmMatch[1]) / 1000;
+    
+    const ltrMatch = lowerName.match(/([\d.]+)\s*ltr/);
+    if (ltrMatch) return parseFloat(ltrMatch[1]);
+    
+    const mlMatch = lowerName.match(/([\d.]+)\s*ml\b/);
+    if (mlMatch) return parseFloat(mlMatch[1]) / 1000;
+    
+    return 1;
+};
 
 const TabButton = ({ active, onClick, icon: Icon, label }) => (
     <button
@@ -1177,7 +1194,7 @@ const Dashboard = (props) => {
                         // Skip if we are in 'Overall' view and this is not from the earliest month or if we have no earliest month logic
                         if (selectedMonth === 'Overall' && itemMonth !== earliestOSMonth) return;
 
-                        const isProcessed = itemName.includes('PASTE') || itemName.includes('PEELED');
+                        const isProcessed = itemName.includes('PASTE') || (itemName.includes('PEELED') && !itemName.includes('PROCESSED'));
                         if (isProcessed) {
                             processedOpenStockKG += weight;
                         } else {
@@ -1239,8 +1256,9 @@ const Dashboard = (props) => {
                 if (matchedMaster && matchedMaster.category === 'Charges') {
                     // Exclude from physical sales volume
                 } else {
-                    salesQty += qty;
-                    salesDetails.push({ name: item.name, weight: qty });
+                    const kgMultiplier = extractKgFromItemName(item.name);
+                    salesQty += (qty * kgMultiplier);
+                    salesDetails.push({ name: item.name, weight: qty * kgMultiplier });
                 }
             }
 
@@ -1414,9 +1432,9 @@ const Dashboard = (props) => {
                 addToStat(ginger, type, weight);
             } else if (uName.includes('GARLIC') && !uName.includes('PASTE') && !uName.includes('PEELED') && !uName.includes('PROCESSED') && !uName.includes('CLEANED')) {
                 addToStat(garlic, type, weight);
-            } else if (uName.includes('GINGER') && (uName.includes('PEELED') || uName.includes('PROCESSED') || uName.includes('CLEANED')) && !uName.includes('PASTE')) {
+            } else if (uName.includes('GINGER') && uName.includes('PEELED') && !uName.includes('PROCESSED') && !uName.includes('PASTE')) {
                 addToStat(gingerPeeled, type, weight);
-            } else if (uName.includes('GARLIC') && (uName.includes('PEELED') || uName.includes('PROCESSED') || uName.includes('CLEANED')) && !uName.includes('PASTE')) {
+            } else if (uName.includes('GARLIC') && uName.includes('PEELED') && !uName.includes('PROCESSED') && !uName.includes('PASTE')) {
                 addToStat(garlicPeeled, type, weight);
             } else if (uName.includes('PASTE')) {
                 if (uName.includes('GINGER') && !uName.includes('GARLIC')) {
@@ -1550,7 +1568,9 @@ const Dashboard = (props) => {
                         const type = t.parsedType;
                         // Check for Sales
                         if (type && String(type).toLowerCase().includes('sale')) {
-                            monthSalesQty += parseFloat(t.parsedQty || 0);
+                            const itemName = t.originalDesc || t.name;
+                            const kgMultiplier = extractKgFromItemName(itemName);
+                            monthSalesQty += (parseFloat(t.parsedQty || 0) * kgMultiplier);
                         }
 
                         // 2. Calculate Expenses
@@ -2819,7 +2839,7 @@ const Dashboard = (props) => {
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '200px', overflowY: 'auto' }}>
                                                 {materialStats.salesDetails.slice(0, 8).map((item, idx) => {
                                                     const nameUpper = (item.name || '').toUpperCase();
-                                                    const isProcessed = nameUpper.includes('PASTE') || nameUpper.includes('PEELED');
+                                                    const isProcessed = nameUpper.includes('PASTE') || (nameUpper.includes('PEELED') && !nameUpper.includes('PROCESSED'));
                                                     const dotColor = isProcessed ? '#f472b6' : '#22d3ee';
                                                     console.log(`SalesItem: ${item.name} | Processed: ${isProcessed} | Color: ${dotColor}`);
                                                     return (
@@ -2856,7 +2876,7 @@ const Dashboard = (props) => {
 
                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Sales Volume</p>
                                     <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#10b981' }}>
-                                        {materialStats.sales.toLocaleString()} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>qty/kg</span>
+                                        {materialStats.sales.toLocaleString('en-IN', { maximumFractionDigits: 2 })} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>kg</span>
                                     </div>
                                     <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Sold to Customers</p>
                                 </div>

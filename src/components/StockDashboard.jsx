@@ -261,6 +261,8 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         'GARLIC RAW': 'garlic',
         'GINGER PEELED': 'gingerPeeled',
         'GARLIC PEELED': 'garlicPeeled',
+        'GINGER PEELED(PROCESSED)': 'gingerPeeledProcessed',
+        'GARLIC PEELED(PROCESSED)': 'garlicPeeledProcessed',
         'G&G PASTE (MIX)': 'paste',
         'GINGER PASTE': 'gingerPaste',
         'GARLIC PASTE': 'garlicPaste'
@@ -309,6 +311,8 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         { key: 'garlic', label: 'Garlic Raw', dbName: 'GARLIC RAW', available: calculatedClosings?.garlic || 0 },
         { key: 'gingerPeeled', label: 'Ginger Peeled', dbName: 'GINGER PEELED', available: calculatedClosings?.gingerPeeled || 0 },
         { key: 'garlicPeeled', label: 'Garlic Peeled', dbName: 'GARLIC PEELED', available: calculatedClosings?.garlicPeeled || 0 },
+        { key: 'gingerPeeledProcessed', label: 'Ginger Peeled(Processed)', dbName: 'GINGER PEELED(PROCESSED)', available: calculatedClosings?.gingerPeeledProcessed || 0 },
+        { key: 'garlicPeeledProcessed', label: 'Garlic Peeled(Processed)', dbName: 'GARLIC PEELED(PROCESSED)', available: calculatedClosings?.garlicPeeledProcessed || 0 },
         { key: 'paste', label: 'G&G Paste (Mix)', dbName: 'G&G PASTE (MIX)', available: calculatedClosings?.paste || 0 },
         { key: 'gingerPaste', label: 'Ginger Paste', dbName: 'GINGER PASTE', available: calculatedClosings?.gingerPaste || 0 },
         { key: 'garlicPaste', label: 'Garlic Paste', dbName: 'GARLIC PASTE', available: calculatedClosings?.garlicPaste || 0 }
@@ -1118,6 +1122,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         // Peeled
         let gingerPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
         let garlicPeeled = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
+        let gingerPeeledProcessed = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
+        let garlicPeeledProcessed = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };
         // Paste
         let paste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' };       // G&G Paste (Mixed)
         let gingerPaste = { open: 0, in: 0, out: 0, nextOpen: 0, adj: 0, lastDate: null, lastObjDate: '' }; // Ginger Paste
@@ -1178,7 +1184,13 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             } else if (name.includes('GARLIC') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
                 targetObj = garlic;
             }
-            // Peeled
+            // Peeled Processed
+            else if (name.includes('GINGER') && name.includes('PEELED') && name.includes('PROCESSED') && !name.includes('PASTE')) {
+                targetObj = gingerPeeledProcessed;
+            } else if (name.includes('GARLIC') && name.includes('PEELED') && name.includes('PROCESSED') && !name.includes('PASTE')) {
+                targetObj = garlicPeeledProcessed;
+            }
+            // Peeled strictly
             else if (name.includes('GINGER') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
                 targetObj = gingerPeeled;
             } else if (name.includes('GARLIC') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
@@ -1232,19 +1244,23 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                     updateLastDate(statObj, item.date);
                 };
                 
-                const classifyAdjustment = (matName, wt) => {
-                    if (matName.includes('GINGER') && !matName.includes('PASTE') && !matName.includes('PEELED') && !matName.includes('PROCESSED') && !matName.includes('CLEANED')) {
+                const classifyAdjustment = (mat, wt) => {
+                    if (mat.includes('GINGER RAW')) {
                         addAdj(ginger, wt);
-                    } else if (matName.includes('GARLIC') && !matName.includes('PASTE') && !matName.includes('PEELED') && !matName.includes('PROCESSED') && !matName.includes('CLEANED')) {
+                    } else if (mat.includes('GARLIC RAW')) {
                         addAdj(garlic, wt);
-                    } else if (matName.includes('GINGER') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !name.includes('PASTE')) {
+                    } else if (mat.includes('GINGER PEELED(PROCESSED)')) {
+                        addAdj(gingerPeeledProcessed, wt);
+                    } else if (mat.includes('GARLIC PEELED(PROCESSED)')) {
+                        addAdj(garlicPeeledProcessed, wt);
+                    } else if (mat.includes('GINGER PEELED')) {
                         addAdj(gingerPeeled, wt);
-                    } else if (matName.includes('GARLIC') && (matName.includes('PEELED') || matName.includes('PROCESSED') || matName.includes('CLEANED')) && !name.includes('PASTE')) {
+                    } else if (mat.includes('GARLIC PEELED')) {
                         addAdj(garlicPeeled, wt);
-                    } else if (matName.includes('PASTE')) {
-                        if (matName.includes('GINGER') && !matName.includes('GARLIC')) {
+                    } else if (mat.includes('PASTE')) {
+                        if (mat.includes('GINGER') && !mat.includes('GARLIC')) {
                             addAdj(gingerPaste, wt);
-                        } else if (matName.includes('GARLIC') && !matName.includes('GINGER')) {
+                        } else if (mat.includes('GARLIC') && !mat.includes('GINGER')) {
                             addAdj(garlicPaste, wt);
                         } else {
                             addAdj(paste, wt);
@@ -1259,20 +1275,24 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         // 2.2 Process Physical counts (to capture count date)
         physicalCounts.forEach(item => {
             if (isMatch(item.date)) {
-                const name = (item.material || '').toUpperCase();
+                const n = (item.material || '').toUpperCase();
                 const classifyPhys = (statObj) => {
                     updateLastDate(statObj, item.date);
                 };
-                if (name.includes('GINGER') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
+                if (n.includes('GINGER RAW')) {
                     classifyPhys(ginger);
-                } else if (name.includes('GARLIC') && !name.includes('PASTE') && !name.includes('PEELED') && !name.includes('PROCESSED') && !name.includes('CLEANED')) {
+                } else if (n.includes('GARLIC RAW')) {
                     classifyPhys(garlic);
-                } else if (name.includes('GINGER') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
+                } else if (n.includes('GINGER PEELED(PROCESSED)')) {
+                    classifyPhys(gingerPeeledProcessed);
+                } else if (n.includes('GARLIC PEELED(PROCESSED)')) {
+                    classifyPhys(garlicPeeledProcessed);
+                } else if (n.includes('GINGER PEELED')) {
                     classifyPhys(gingerPeeled);
-                } else if (name.includes('GARLIC') && (name.includes('PEELED') || name.includes('PROCESSED') || name.includes('CLEANED')) && !name.includes('PASTE')) {
+                } else if (n.includes('GARLIC PEELED')) {
                     classifyPhys(garlicPeeled);
-                } else if (name.includes('PASTE')) {
-                    if (name.includes('GINGER') && !name.includes('GARLIC')) {
+                } else if (n.includes('PASTE')) {
+                    if (n.includes('GINGER') && !n.includes('GARLIC')) {
                         classifyPhys(gingerPaste);
                     } else if (name.includes('GARLIC') && !name.includes('GINGER')) {
                         classifyPhys(garlicPaste);
@@ -1346,6 +1366,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
         let gingerPhysical = getPhysical('GINGER RAW');
         let garlicPhysical = getPhysical('GARLIC RAW');
+        let gingerPeeledProcessedPhysical = getPhysical('GINGER PEELED(PROCESSED)');
+        let garlicPeeledProcessedPhysical = getPhysical('GARLIC PEELED(PROCESSED)');
         let gingerPeeledPhysical = getPhysical('GINGER PEELED');
         let garlicPeeledPhysical = getPhysical('GARLIC PEELED');
         let pastePhysical = getPhysical('G&G PASTE (MIX)');
@@ -1389,6 +1411,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         const ledgers = {
             ginger: { ...ginger, closing: closeRaw(ginger, gingerPhysical) },
             garlic: { ...garlic, closing: closeRaw(garlic, garlicPhysical) },
+            gingerPeeledProcessed: { ...gingerPeeledProcessed, closing: closeRaw(gingerPeeledProcessed, gingerPeeledProcessedPhysical) },
+            garlicPeeledProcessed: { ...garlicPeeledProcessed, closing: closeRaw(garlicPeeledProcessed, garlicPeeledProcessedPhysical) },
             gingerPeeled: { ...gingerPeeled, closing: closeProcessed(gingerPeeled, gingerPeeledPhysical, 'Ginger Peeled') },
             garlicPeeled: { ...garlicPeeled, closing: closeProcessed(garlicPeeled, garlicPeeledPhysical, 'Garlic Peeled') },
             paste: { ...paste, closing: closeProcessed(paste, pastePhysical, 'Paste Mix') },
@@ -1410,6 +1434,14 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
     const garlicCalculatedClosing = useMemo(() => {
         return stockStats.garlic.open + stockStats.garlic.in - stockStats.garlic.out + (stockStats.garlic.adj || 0);
     }, [stockStats.garlic]);
+
+    const gingerPeeledProcessedCalculatedClosing = useMemo(() => {
+        return stockStats.gingerPeeledProcessed.open + stockStats.gingerPeeledProcessed.in - stockStats.gingerPeeledProcessed.out + (stockStats.gingerPeeledProcessed.adj || 0);
+    }, [stockStats.gingerPeeledProcessed]);
+
+    const garlicPeeledProcessedCalculatedClosing = useMemo(() => {
+        return stockStats.garlicPeeledProcessed.open + stockStats.garlicPeeledProcessed.in - stockStats.garlicPeeledProcessed.out + (stockStats.garlicPeeledProcessed.adj || 0);
+    }, [stockStats.garlicPeeledProcessed]);
 
     const gingerPeeledCalculatedClosing = useMemo(() => {
         return stockStats.gingerPeeled.open + stockStats.gingerPeeled.in - stockStats.gingerPeeled.out + (stockStats.gingerPeeled.adj || 0);
@@ -1446,23 +1478,23 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             }
         };
 
-        const buildRes = (matName, openVal) => {
+        const buildRes = (matName, nextOpenVal) => {
             const manual = getManual(matName);
             if (manual) return { weight: manual.weight, source: 'Manual' };
-            if (selectedMonth !== 'Overall' && openVal > 0) {
-                return { weight: openVal, source: 'Excel OS' };
+            if (selectedMonth !== 'Overall' && nextOpenVal > 0) {
+                return { weight: nextOpenVal, source: 'Excel OS' };
             }
             return null;
         };
 
         return {
-            ginger: buildRes('GINGER RAW', stockStats.ginger.open),
-            garlic: buildRes('GARLIC RAW', stockStats.garlic.open),
-            gingerPeeled: buildRes('GINGER PEELED', stockStats.gingerPeeled.open),
-            garlicPeeled: buildRes('GARLIC PEELED', stockStats.garlicPeeled.open),
-            paste: buildRes('G&G PASTE (MIX)', stockStats.paste.open),
-            gingerPaste: buildRes('GINGER PASTE', stockStats.gingerPaste.open),
-            garlicPaste: buildRes('GARLIC PASTE', stockStats.garlicPaste.open)
+            ginger: buildRes('GINGER RAW', stockStats.ginger.nextOpen),
+            garlic: buildRes('GARLIC RAW', stockStats.garlic.nextOpen),
+            gingerPeeled: buildRes('GINGER PEELED', stockStats.gingerPeeled.nextOpen),
+            garlicPeeled: buildRes('GARLIC PEELED', stockStats.garlicPeeled.nextOpen),
+            paste: buildRes('G&G PASTE (MIX)', stockStats.paste.nextOpen),
+            gingerPaste: buildRes('GINGER PASTE', stockStats.gingerPaste.nextOpen),
+            garlicPaste: buildRes('GARLIC PASTE', stockStats.garlicPaste.nextOpen)
         };
     }, [physicalCounts, selectedMonth, selectedYear, stockStats]);
 
@@ -1493,6 +1525,8 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         let items = [
             { id: 'ginger_raw', title: "Ginger (Raw)", ...stockStats.ginger, color: "amber", category: "Raw" },
             { id: 'garlic_raw', title: "Garlic (Raw)", ...stockStats.garlic, color: "purple", category: "Raw" },
+            { id: 'ginger_peeled_processed', title: "Ginger Peeled(Processed)", ...stockStats.gingerPeeledProcessed, color: "amber", category: "Raw" },
+            { id: 'garlic_peeled_processed', title: "Garlic Peeled(Processed)", ...stockStats.garlicPeeledProcessed, color: "purple", category: "Raw" },
             { id: 'ginger_peeled', title: "Ginger (Peeled)", ...stockStats.gingerPeeled, color: "orange", category: "Processed" },
             { id: 'garlic_peeled', title: "Garlic (Peeled)", ...stockStats.garlicPeeled, color: "indigo", category: "Processed" },
             { id: 'mix_paste', title: "G&G Paste (Mix)", ...stockStats.paste, color: "green", category: "Processed" },
@@ -1521,6 +1555,44 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         return { total, low, errors };
     }, [filteredStocks]);
 
+    const discrepancyStats = useMemo(() => {
+        const getVariance = (stat, phys) => {
+            if (!stat) return { kg: 0, pct: 0 };
+            const calculatedClosing = (stat.open || 0) + (stat.in || 0) - (stat.out || 0) + (stat.adj || 0);
+            
+            let targetStock = calculatedClosing;
+            if (stat.nextOpen > 0) {
+                targetStock = stat.nextOpen;
+            } else if (phys && phys.weight !== undefined) {
+                targetStock = phys.weight;
+            }
+            
+            const diff = calculatedClosing - targetStock;
+            const totalIn = (stat.open || 0) + (stat.in || 0);
+            
+            return {
+                kg: diff,
+                pct: totalIn > 0 ? (diff / totalIn) * 100 : 0,
+                calc: calculatedClosing,
+                phys: targetStock,
+                open: stat.open || 0,
+                in: stat.in || 0,
+                out: stat.out || 0,
+                adj: stat.adj || 0,
+                totalIn: totalIn
+            };
+        };
+
+        return {
+            ginger: {
+                totalLoss: getVariance(stockStats.ginger, monthlyPhysical['ginger'])
+            },
+            garlic: {
+                totalLoss: getVariance(stockStats.garlic, monthlyPhysical['garlic'])
+            }
+        };
+    }, [stockStats, monthlyPhysical]);
+
     const reconciliationItems = useMemo(() => {
         const getAdjustSum = (matName) => {
             return monthlyAdjustments
@@ -1531,13 +1603,15 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         return [
             { key: 'ginger', label: 'Ginger (Raw)', dbName: 'GINGER RAW', calculated: gingerCalculatedClosing, adjusted: getAdjustSum('GINGER RAW') },
             { key: 'garlic', label: 'Garlic (Raw)', dbName: 'GARLIC RAW', calculated: garlicCalculatedClosing, adjusted: getAdjustSum('GARLIC RAW') },
+            { key: 'gingerPeeledProcessed', label: 'Ginger Peeled(Processed)', dbName: 'GINGER PEELED(PROCESSED)', calculated: gingerPeeledProcessedCalculatedClosing, adjusted: getAdjustSum('GINGER PEELED(PROCESSED)') },
+            { key: 'garlicPeeledProcessed', label: 'Garlic Peeled(Processed)', dbName: 'GARLIC PEELED(PROCESSED)', calculated: garlicPeeledProcessedCalculatedClosing, adjusted: getAdjustSum('GARLIC PEELED(PROCESSED)') },
             { key: 'gingerPeeled', label: 'Ginger (Peeled)', dbName: 'GINGER PEELED', calculated: gingerPeeledCalculatedClosing, adjusted: getAdjustSum('GINGER PEELED') },
             { key: 'garlicPeeled', label: 'Garlic (Peeled)', dbName: 'GARLIC PEELED', calculated: garlicPeeledCalculatedClosing, adjusted: getAdjustSum('GARLIC PEELED') },
             { key: 'paste', label: 'G&G Paste (Mix)', dbName: 'G&G PASTE (MIX)', calculated: pasteCalculatedClosing, adjusted: getAdjustSum('G&G PASTE (MIX)') },
             { key: 'gingerPaste', label: 'Ginger Paste', dbName: 'GINGER PASTE', calculated: gingerPasteCalculatedClosing, adjusted: getAdjustSum('GINGER PASTE') },
             { key: 'garlicPaste', label: 'Garlic Paste', dbName: 'GARLIC PASTE', calculated: garlicPasteCalculatedClosing, adjusted: getAdjustSum('GARLIC PASTE') }
         ];
-    }, [monthlyAdjustments, gingerCalculatedClosing, garlicCalculatedClosing, gingerPeeledCalculatedClosing, garlicPeeledCalculatedClosing, pasteCalculatedClosing, gingerPasteCalculatedClosing, garlicPasteCalculatedClosing]);
+    }, [monthlyAdjustments, gingerCalculatedClosing, garlicCalculatedClosing, gingerPeeledProcessedCalculatedClosing, garlicPeeledProcessedCalculatedClosing, gingerPeeledCalculatedClosing, garlicPeeledCalculatedClosing, pasteCalculatedClosing, gingerPasteCalculatedClosing, garlicPasteCalculatedClosing]);
 
     const isReconciliationDone = useMemo(() => {
         const active = reconciliationItems.filter(item => monthlyPhysical[item.key]);
@@ -1913,7 +1987,80 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                         </div>
                     </div>
 
+                    {/* 4th Card: Discrepancy Breakdown */}
+                    <div style={{
+                        background: 'var(--glass-highlight)',
+                        borderRadius: '1rem',
+                        padding: '1.5rem',
+                        border: '1px solid var(--glass-border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'flex-start',
+                        height: '100%',
+                        minHeight: '220px',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>Shortage Analysis</h3>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem', overflowY: 'auto' }} className="custom-scrollbar">
+                            <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                                <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ginger Discrepancy</h4>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Total Shortage / Loss:</span>
+                                    <span style={{ fontSize: '0.85rem', color: discrepancyStats.ginger.totalLoss.kg > 0 ? '#f87171' : '#10b981', fontWeight: 600 }}>{discrepancyStats.ginger.totalLoss.kg > 0 ? '' : '+'}{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} kg ({Math.abs(discrepancyStats.ginger.totalLoss.pct).toFixed(1)}%)</span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                        <span>[1] System Stock:</span>
+                                        <span>({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)} - {discrepancyStats.ginger.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.ginger.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                        <span>[2] Physical Count:</span>
+                                        <span><strong>{discrepancyStats.ginger.totalLoss.phys.toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.ginger.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
+                                        <span>[1] - [2] = Shortage:</span>
+                                        <span><strong>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                                        <span>Loss %:</span>
+                                        <span>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.ginger.totalLoss.pct).toFixed(1)}%</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                                <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Garlic Discrepancy</h4>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Total Shortage / Loss:</span>
+                                    <span style={{ fontSize: '0.85rem', color: discrepancyStats.garlic.totalLoss.kg > 0 ? '#f87171' : '#10b981', fontWeight: 600 }}>{discrepancyStats.garlic.totalLoss.kg > 0 ? '' : '+'}{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} kg ({Math.abs(discrepancyStats.garlic.totalLoss.pct).toFixed(1)}%)</span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                        <span>[1] System Stock:</span>
+                                        <span>({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)} - {discrepancyStats.garlic.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.garlic.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                        <span>[2] Physical Count:</span>
+                                        <span><strong>{discrepancyStats.garlic.totalLoss.phys.toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.garlic.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
+                                        <span>[1] - [2] = Shortage:</span>
+                                        <span><strong>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} kg</strong></span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                                        <span>Loss %:</span>
+                                        <span>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.garlic.totalLoss.pct).toFixed(1)}%</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
             )}
 
             {/* Tables Section */}

@@ -1272,6 +1272,8 @@ const BatchManager = ({ onBack }) => {
                                 >
                                     <option value="GINGER">Ginger (Raw)</option>
                                     <option value="GARLIC">Garlic (Raw)</option>
+                                    <option value="PEELED_GINGER_PROCESSED">Ginger Peeled(Processed)</option>
+                                    <option value="PEELED_GARLIC_PROCESSED">Garlic Peeled(Processed)</option>
                                     <option value="SALT">Salt</option>
                                     <option value="OIL">Oil</option>
                                 </select>
@@ -1558,6 +1560,8 @@ const BatchManager = ({ onBack }) => {
                                         >
                                             <option value="GINGER">Ginger (Raw)</option>
                                             <option value="GARLIC">Garlic (Raw)</option>
+                                            <option value="PEELED_GINGER_PROCESSED">Ginger Peeled(Processed)</option>
+                                            <option value="PEELED_GARLIC_PROCESSED">Garlic Peeled(Processed)</option>
                                             <option value="SALT">Salt</option>
                                             <option value="OIL">Oil</option>
                                             <option value="WATER">Water</option>

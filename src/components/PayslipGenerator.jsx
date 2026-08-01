@@ -81,9 +81,15 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             }
         }
 
+        let daysAbsent = 0;
+
         monthAttendance.forEach(att => {
-            if (att.attendance_status === 'Present' || (att.attendance_status || '').toLowerCase().includes('present')) {
-                daysPresent += 1;
+            const status = (att.attendance_status || 'Present').toLowerCase();
+            const units = (att.shift_type === 'Half Day' ? 0.5 : 1);
+
+            if (status.includes('present')) {
+                daysPresent += units;
+                if (units === 0.5 && !isSpecialDay(att.date, payrollConfig?.national_holidays)) daysAbsent += 0.5;
 
                 const worked = parseFloat(att.total_hours || att.hoursWorked || 0);
                 const ot = parseFloat(att.ot_hours || 0); // Strictly use ot_hours to match dashboard
@@ -103,12 +109,26 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
 
                 totalDailyWageEarned += dailyTotal;
                 totalOTPay += otPay;
-                totalBaseWage += Math.max(0, dailyTotal - otPay);
+                if (!isMonthly) {
+                    totalBaseWage += Math.max(0, dailyTotal - otPay);
+                }
+            } else if (status === 'absent') {
+                daysAbsent += 1;
+            } else if (status.includes('leave')) {
+                if (units === 0.5) daysAbsent += 0.5;
             }
         });
 
-        let grossEarned = totalBaseWage + totalOTPay;
         const monthlySalary = parseFloat(employee.monthly_salary || 0);
+        let absentDeduction = 0;
+
+        if (isMonthly) {
+            const workingDays = getWorkingDaysInMonth(selectedYear, selectedMonth, payrollConfig?.national_holidays || []);
+            const dailyRate = workingDays > 0 ? monthlySalary / workingDays : 0;
+            absentDeduction = daysAbsent * dailyRate;
+        }
+
+        let grossEarned = totalBaseWage + totalOTPay;
 
         if (isMonthly) {
             grossEarned += monthlySalary;
@@ -152,7 +172,7 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             }
         });
 
-        const netEarningsForMonth = grossEarned + totalBonusPoints - totalDeductions;
+        const netEarningsForMonth = grossEarned + totalBonusPoints - totalDeductions - absentDeduction;
         const totalDisbursed = totalSalariesPaidStr + totalWagesPaidStr;
         
         // Consistent Settlement Logic matching Portal Dashboard
@@ -166,6 +186,8 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
             monthName,
             year: selectedYear,
             daysPresent,
+            daysAbsent,
+            absentDeduction,
             totalOTHours: totalOTHours.toFixed(1),
             totalRegHours: (totalWorkedHours - totalOTHours).toFixed(1),
             totalBaseWage,
@@ -355,12 +377,14 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
 
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '1rem' }}>
                                         <tbody>
-                                            <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.4rem 0', color: '#475569' }}>
-                                                    {payslipData.isMonthly ? 'Base Wages (Overtime Only)' : 'Base Wages (Reg. Hours)'}
-                                                </td>
-                                                <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalBaseWage)}</td>
-                                            </tr>
+                                            {!payslipData.isMonthly && (
+                                                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.4rem 0', color: '#475569' }}>
+                                                        Base Wages (Reg. Hours)
+                                                    </td>
+                                                    <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalBaseWage)}</td>
+                                                </tr>
+                                            )}
                                             {payslipData.isMonthly && (
                                                 <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                     <td style={{ padding: '0.4rem 0', color: '#475569' }}>Monthly Fixed Salary</td>
@@ -371,13 +395,19 @@ const PayslipGenerator = ({ isOpen, onClose, employees, attendanceData, paymentD
                                                 <td style={{ padding: '0.4rem 0', color: '#475569' }}>Overtime Pay</td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(payslipData.totalOTPay)}</td>
                                             </tr>
+                                            {payslipData.isMonthly && payslipData.daysAbsent > 0 && (
+                                                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.4rem 0', color: '#ef4444' }}>Absent Deduction ({payslipData.daysAbsent} days)</td>
+                                                    <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#ef4444' }}>-{formatCurrency(payslipData.absentDeduction)}</td>
+                                                </tr>
+                                            )}
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '0.4rem 0', color: '#475569' }}>Bonus Payout</td>
                                                 <td style={{ padding: '0.4rem 0', textAlign: 'right', fontWeight: 600, color: '#a855f7' }}>{payslipData.totalBonus > 0 ? `+${formatCurrency(payslipData.totalBonus)}` : '₹0'}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
                                                 <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#0f172a' }}>Gross Earnings (Total)</td>
-                                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{formatCurrency(payslipData.grossEarned + payslipData.totalBonus)}</td>
+                                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{formatCurrency(payslipData.grossEarned + payslipData.totalBonus - (payslipData.absentDeduction || 0))}</td>
                                             </tr>
                                             <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '0.4rem 0', color: '#475569', paddingTop: '0.6rem' }}>Penalties / Deductions</td>

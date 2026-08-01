@@ -20,6 +20,15 @@ const formatCurrency = (val) => {
     }).format(val || 0);
 };
 
+const formatCurrencyRound = (val) => {
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(Math.round(val || 0));
+};
+
 
 
 // Moved helpers outside component to be reused
@@ -661,8 +670,9 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
         // 1. Calculate Payments from filteredPayments
         filteredPayments.forEach(p => {
             const amt = parseFloat(p.amount) || 0;
-            if (p.type === 'Salary' || p.type === 'Advance') stats.totalAdvance += amt; // Treat both as payouts against entitlement
-            else if (p.type === 'Wages') stats.totalWages += amt;
+            if (p.type === 'Salary' || p.type === 'SALARY') stats.totalSalary += amt;
+            else if (p.type === 'Advance' || p.type === 'ADVANCE') stats.totalAdvance += amt;
+            else if (p.type === 'Wages' || p.type === 'WAGES') stats.totalWages += amt;
             else if (p.type === 'Bonus') {
                 stats.totalBonus += amt;
                 if (!p.remarks?.includes('[DEDUCTIBLE]')) {
@@ -862,7 +872,7 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
                 if (status === 'Present') {
                     displayPresentCount += units;
-                    if (units === 0.5) displayAbsentCount += 0.5;
+                    if (units === 0.5 && !isSpecialDay(r.date, payrollConfig.national_holidays)) displayAbsentCount += 0.5;
                     if (emp?.staff_type === 'Temporary') displayTempPresentCount += units;
                 } else if (status === 'Absent') {
                     displayAbsentCount += 1;
@@ -917,9 +927,11 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
 
             if (isPresent) {
                 presentCount += units;
-                if (units === 0.5) absentCount += 0.5;
+                if (units === 0.5 && !isSpecialDay(d.date, payrollConfig.national_holidays)) absentCount += 0.5;
             }
-            else if (d.attendance_status === 'Absent') absentCount++;
+            else if (d.attendance_status === 'Absent') {
+                absentCount++;
+            }
             else if (d.attendance_status?.toLowerCase().includes('leave')) leaveCount++;
 
             totalHours += hours;
@@ -1823,10 +1835,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem' }}>
                                                                 <div style={{
                                                                     padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
-                                                                    background: (row.attendance_status === 'Present') ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                                    color: (row.attendance_status === 'Present') ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                                    border: (row.attendance_status === 'Present') ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
-                                                                }}>{row.attendance_status || 'Present'}</div>
+                                                                    background: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)') : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? '#3b82f6' : '#10b981') : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)') : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                }}>{(row.attendance_status === 'Present' && isSpecialDay(row.date, payrollConfig?.national_holidays)) ? 'Present (OT)' : (row.attendance_status || 'Present')}</div>
                                                             </td>
                                                             <td style={{ padding: '1rem' }}>
                                                                 {(row.attendance_status === 'Present' || row.attendance_status === 'Casual Leave' || row.attendance_status === 'Medical Leave') && (
@@ -1957,10 +1969,10 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                                                             <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 <div style={{
                                                                     padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 600, display: 'inline-block',
-                                                                    background: (row.attendance_status === 'Present') ? 'rgba(16, 185, 129, 0.1)' : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                                                                    color: (row.attendance_status === 'Present') ? '#10b981' : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
-                                                                    border: (row.attendance_status === 'Present') ? '1px solid rgba(16, 185, 129, 0.2)' : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
-                                                                }}>{row.attendance_status || 'Present'}</div>
+                                                                    background: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)') : (row.attendance_status === 'Absent' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
+                                                                    color: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? '#3b82f6' : '#10b981') : (row.attendance_status === 'Absent' ? '#ef4444' : '#f59e0b'),
+                                                                    border: (row.attendance_status === 'Present') ? (isSpecialDay(row.date, payrollConfig?.national_holidays) ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)') : (row.attendance_status === 'Absent' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)')
+                                                                }}>{(row.attendance_status === 'Present' && isSpecialDay(row.date, payrollConfig?.national_holidays)) ? 'Present (OT)' : (row.attendance_status || 'Present')}</div>
                                                             </td>
                                                             <td style={{ padding: '1rem', borderRight: '1px solid var(--glass-border)' }}>
                                                                 {(row.attendance_status === 'Present' || row.attendance_status === 'Casual Leave' || row.attendance_status === 'Medical Leave') && (
@@ -2085,31 +2097,38 @@ const TimeAttendance = ({ onBack, hideBack = false }) => {
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #3b82f6' }}>
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Salary Paid</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrencyRound(paymentStats.totalSalary)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalSalary)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #f59e0b' }}>
                             <div style={{ color: '#f59e0b', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Advances</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrency(paymentStats.totalAdvance)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#f59e0b' }}>{formatCurrencyRound(paymentStats.totalAdvance)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalAdvance)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #10b981' }}>
                             <div style={{ color: '#10b981', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Wages</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrency(paymentStats.totalWages)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{formatCurrencyRound(paymentStats.totalWages)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalWages)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #a855f7' }}>
                             <div style={{ color: '#a855f7', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Bonus</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrency(paymentStats.totalBonus)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a855f7' }}>{formatCurrencyRound(paymentStats.totalBonus)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalBonus)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.05)' }}>
                             <div style={{ color: '#a78bfa', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Financial Outflow (Cash)</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.nonDeductibleBonuses)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrencyRound(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.nonDeductibleBonuses)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalSalary + paymentStats.totalAdvance + paymentStats.totalWages + paymentStats.nonDeductibleBonuses)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: '4px solid #ec4899', background: 'rgba(236, 72, 153, 0.05)' }}>
                             <div style={{ color: '#f472b6', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Gross Total Earnings (Incl. OT & Bonuses)</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrency(paymentStats.totalEarned + paymentStats.nonDeductibleBonuses + paymentStats.deductibleBonuses)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{formatCurrencyRound(paymentStats.totalEarned + paymentStats.nonDeductibleBonuses + paymentStats.deductibleBonuses)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.totalEarned + paymentStats.nonDeductibleBonuses + paymentStats.deductibleBonuses)}</div>
                         </div>
                         <div className="glass-panel" style={{ padding: '1.25rem', borderLeft: `4px solid ${paymentStats.balance >= 0 ? '#10b981' : '#ef4444'}`, background: paymentStats.balance >= 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)' }}>
                             <div style={{ color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Balance Salary Pending</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(paymentStats.balance)}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: paymentStats.balance >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrencyRound(paymentStats.balance)}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', opacity: 0.8 }}>Exact: {formatCurrency(paymentStats.balance)}</div>
                         </div>
                     </div>
 

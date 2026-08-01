@@ -1579,7 +1579,7 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
             )}
 
             {/* Monthly Alert and Discrepancy Banner */}
-            {((new Date().getDate() === 1) ||
+            {!isMonthClosed && ((new Date().getDate() === 1) ||
               (monthlyPhysical.ginger && (Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) > 10 || (gingerCalculatedClosing > 0 && Math.abs(monthlyPhysical.ginger.weight - gingerCalculatedClosing) / gingerCalculatedClosing > 0.05))) ||
               (monthlyPhysical.garlic && (Math.abs(monthlyPhysical.garlic.weight - garlicCalculatedClosing) > 20 || (garlicCalculatedClosing > 0 && Math.abs(monthlyPhysical.garlic.weight - garlicCalculatedClosing) / garlicCalculatedClosing > 0.05)))
             ) && (

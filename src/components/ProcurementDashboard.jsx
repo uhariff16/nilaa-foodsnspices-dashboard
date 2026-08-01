@@ -676,6 +676,18 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                                 );
                             })}
                         </div>
+                        {sortedPurchases.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '80px 70px 150px 120px 60px 80px 100px' : '90px 80px 1fr 1fr 60px 80px 100px', padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)', fontWeight: 700, minWidth: isMobile ? '640px' : 'auto', fontSize: '0.9rem' }}>
+                                <div style={{ gridColumn: '1 / span 4', textAlign: 'right', color: 'var(--text-primary)', paddingRight: '1rem' }}>Total:</div>
+                                <div style={{ textAlign: 'right', color: '#e0f2fe' }}>
+                                    {sortedPurchases.reduce((sum, item) => sum + (item.quantity || item.parsedQty || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+                                </div>
+                                <div></div>
+                                <div style={{ textAlign: 'right', color: '#f43f5e' }}>
+                                    ₹{sortedPurchases.reduce((sum, item) => sum + (item.parsedAmount || item.amount || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

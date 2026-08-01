@@ -337,7 +337,7 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             summary[k].count = summary[k].invoiceSet.size; // Set unique bills count
         });
 
-        let result = Object.entries(summary).filter(([supplier, _]) => supplier !== 'UNKNOWN');
+        let result = Object.entries(summary);
         if (supplierSearch) {
             const ss = supplierSearch.toLowerCase();
             result = result.filter(([supplier, _]) => supplier.toLowerCase().includes(ss));

@@ -306,79 +306,6 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
         ? Math.max(0, sourceSys - sourcePhysObj.weight) 
         : (sourceSys < 0 ? -sourceSys : 0);
 
-    const itemsToReconcile = [
-        { key: 'ginger', label: 'Ginger Raw', dbName: 'GINGER RAW', available: calculatedClosings?.ginger || 0 },
-        { key: 'garlic', label: 'Garlic Raw', dbName: 'GARLIC RAW', available: calculatedClosings?.garlic || 0 },
-        { key: 'gingerPeeled', label: 'Ginger Peeled', dbName: 'GINGER PEELED', available: calculatedClosings?.gingerPeeled || 0 },
-        { key: 'garlicPeeled', label: 'Garlic Peeled', dbName: 'GARLIC PEELED', available: calculatedClosings?.garlicPeeled || 0 },
-        { key: 'gingerPeeledProcessed', label: 'Ginger Peeled(Processed)', dbName: 'GINGER PEELED(PROCESSED)', available: calculatedClosings?.gingerPeeledProcessed || 0 },
-        { key: 'garlicPeeledProcessed', label: 'Garlic Peeled(Processed)', dbName: 'GARLIC PEELED(PROCESSED)', available: calculatedClosings?.garlicPeeledProcessed || 0 },
-        { key: 'paste', label: 'G&G Paste (Mix)', dbName: 'G&G PASTE (MIX)', available: calculatedClosings?.paste || 0 },
-        { key: 'gingerPaste', label: 'Ginger Paste', dbName: 'GINGER PASTE', available: calculatedClosings?.gingerPaste || 0 },
-        { key: 'garlicPaste', label: 'Garlic Paste', dbName: 'GARLIC PASTE', available: calculatedClosings?.garlicPaste || 0 }
-    ];
-
-    const activeDiscrepancies = itemsToReconcile.filter(item => {
-        const phys = monthlyPhysical?.[item.key];
-        return phys && Math.abs(phys.weight - item.available) >= 0.01;
-    });
-
-    const handleAutoReconcile = async () => {
-        let targetDate = new Date().toISOString().split('T')[0];
-        if (selectedMonth !== 'Overall') {
-            const [sMonth, sYear] = selectedMonth.split(' ');
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            const mIdx = monthNames.indexOf(sMonth);
-            if (mIdx !== -1) {
-                const lastDay = new Date(parseInt(sYear), mIdx + 1, 0);
-                targetDate = lastDay.toISOString().split('T')[0];
-            }
-        }
-
-        const inserts = [];
-        let msgDetails = '';
-
-        activeDiscrepancies.forEach(item => {
-            const phys = monthlyPhysical[item.key];
-            const diff = phys.weight - item.available;
-            inserts.push({
-                date: targetDate,
-                type: 'adjustment',
-                material: item.dbName,
-                weight: parseFloat(diff.toFixed(2)),
-                remarks: `Auto-Reconcile Discrepancy (${selectedMonth})`
-            });
-            msgDetails += `• ${item.label}: ${diff >= 0 ? '+' : ''}${diff.toFixed(1)} kg\n`;
-        });
-
-        if (inserts.length === 0) {
-            alert("No discrepancies found to reconcile.");
-            return;
-        }
-
-        const msg = `This will log manual adjustments to reconcile calculated stock with physical counts for ${selectedMonth}:\n\n` +
-            msgDetails +
-            `\nDo you want to proceed?`;
-
-        if (!window.confirm(msg)) return;
-        if (!window.confirm("Are you absolutely sure? This will update the calculated available stocks on the dashboard.")) return;
-
-        setIsSaving(true);
-        try {
-            const { error } = await supabase.from('production_logs').insert(inserts);
-            if (error) throw error;
-
-            alert("Discrepancies reconciled and adjustments recorded successfully!");
-            onSave();
-            onClose();
-        } catch (err) {
-            console.error("Error auto-reconciling:", err);
-            alert("Failed to reconcile: " + err.message);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.weight || isNaN(formData.weight)) {
@@ -524,58 +451,6 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
                         Spoilage / Loss
                     </button>
                 </div>
-
-                {/* Auto-Reconcile Section */}
-                {mode === 'adjustment' && selectedMonth !== 'Overall' && activeDiscrepancies.length > 0 && (
-                    <div style={{
-                        background: 'rgba(59, 130, 246, 0.08)',
-                        border: '1px dashed #3b82f6',
-                        borderRadius: '0.75rem',
-                        padding: '1rem',
-                        marginBottom: '1.5rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem'
-                    }}>
-                        <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#60a5fa', fontWeight: 600 }}>
-                            Auto-Reconcile with Physical Count
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            {activeDiscrepancies.map(item => {
-                                const phys = monthlyPhysical[item.key];
-                                const diff = phys.weight - item.available;
-                                return (
-                                    <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>{item.label}:</span>
-                                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                            Diff: {diff >= 0 ? '+' : ''}{diff.toFixed(1)} kg
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleAutoReconcile}
-                            disabled={isSaving}
-                            style={{
-                                width: '100%',
-                                padding: '0.5rem',
-                                borderRadius: '0.5rem',
-                                background: '#3b82f6',
-                                border: 'none',
-                                color: 'white',
-                                fontWeight: 600,
-                                fontSize: '0.85rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                opacity: isSaving ? 0.7 : 1
-                            }}
-                        >
-                            {isSaving ? 'Processing...' : 'Apply Discrepancy Adjustments'}
-                        </button>
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div>
@@ -922,12 +797,14 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
 
     const [searchTerm, setSearchTerm] = React.useState('');
     const [activeCategory, setActiveCategory] = React.useState('All'); // All, Raw, Processed
+    const [expandedFormula, setExpandedFormula] = React.useState({ ginger: false, garlic: false });
 
     const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
     const [showPhysicalModal, setShowPhysicalModal] = useState(false);
     const [showLogsModal, setShowLogsModal] = useState(false);
     const [adjustments, setAdjustments] = useState([]);
     const [physicalCounts, setPhysicalCounts] = useState([]);
+    const [monthClosedLogs, setMonthClosedLogs] = useState([]);
 
     // Fetch Manual Adjustments from DB
     const fetchAdjustments = async () => {
@@ -961,9 +838,24 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         }
     };
 
+    // Fetch Month Closed Logs
+    const fetchMonthClosedLogs = async () => {
+        try {
+            const { data: logs, error } = await supabase
+                .from('production_logs')
+                .select('*')
+                .eq('type', 'month_closed');
+            if (error) throw error;
+            setMonthClosedLogs(logs || []);
+        } catch (err) {
+            console.error("Error fetching month closed logs:", err);
+        }
+    };
+
     useEffect(() => {
         fetchAdjustments();
         fetchPhysicalCounts();
+        fetchMonthClosedLogs();
     }, []);
 
     // Thresholds for alerts
@@ -971,6 +863,42 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
         RAW: 100,
         PEELED: 50,
         PASTE: 20
+    };
+
+    const isMonthClosed = useMemo(() => {
+        if (selectedMonth === 'Overall') return false;
+        return monthClosedLogs.some(log => log.remarks === selectedMonth);
+    }, [selectedMonth, monthClosedLogs]);
+
+    const handleMarkMonthDone = async () => {
+        if (!window.confirm(`Are you sure you want to mark ${selectedMonth} as Done? This will visually stamp the month as reconciled and locked.`)) return;
+        
+        let targetDate = new Date().toISOString().split('T')[0];
+        const [sMonth, sYear] = selectedMonth.split(' ');
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const mIdx = monthNames.indexOf(sMonth);
+        if (mIdx !== -1) {
+            const lastDay = new Date(parseInt(sYear), mIdx + 1, 0);
+            targetDate = lastDay.toISOString().split('T')[0];
+        }
+
+        try {
+            const { error } = await supabase
+                .from('production_logs')
+                .insert([{
+                    date: targetDate,
+                    type: 'month_closed',
+                    material: 'SYSTEM',
+                    weight: 0,
+                    remarks: selectedMonth
+                }]);
+            if (error) throw error;
+            alert(`${selectedMonth} has been marked as Done!`);
+            fetchMonthClosedLogs();
+        } catch (err) {
+            console.error("Error closing month:", err);
+            alert("Failed to mark month as done: " + err.message);
+        }
     };
 
     const getHealthStatus = (title, closing) => {
@@ -2006,57 +1934,83 @@ const StockDashboard = ({ productionData, salesData, procurementData, selectedMo
                                 <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></div>
                                 <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>Shortage Analysis</h3>
                             </div>
+                            {selectedMonth !== 'Overall' && (
+                                isMonthClosed ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>
+                                        <CheckCircle size={14} /> Month Reconciled
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={handleMarkMonthDone}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-primary)', padding: '0.4rem 0.8rem', borderRadius: '1rem', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                                    >
+                                        Mark Month as Done
+                                    </button>
+                                )
+                            )}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem', overflowY: 'auto' }} className="custom-scrollbar">
                             <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '0.5rem' }}>
                                 <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ginger Discrepancy</h4>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Total Shortage / Loss:</span>
+                                <div 
+                                    style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem', cursor: 'pointer' }}
+                                    onClick={() => setExpandedFormula(prev => ({ ...prev, ginger: !prev.ginger }))}
+                                >
+                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Moisture loss / Peeling/Yield Loss:</span>
                                     <span style={{ fontSize: '0.85rem', color: discrepancyStats.ginger.totalLoss.kg > 0 ? '#f87171' : '#10b981', fontWeight: 600 }}>{discrepancyStats.ginger.totalLoss.kg > 0 ? '' : '+'}{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} kg ({Math.abs(discrepancyStats.ginger.totalLoss.pct).toFixed(1)}%)</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                        <span>[1] System Stock:</span>
-                                        <span>({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)} - {discrepancyStats.ginger.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.ginger.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                {expandedFormula.ginger && (
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span>[1] System Stock:</span>
+                                            <span>({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)} - {discrepancyStats.ginger.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.ginger.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span>[2] Physical Count:</span>
+                                            <span><strong>{discrepancyStats.ginger.totalLoss.phys.toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.ginger.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
+                                            <span>[1] - [2] = Shortage:</span>
+                                            <span><strong>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                                            <span>Loss %:</span>
+                                            <span>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.ginger.totalLoss.pct).toFixed(1)}%</strong></span>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                        <span>[2] Physical Count:</span>
-                                        <span><strong>{discrepancyStats.ginger.totalLoss.phys.toFixed(1)} kg</strong></span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.ginger.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
-                                        <span>[1] - [2] = Shortage:</span>
-                                        <span><strong>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} kg</strong></span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
-                                        <span>Loss %:</span>
-                                        <span>{Math.abs(discrepancyStats.ginger.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.ginger.totalLoss.open.toFixed(1)} + {discrepancyStats.ginger.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.ginger.totalLoss.pct).toFixed(1)}%</strong></span>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                             <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '0.5rem' }}>
                                 <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Garlic Discrepancy</h4>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Total Shortage / Loss:</span>
+                                <div 
+                                    style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem', cursor: 'pointer' }}
+                                    onClick={() => setExpandedFormula(prev => ({ ...prev, garlic: !prev.garlic }))}
+                                >
+                                    <span style={{ fontSize: '0.85rem', color: '#9ca3af' }}>Moisture loss / Peeling/Yield Loss:</span>
                                     <span style={{ fontSize: '0.85rem', color: discrepancyStats.garlic.totalLoss.kg > 0 ? '#f87171' : '#10b981', fontWeight: 600 }}>{discrepancyStats.garlic.totalLoss.kg > 0 ? '' : '+'}{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} kg ({Math.abs(discrepancyStats.garlic.totalLoss.pct).toFixed(1)}%)</span>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                        <span>[1] System Stock:</span>
-                                        <span>({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)} - {discrepancyStats.garlic.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.garlic.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                {expandedFormula.garlic && (
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span>[1] System Stock:</span>
+                                            <span>({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)} - {discrepancyStats.garlic.totalLoss.out.toFixed(1)}) = <strong>{discrepancyStats.garlic.totalLoss.calc.toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span>[2] Physical Count:</span>
+                                            <span><strong>{discrepancyStats.garlic.totalLoss.phys.toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.garlic.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
+                                            <span>[1] - [2] = Shortage:</span>
+                                            <span><strong>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} kg</strong></span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
+                                            <span>Loss %:</span>
+                                            <span>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.garlic.totalLoss.pct).toFixed(1)}%</strong></span>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                        <span>[2] Physical Count:</span>
-                                        <span><strong>{discrepancyStats.garlic.totalLoss.phys.toFixed(1)} kg</strong></span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', color: discrepancyStats.garlic.totalLoss.kg > 0 ? '#f87171' : '#10b981' }}>
-                                        <span>[1] - [2] = Shortage:</span>
-                                        <span><strong>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} kg</strong></span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.25rem', marginTop: '0.25rem' }}>
-                                        <span>Loss %:</span>
-                                        <span>{Math.abs(discrepancyStats.garlic.totalLoss.kg).toFixed(1)} ÷ ({discrepancyStats.garlic.totalLoss.open.toFixed(1)} + {discrepancyStats.garlic.totalLoss.in.toFixed(1)}) = <strong>{Math.abs(discrepancyStats.garlic.totalLoss.pct).toFixed(1)}%</strong></span>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>

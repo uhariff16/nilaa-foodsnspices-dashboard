@@ -37,7 +37,8 @@ const AdminSystemSettings = () => {
         alert_stock_garlic_paste_enabled: 'true',
         alert_stock_garlic_paste_threshold: '20',
         alert_invoice_gaps_enabled: 'true',
-        financial_model_cogs_enabled: 'false'
+        financial_model_cogs_enabled: 'false',
+        rnd_module_enabled: 'false'
     });
 
     useEffect(() => {
@@ -208,6 +209,16 @@ const AdminSystemSettings = () => {
                             </div>
                         </div>
                         {renderToggleSwitch('financial_model_cogs_enabled', settings.financial_model_cogs_enabled)}
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0' }}>
+                        <div style={{ flex: 1, paddingRight: '2rem' }}>
+                            <h4 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0 0 0.25rem 0' }}>Research & Development Module</h4>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '0 0 0.75rem 0' }}>
+                                Enable or disable the entire R&D module (Project Tracking, Formula Management, Labs). Currently accessible only to Administrators.
+                            </p>
+                        </div>
+                        {renderToggleSwitch('rnd_module_enabled', settings.rnd_module_enabled)}
                     </div>
                 </div>
 

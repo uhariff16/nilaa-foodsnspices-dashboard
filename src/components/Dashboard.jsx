@@ -85,10 +85,15 @@ const Dashboard = (props) => {
     });
     const [showExecutiveMenu, setShowExecutiveMenu] = useState(false);
     const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
+    const [showModulesMenu, setShowModulesMenu] = useState(false);
+    const [modulesMenuCoords, setModulesMenuCoords] = useState({ top: 0, left: 0 });
 
     useEffect(() => {
-        const closeMenu = () => setShowExecutiveMenu(false);
-        if (showExecutiveMenu) {
+        const closeMenu = () => {
+            setShowExecutiveMenu(false);
+            setShowModulesMenu(false);
+        };
+        if (showExecutiveMenu || showModulesMenu) {
             window.addEventListener('click', closeMenu);
             window.addEventListener('scroll', closeMenu, { passive: true });
         }
@@ -96,7 +101,7 @@ const Dashboard = (props) => {
             window.removeEventListener('click', closeMenu);
             window.removeEventListener('scroll', closeMenu);
         };
-    }, [showExecutiveMenu]);
+    }, [showExecutiveMenu, showModulesMenu]);
 
     // Theme Context
     const { theme, toggleTheme } = useTheme();
@@ -182,7 +187,8 @@ const Dashboard = (props) => {
         alert_stock_ginger_paste_threshold: '20',
         alert_stock_garlic_paste_enabled: 'true',
         alert_stock_garlic_paste_threshold: '20',
-        alert_invoice_gaps_enabled: 'true'
+        alert_invoice_gaps_enabled: 'true',
+        rnd_module_enabled: 'false'
     });
     const [alertsDismissed, setAlertsDismissed] = useState(false);
 
@@ -224,7 +230,8 @@ const Dashboard = (props) => {
                     alert_stock_ginger_paste_threshold: '20',
                     alert_stock_garlic_paste_enabled: 'true',
                     alert_stock_garlic_paste_threshold: '20',
-                    alert_invoice_gaps_enabled: 'true'
+                    alert_invoice_gaps_enabled: 'true',
+                    rnd_module_enabled: 'false'
                 };
                 settingsRes.data.forEach(item => {
                     mapped[item.key] = item.value;
@@ -1921,6 +1928,63 @@ const Dashboard = (props) => {
                         >
                             <Settings size={18} style={{ marginRight: '0.5rem' }} /> Admin
                         </button>
+                    )}
+
+                    {/* [NEW] Modules Dropdown */}
+                    {(props.isAdmin && alertSettings.rnd_module_enabled === 'true') && (
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                className="btn-primary"
+                                style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--glass-border)', color: '#10b981', boxShadow: 'none' }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setModulesMenuCoords({ top: rect.bottom + 8, left: rect.left });
+                                    setShowModulesMenu(!showModulesMenu);
+                                    setShowExecutiveMenu(false);
+                                }}
+                            >
+                                <Layers size={18} style={{ marginRight: '0.5rem' }} /> Modules <ChevronDown size={14} style={{ marginLeft: '0.5rem', transform: showModulesMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                            </button>
+                            {showModulesMenu && (
+                                <div style={{
+                                    position: 'fixed',
+                                    top: `${modulesMenuCoords.top}px`,
+                                    left: `${modulesMenuCoords.left}px`,
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--glass-border)',
+                                    borderRadius: '0.75rem',
+                                    padding: '0.5rem',
+                                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                    zIndex: 1000,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.25rem'
+                                }}>
+                                    <button
+                                        onClick={() => { navigate('/rnd'); setShowModulesMenu(false); }}
+                                        style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            borderRadius: '0.5rem',
+                                            padding: '0.6rem 1rem',
+                                            color: 'var(--text-primary)',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            fontSize: '0.9rem',
+                                            whiteSpace: 'nowrap'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        <Package size={16} color="#10b981" /> R&D Lab Module
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     {/* User Profile Display */}

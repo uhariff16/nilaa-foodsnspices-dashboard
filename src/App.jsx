@@ -6,6 +6,7 @@ import AdminPanel from './components/admin/AdminPanel';
 import Login from './components/Login';
 import ResetPassword from './components/ResetPassword';
 import AttendancePage from './components/AttendancePage';
+import RnDDashboard from './components/rnd/RnDDashboard';
 import { supabase } from './lib/supabaseClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -299,6 +300,14 @@ const App = () => {
                                 element={
                                     <ProtectedRoute adminOnly={true}>
                                         <AdminPanel />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/rnd"
+                                element={
+                                    <ProtectedRoute adminOnly={true}>
+                                        <RnDDashboard />
                                     </ProtectedRoute>
                                 }
                             />

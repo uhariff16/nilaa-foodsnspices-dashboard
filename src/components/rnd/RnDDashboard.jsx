@@ -8,6 +8,8 @@ import RndFormulas from './RndFormulas';
 import RndIngredients from './RndIngredients';
 import RndTrials from './RndTrials';
 import RndStorage from './RndStorage';
+import RndObservations from './RndObservations';
+import { Microscope } from 'lucide-react';
 
 const RnDDashboard = () => {
     const [activeTab, setActiveTab] = useState('projects');
@@ -104,6 +106,18 @@ const RnDDashboard = () => {
                 >
                     <FlaskConical size={18} /> Storage & Samples
                 </button>
+                <button
+                    onClick={() => setActiveTab('observations')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'observations' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'observations' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'observations' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <Microscope size={18} /> Observations & Labs
+                </button>
             </div>
 
             {/* Content Area */}
@@ -113,6 +127,7 @@ const RnDDashboard = () => {
                 {activeTab === 'ingredients' && <RndIngredients />}
                 {activeTab === 'trials' && <RndTrials />}
                 {activeTab === 'storage' && <RndStorage />}
+                {activeTab === 'observations' && <RndObservations />}
             </div>
         </div>
     );

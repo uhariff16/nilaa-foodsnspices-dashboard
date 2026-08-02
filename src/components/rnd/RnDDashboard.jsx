@@ -6,6 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 import RndProjects from './RndProjects';
 import RndFormulas from './RndFormulas';
 import RndIngredients from './RndIngredients';
+import RndTrials from './RndTrials';
+import RndStorage from './RndStorage';
 
 const RnDDashboard = () => {
     const [activeTab, setActiveTab] = useState('projects');
@@ -78,6 +80,30 @@ const RnDDashboard = () => {
                 >
                     <Leaf size={18} /> Ingredient DB
                 </button>
+                <button
+                    onClick={() => setActiveTab('trials')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'trials' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'trials' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'trials' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <ClipboardList size={18} /> Trials & Batches
+                </button>
+                <button
+                    onClick={() => setActiveTab('storage')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'storage' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'storage' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'storage' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <FlaskConical size={18} /> Storage & Samples
+                </button>
             </div>
 
             {/* Content Area */}
@@ -85,6 +111,8 @@ const RnDDashboard = () => {
                 {activeTab === 'projects' && <RndProjects />}
                 {activeTab === 'formulas' && <RndFormulas />}
                 {activeTab === 'ingredients' && <RndIngredients />}
+                {activeTab === 'trials' && <RndTrials />}
+                {activeTab === 'storage' && <RndStorage />}
             </div>
         </div>
     );

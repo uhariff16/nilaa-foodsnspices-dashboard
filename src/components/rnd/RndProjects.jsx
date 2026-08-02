@@ -39,13 +39,16 @@ const RndProjects = () => {
     const handleSave = async (e) => {
         e.preventDefault();
         try {
-            const { error } = await supabase.from('rnd_projects').insert([formData]);
+            const payload = { ...formData };
+            if (payload.target_cost === '') payload.target_cost = null;
+            
+            const { error } = await supabase.from('rnd_projects').insert([payload]);
             if (error) throw error;
             setShowForm(false);
             fetchProjects();
         } catch (err) {
             console.error("Save error:", err);
-            alert("Failed to save project.");
+            alert(`Failed to save project: ${err.message || 'Unknown error'}`);
         }
     };
 

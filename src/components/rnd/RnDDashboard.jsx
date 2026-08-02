@@ -11,10 +11,11 @@ import RndStorage from './RndStorage';
 import RndObservations from './RndObservations';
 import RndRiskAnalytics from './RndRiskAnalytics';
 import RndApprovals from './RndApprovals';
-import { Microscope, AlertTriangle, CheckSquare } from 'lucide-react';
+import RndOverview from './RndOverview';
+import { Microscope, AlertTriangle, CheckSquare, LayoutDashboard } from 'lucide-react';
 
 const RnDDashboard = () => {
-    const [activeTab, setActiveTab] = useState('projects');
+    const [activeTab, setActiveTab] = useState('overview');
     const { isAdmin } = useAuth();
     const navigate = useNavigate();
 
@@ -46,8 +47,20 @@ const RnDDashboard = () => {
                 </button>
             </div>
 
-            {/* Sub-navigation */}
-            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
+            {/* Secondary Navigation */}
+            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                <button
+                    onClick={() => setActiveTab('overview')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'overview' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'overview' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'overview' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <LayoutDashboard size={18} /> Overview
+                </button>
                 <button
                     onClick={() => setActiveTab('projects')}
                     style={{
@@ -148,6 +161,7 @@ const RnDDashboard = () => {
 
             {/* Content Area */}
             <div className="glass-panel" style={{ padding: '2rem', minHeight: '60vh' }}>
+                {activeTab === 'overview' && <RndOverview />}
                 {activeTab === 'projects' && <RndProjects />}
                 {activeTab === 'formulas' && <RndFormulas />}
                 {activeTab === 'ingredients' && <RndIngredients />}

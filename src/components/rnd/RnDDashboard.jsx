@@ -9,7 +9,9 @@ import RndIngredients from './RndIngredients';
 import RndTrials from './RndTrials';
 import RndStorage from './RndStorage';
 import RndObservations from './RndObservations';
-import { Microscope } from 'lucide-react';
+import RndRiskAnalytics from './RndRiskAnalytics';
+import RndApprovals from './RndApprovals';
+import { Microscope, AlertTriangle, CheckSquare } from 'lucide-react';
 
 const RnDDashboard = () => {
     const [activeTab, setActiveTab] = useState('projects');
@@ -118,6 +120,30 @@ const RnDDashboard = () => {
                 >
                     <Microscope size={18} /> Observations & Labs
                 </button>
+                <button
+                    onClick={() => setActiveTab('risk')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'risk' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'risk' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'risk' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <AlertTriangle size={18} /> Risk & Analytics
+                </button>
+                <button
+                    onClick={() => setActiveTab('approvals')}
+                    style={{
+                        background: 'none', border: 'none', padding: '0.75rem 1rem',
+                        color: activeTab === 'approvals' ? '#10b981' : 'var(--text-secondary)',
+                        borderBottom: activeTab === 'approvals' ? '2px solid #10b981' : '2px solid transparent',
+                        cursor: 'pointer', fontWeight: activeTab === 'approvals' ? 'bold' : 'normal',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                    }}
+                >
+                    <CheckSquare size={18} /> Approvals
+                </button>
             </div>
 
             {/* Content Area */}
@@ -128,6 +154,8 @@ const RnDDashboard = () => {
                 {activeTab === 'trials' && <RndTrials />}
                 {activeTab === 'storage' && <RndStorage />}
                 {activeTab === 'observations' && <RndObservations />}
+                {activeTab === 'risk' && <RndRiskAnalytics />}
+                {activeTab === 'approvals' && <RndApprovals />}
             </div>
         </div>
     );

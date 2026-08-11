@@ -892,8 +892,12 @@ const Dashboard = (props) => {
         return (props.purchaseData || []).filter(item => {
             const inv = String(item.invoice_no || item.invoiceNo || '').trim().toUpperCase();
             const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
-            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
+            
             if (inv.startsWith('P')) return true;
+            
+            if (item.parsedType === 'Expense' && !inv) return false;
+
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
             const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
             if (isExpense) return false;
             return isPurchaseKeyword;

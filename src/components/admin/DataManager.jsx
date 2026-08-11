@@ -28,18 +28,27 @@ const DataManager = () => {
         setLoading(true);
         setStatus({ type: 'idle', message: '' });
         try {
-            let query = supabase
-                .from(selectedTable)
-                .select('*');
+            let query;
+            
+            if (selectedTable === 'payments') {
+                query = supabase.from('transactions').select('*').eq('payment_mode', 'Supplier_Payment');
+            } else {
+                query = supabase.from(selectedTable).select('*');
+            }
 
             if (searchTerm) {
-                if (selectedTable === 'transactions') {
-                    query = query.or(`item_name.ilike.%${searchTerm}%,invoice_no.ilike.%${searchTerm}%`);
+                if (selectedTable === 'transactions' || selectedTable === 'payments') {
+                    query = query.or(`item_name.ilike.%${searchTerm}%,invoice_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%`);
                 } else if (selectedTable === 'customer_receivables') {
                     query = query.ilike('customer_name', `%${searchTerm}%`);
                 } else {
                     query = query.ilike('material', `%${searchTerm}%`);
                 }
+            }
+
+            if (selectedTable === 'transactions') {
+                // When viewing generic transactions, hide supplier payments to keep them separate
+                query = query.neq('payment_mode', 'Supplier_Payment');
             }
 
             if (selectedTable === 'customer_receivables') {
@@ -105,8 +114,9 @@ const DataManager = () => {
             delete updatePayload.id; // Don't update ID
             delete updatePayload.created_at;
 
+            const targetDbTable = selectedTable === 'payments' ? 'transactions' : selectedTable;
             const { error } = await supabase
-                .from(selectedTable)
+                .from(targetDbTable)
                 .update(updatePayload)
                 .eq('id', editingId);
 
@@ -131,8 +141,9 @@ const DataManager = () => {
 
         setLoading(true);
         try {
+            const targetDbTable = selectedTable === 'payments' ? 'transactions' : selectedTable;
             const { error } = await supabase
-                .from(selectedTable)
+                .from(targetDbTable)
                 .delete()
                 .eq('id', id);
 
@@ -161,6 +172,13 @@ const DataManager = () => {
                         >
                             <DollarSign size={16} />
                             Transactions
+                        </button>
+                        <button
+                            onClick={() => setSelectedTable('payments')}
+                            className={`btn-toggle ${selectedTable === 'payments' ? 'active blue' : ''}`}
+                        >
+                            <DollarSign size={16} />
+                            Payments
                         </button>
                         <button
                             onClick={() => setSelectedTable('production_logs')}
@@ -223,9 +241,10 @@ const DataManager = () => {
                                 <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                     {selectedTable === 'customer_receivables' ? 'Customer' : 'Date'}
                                 </th>
-                                {selectedTable === 'transactions' ? (
+                                {selectedTable === 'transactions' || selectedTable === 'payments' ? (
                                     <>
                                         <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Type</th>
+                                        <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Customer/Supplier</th>
                                         <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Item / Description</th>
                                         <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Amount</th>
                                     </>
@@ -260,15 +279,21 @@ const DataManager = () => {
                                                         style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                 )}
                                             </td>
-                                            {selectedTable === 'transactions' ? (
+                                            {selectedTable === 'transactions' || selectedTable === 'payments' ? (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
                                                         <select value={editForm.payment_mode} onChange={e => handleEditChange('payment_mode', e.target.value)}
                                                             style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }}>
                                                             <option value="Sale">Sale</option>
+                                                            <option value="Purchase">Purchase</option>
                                                             <option value="Expense">Expense</option>
+                                                            <option value="Supplier_Payment">Supplier Payment</option>
                                                             <option value="Online">Online</option>
                                                         </select>
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input type="text" value={editForm.customer_name || ''} onChange={e => handleEditChange('customer_name', e.target.value)} placeholder="Customer Name"
+                                                            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid #3b82f6', borderRadius: '0.25rem', padding: '0.25rem', color: 'var(--text-primary)', fontSize: '0.75rem' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <input type="text" value={editForm.item_name} onChange={e => handleEditChange('item_name', e.target.value)}
@@ -328,7 +353,7 @@ const DataManager = () => {
                                                 {selectedTable === 'customer_receivables' ? row.customer_name : row.date}
                                             </td>
 
-                                            {selectedTable === 'transactions' ? (
+                                            {selectedTable === 'transactions' || selectedTable === 'payments' ? (
                                                 <>
                                                     <td style={{ padding: '1rem' }}>
                                                         <span style={{
@@ -337,12 +362,15 @@ const DataManager = () => {
                                                             fontSize: '0.625rem',
                                                             fontWeight: 'bold',
                                                             textTransform: 'uppercase',
-                                                            background: row.payment_mode === 'Expense' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                                            color: row.payment_mode === 'Expense' ? '#fca5a5' : '#6ee7b7',
-                                                            border: row.payment_mode === 'Expense' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                                            background: row.payment_mode === 'Expense' ? 'rgba(239, 68, 68, 0.1)' : (row.payment_mode === 'Supplier_Payment' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
+                                                            color: row.payment_mode === 'Expense' ? '#fca5a5' : (row.payment_mode === 'Supplier_Payment' ? '#93c5fd' : '#6ee7b7'),
+                                                            border: row.payment_mode === 'Expense' ? '1px solid rgba(239, 68, 68, 0.2)' : (row.payment_mode === 'Supplier_Payment' ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)')
                                                         }}>
                                                             {row.payment_mode}
                                                         </span>
+                                                    </td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                        {row.customer_name || 'N/A'}
                                                     </td>
                                                     <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                                         {row.item_name}

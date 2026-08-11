@@ -11,7 +11,7 @@ const AdminCleanup = () => {
     const [previewData, setPreviewData] = useState(null);
     const [status, setStatus] = useState({ type: '', message: '' });
 
-    const [targets, setTargets] = useState({ sales: true, production: true });
+    const [targets, setTargets] = useState({ sales: true, production: true, payments: false });
 
     // Generate Year Options
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -37,55 +37,83 @@ const AdminCleanup = () => {
         try {
             if (mode === 'period') {
                 if (!selectedMonth) {
-                    setStatus({ type: 'error', message: 'Please select a month.' });
+                    setStatus({ type: 'error', message: 'Please select a month or Whole Year.' });
                     setPreviewLoading(false);
                     return;
                 }
 
-                if (!targets.sales && !targets.production) {
+                if (!targets.sales && !targets.production && !targets.payments) {
                     setStatus({ type: 'error', message: 'Please select at least one data type to clean.' });
                     setPreviewLoading(false);
                     return;
                 }
 
-                const monthIndex = months.indexOf(selectedMonth);
-                const startDate = getLocalDateString(selectedYear, monthIndex, 1);
-                const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
+                let startDate, nextMonthDate;
+                if (selectedMonth === 'Whole Year') {
+                    startDate = getLocalDateString(selectedYear, 0, 1);
+                    nextMonthDate = getLocalDateString(selectedYear + 1, 0, 1);
+                } else {
+                    const monthIndex = months.indexOf(selectedMonth);
+                    startDate = getLocalDateString(selectedYear, monthIndex, 1);
+                    nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
+                }
 
                 let txCount = 0;
                 let plCount = 0;
+                let payCount = 0;
+                let samples = [];
 
                 if (targets.sales) {
-                    const { count, error } = await supabase
+                    const { data, count, error } = await supabase
                         .from('transactions')
-                        .select('*', { count: 'exact', head: true })
+                        .select('id, date, payment_mode, item_name, amount', { count: 'exact' })
                         .gte('date', startDate)
-                        .lt('date', nextMonthDate);
+                        .lt('date', nextMonthDate)
+                        .neq('payment_mode', 'Supplier_Payment')
+                        .limit(50);
                     if (error) throw error;
                     txCount = count || 0;
+                    if (data) samples = [...samples, ...data.map(d => ({ ...d, _type: 'Sales/Expense' }))];
+                }
+
+                if (targets.payments) {
+                    const { data, count, error } = await supabase
+                        .from('transactions')
+                        .select('id, date, payment_mode, item_name, amount', { count: 'exact' })
+                        .gte('date', startDate)
+                        .lt('date', nextMonthDate)
+                        .eq('payment_mode', 'Supplier_Payment')
+                        .limit(50);
+                    if (error) throw error;
+                    payCount = count || 0;
+                    if (data) samples = [...samples, ...data.map(d => ({ ...d, _type: 'Payment' }))];
                 }
 
                 if (targets.production) {
-                    const { count, error } = await supabase
+                    const { data, count, error } = await supabase
                         .from('production_logs')
-                        .select('*', { count: 'exact', head: true })
+                        .select('id, date, type, material, weight', { count: 'exact' })
                         .gte('date', startDate)
-                        .lt('date', nextMonthDate);
+                        .lt('date', nextMonthDate)
+                        .limit(50);
                     if (error) throw error;
                     plCount = count || 0;
+                    if (data) samples = [...samples, ...data.map(d => ({ ...d, _type: 'Production Log' }))];
                 }
 
-                const totalCount = txCount + plCount;
+                const totalCount = txCount + plCount + payCount;
 
                 setPreviewData({
                     mode: 'period',
                     txCount,
                     plCount,
+                    payCount,
                     totalCount,
-                    period: `${selectedMonth} ${selectedYear}`
+                    period: `${selectedMonth} ${selectedYear}`,
+                    samples: samples.slice(0, 100)
                 });
 
-                if (totalCount === 0) setStatus({ type: 'info', message: `No selected records found for ${selectedMonth} ${selectedYear}.` });
+                if (totalCount === 0) setStatus({ type: 'info', message: `No selected records found for ${selectedMonth === 'Whole Year' ? 'the year' : selectedMonth} ${selectedYear}.` });
 
             } else if (mode === 'all_production') {
                 // Fetch Total Production Logs
@@ -128,17 +156,21 @@ const AdminCleanup = () => {
     };
 
     // Recursive deletion helper to bypass limits
-    const deleteInBatches = async (table, startDate, endDate) => {
+    const deleteInBatches = async (table, startDate, endDate, filterCol = null, filterVal = null, notFilter = false) => {
         let deletedTotal = 0;
         let hasMore = true;
 
         while (hasMore) {
             // Check if ANY records exist in this range
-            const { count, error: checkError } = await supabase
-                .from(table)
-                .select('*', { count: 'exact', head: true })
-                .gte('date', startDate)
-                .lt('date', endDate);
+            let query = supabase.from(table).select('*', { count: 'exact', head: true })
+                .gte('date', startDate).lt('date', endDate);
+            
+            if (filterCol) {
+                if (notFilter) query = query.neq(filterCol, filterVal);
+                else query = query.eq(filterCol, filterVal);
+            }
+
+            const { count, error: checkError } = await query;
 
             if (checkError) throw checkError;
 
@@ -148,11 +180,15 @@ const AdminCleanup = () => {
             }
 
             // Perform Delete
-            const { error: deleteError } = await supabase
-                .from(table)
-                .delete()
-                .gte('date', startDate)
-                .lt('date', endDate);
+            let delQuery = supabase.from(table).delete()
+                .gte('date', startDate).lt('date', endDate);
+            
+            if (filterCol) {
+                if (notFilter) delQuery = delQuery.neq(filterCol, filterVal);
+                else delQuery = delQuery.eq(filterCol, filterVal);
+            }
+
+            const { error: deleteError } = await delQuery;
 
             if (deleteError) throw deleteError;
 
@@ -170,6 +206,7 @@ const AdminCleanup = () => {
         if (mode === 'period') {
             confirmMessage = `Are you SURE you want to delete data from ${previewData.period}? \n` +
                 (targets.sales ? `\n- ${previewData.txCount} Sales/Expenses` : '') +
+                (targets.payments ? `\n- ${previewData.payCount} Payments` : '') +
                 (targets.production ? `\n- ${previewData.plCount} Production Logs` : '') +
                 `\n\nThis cannot be undone.`;
         } else if (mode === 'all_production') {
@@ -185,12 +222,22 @@ const AdminCleanup = () => {
 
         try {
             if (mode === 'period') {
-                const monthIndex = months.indexOf(selectedMonth);
-                const startDate = getLocalDateString(selectedYear, monthIndex, 1);
-                const nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
+                let startDate, nextMonthDate;
+                if (selectedMonth === 'Whole Year') {
+                    startDate = getLocalDateString(selectedYear, 0, 1);
+                    nextMonthDate = getLocalDateString(selectedYear + 1, 0, 1);
+                } else {
+                    const monthIndex = months.indexOf(selectedMonth);
+                    startDate = getLocalDateString(selectedYear, monthIndex, 1);
+                    nextMonthDate = getLocalDateString(selectedYear, monthIndex + 1, 1);
+                }
 
                 if (targets.sales) {
-                    await deleteInBatches('transactions', startDate, nextMonthDate);
+                    await deleteInBatches('transactions', startDate, nextMonthDate, 'payment_mode', 'Supplier_Payment', true);
+                }
+
+                if (targets.payments) {
+                    await deleteInBatches('transactions', startDate, nextMonthDate, 'payment_mode', 'Supplier_Payment', false);
                 }
 
                 if (targets.production) {
@@ -278,12 +325,14 @@ const AdminCleanup = () => {
                         <br /> <span style={{ color: '#fb923c', fontWeight: 'bold' }}>Warning: This action is irreversible.</span>
                     </p>
 
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', justifyContent: 'center' }}>
-                        {mode === 'period' && (
-                            <>
-                                {/* Granular Toggles */}
-                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.25rem', justifyContent: 'center', width: '100%' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.sales ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                        {mode === 'period' ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                {/* Left Side: Checkboxes */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', background: 'rgba(0,0,0,0.2)', padding: '1.25rem', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)', flex: 1, minWidth: '200px' }}>
+                                    <h4 style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Data to Clean</h4>
+                                    
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: targets.sales ? 'white' : '#94a3b8', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
                                         <input
                                             type="checkbox"
                                             checked={targets.sales}
@@ -291,11 +340,23 @@ const AdminCleanup = () => {
                                                 setTargets(prev => ({ ...prev, sales: e.target.checked }));
                                                 setPreviewData(null);
                                             }}
-                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
+                                            style={{ accentColor: '#3b82f6', width: '1.125rem', height: '1.125rem', cursor: 'pointer' }}
                                         />
                                         Sales & Expenses
                                     </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: targets.production ? 'white' : '#64748b', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: targets.payments ? 'white' : '#94a3b8', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={targets.payments}
+                                            onChange={(e) => {
+                                                setTargets(prev => ({ ...prev, payments: e.target.checked }));
+                                                setPreviewData(null);
+                                            }}
+                                            style={{ accentColor: '#3b82f6', width: '1.125rem', height: '1.125rem', cursor: 'pointer' }}
+                                        />
+                                        Payments
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: targets.production ? 'white' : '#94a3b8', fontSize: '0.875rem', cursor: 'pointer', userSelect: 'none' }}>
                                         <input
                                             type="checkbox"
                                             checked={targets.production}
@@ -303,59 +364,84 @@ const AdminCleanup = () => {
                                                 setTargets(prev => ({ ...prev, production: e.target.checked }));
                                                 setPreviewData(null);
                                             }}
-                                            style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
+                                            style={{ accentColor: '#3b82f6', width: '1.125rem', height: '1.125rem', cursor: 'pointer' }}
                                         />
                                         Production Logs
                                     </label>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '1rem', width: '100%', justifyContent: 'center' }}>
-                                    {/* Year Selector */}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Year</label>
-                                        <select
-                                            value={selectedYear}
-                                            onChange={(e) => setSelectedYear(Number(e.target.value))}
-                                            style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer' }}
-                                        >
-                                            {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                        </select>
+                                {/* Right Side: Period & Button */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', flex: 1.5, minWidth: '280px' }}>
+                                    <div style={{ display: 'flex', gap: '1rem', width: '100%' }}>
+                                        {/* Year Selector */}
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Year</label>
+                                            <select
+                                                value={selectedYear}
+                                                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                                style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer' }}
+                                            >
+                                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                            </select>
+                                        </div>
+
+                                        {/* Month Selector */}
+                                        <div style={{ flex: 2 }}>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Month</label>
+                                            <select
+                                                value={selectedMonth}
+                                                onChange={(e) => {
+                                                    setSelectedMonth(e.target.value);
+                                                    setPreviewData(null);
+                                                    setStatus({ type: '', message: '' });
+                                                }}
+                                                style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer' }}
+                                            >
+                                                <option value="">Select Period</option>
+                                                <option value="Whole Year" style={{ fontWeight: 'bold', color: '#fca5a5' }}>Whole Year</option>
+                                                {months.map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
                                     </div>
 
-                                    {/* Month Selector */}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Month</label>
-                                        <select
-                                            value={selectedMonth}
-                                            onChange={(e) => {
-                                                setSelectedMonth(e.target.value);
-                                                setPreviewData(null);
-                                                setStatus({ type: '', message: '' });
-                                            }}
-                                            style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.625rem 2rem 0.625rem 0.75rem', cursor: 'pointer', minWidth: '140px' }}
-                                        >
-                                            <option value="">Select Month</option>
-                                            {months.map(m => <option key={m} value={m}>{m}</option>)}
-                                        </select>
-                                    </div>
+                                    {/* Preview Button */}
+                                    <button
+                                        onClick={fetchPreview}
+                                        disabled={(mode === 'period' && !selectedMonth) || previewLoading}
+                                        className="btn-action"
+                                        style={{
+                                            width: '100%',
+                                            justifyContent: 'center',
+                                            padding: '0.875rem',
+                                            background: 'linear-gradient(to right, #2563eb, #3b82f6)',
+                                            opacity: (!selectedMonth || previewLoading) ? 0.5 : 1,
+                                            cursor: (!selectedMonth || previewLoading) ? 'not-allowed' : 'pointer',
+                                            marginTop: 'auto'
+                                        }}
+                                    >
+                                        {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : <Calendar size={18} />}
+                                        Analyze Data
+                                    </button>
                                 </div>
-                            </>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                {/* Preview Button for other modes */}
+                                <button
+                                    onClick={fetchPreview}
+                                    disabled={previewLoading}
+                                    className="btn-action"
+                                    style={{
+                                        background: mode === 'customer_insights' ? 'linear-gradient(to right, #3b82f6, #60a5fa)' : '#dc2626',
+                                        opacity: previewLoading ? 0.5 : 1,
+                                        cursor: previewLoading ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : (mode === 'customer_insights' ? <Users size={18} /> : <Bomb size={18} />)}
+                                    Scan DB
+                                </button>
+                            </div>
                         )}
-
-                        {/* Preview Button */}
-                        <button
-                            onClick={fetchPreview}
-                            disabled={(mode === 'period' && !selectedMonth) || previewLoading}
-                            className="btn-action"
-                            style={{
-                                background: mode === 'period' ? 'linear-gradient(to right, #2563eb, #3b82f6)' : (mode === 'customer_insights' ? 'linear-gradient(to right, #3b82f6, #60a5fa)' : '#dc2626'),
-                                opacity: (mode === 'period' && !selectedMonth) || previewLoading ? 0.5 : 1,
-                                cursor: (mode === 'period' && !selectedMonth) || previewLoading ? 'not-allowed' : 'pointer'
-                            }}
-                        >
-                            {previewLoading ? <RefreshCw className="animate-spin" size={18} /> : (mode === 'period' ? <Calendar size={18} /> : (mode === 'customer_insights' ? <Users size={18} /> : <Bomb size={18} />))}
-                            {mode === 'period' ? 'Analyze' : 'Scan DB'}
-                        </button>
                     </div>
                 </div>
 
@@ -368,8 +454,53 @@ const AdminCleanup = () => {
                                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.5' }}>
                                     {mode === 'period' ? (
                                         <>
-                                            Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> records
-                                            for <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{previewData.period}</span>.
+                                            <p style={{ margin: 0 }}>
+                                                Found <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{previewData.totalCount}</span> total records
+                                                for <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{previewData.period}</span>.
+                                            </p>
+                                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.5rem 0' }}>Breakdown of records to delete:</p>
+                                                <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                    {previewData.txCount > 0 && <li>Sales & Expenses: <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.txCount}</span></li>}
+                                                    {previewData.payCount > 0 && <li>Payments: <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.payCount}</span></li>}
+                                                    {previewData.plCount > 0 && <li>Production Logs: <span style={{ fontWeight: 'bold', color: 'white' }}>{previewData.plCount}</span></li>}
+                                                </ul>
+                                            </div>
+
+                                            {/* Preview Table */}
+                                            {previewData.samples && previewData.samples.length > 0 && (
+                                                <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                                    <p style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.5rem 0' }}>Data Preview (Sample):</p>
+                                                    <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.05)' }} className="custom-scrollbar">
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                                                            <thead style={{ position: 'sticky', top: 0, background: '#1e293b', color: '#cbd5e1' }}>
+                                                                <tr>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Date</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Category</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Details</th>
+                                                                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Amount/Qty</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody style={{ color: '#94a3b8' }}>
+                                                                {previewData.samples.map(s => (
+                                                                    <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                        <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{s.date}</td>
+                                                                        <td style={{ padding: '0.5rem' }}>
+                                                                            <span style={{ padding: '0.125rem 0.375rem', borderRadius: '0.25rem', background: 'rgba(255,255,255,0.1)', fontSize: '0.625rem', whiteSpace: 'nowrap' }}>
+                                                                                {s._type}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td style={{ padding: '0.5rem', color: '#e2e8f0' }}>{s.item_name || s.material || 'N/A'}</td>
+                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', fontFamily: 'monospace' }}>
+                                                                            {s.amount ? `₹${s.amount}` : s.weight ? `${s.weight} KG` : '-'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </>
                                     ) : mode === 'all_production' ? (
                                         <>

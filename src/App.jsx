@@ -170,7 +170,9 @@ const DashboardLayout = () => {
                 // We ignore the DB ID for unique check because re-uploads might generate new IDs for the same data.
                 // We create a composite key from the business data fields.
                 // Including item_name in the key ensures that different types of expenses (e.g., Water vs Salary) on the same day with the same amount aren't merged.
-                const key = `${t.date}-${t.invoice_no}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
+                // For Supplier_Payments, we ignore invoice_no because duplicate manual entries over several days might generate different PAY-X IDs.
+                const invKey = t.payment_mode === 'Supplier_Payment' ? '' : t.invoice_no;
+                const key = `${t.date}-${invKey}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
 
                 if (!uniqueTxnsMap.has(key)) {
                     uniqueTxnsMap.set(key, t);

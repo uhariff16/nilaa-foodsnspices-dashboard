@@ -128,12 +128,12 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
             const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
             
             // Procurement bills have bill numbers starting with "P" (e.g., P-255).
-            // We also keep the keyword whitelist for resilience, but we MUST reject clear expenses.
-            // If it starts with P, it is undeniably a procurement bill.
-            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
-            
-            // Enforce: Either it starts with 'P', or it's a known keyword AND it's not explicitly an expense
             if (inv.startsWith('P')) return true;
+            
+            // Reject generic expenses without invoice numbers to prevent duplicate billing data
+            if (item.parsedType === 'Expense' && !inv) return false;
+
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
             
             const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
             if (isExpense) return false;
@@ -302,8 +302,13 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
         return (purchases || []).filter(item => {
             const inv = String(item.invoice_no || item.invoiceNo || '').trim().toUpperCase();
             const desc = ((item.originalDesc || '') + ' ' + (item.supplier || '') + ' ' + (item.remarks || '')).toLowerCase();
-            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
+            
             if (inv.startsWith('P')) return true;
+
+            // Reject generic expenses without invoice numbers to prevent duplicate billing data (e.g. UNKNOWN supplier)
+            if (item.parsedType === 'Expense' && !inv) return false;
+
+            const isPurchaseKeyword = item.parsedType === 'Purchase' || desc.includes('ginger') || desc.includes('garlic') || desc.includes('jayakodi') || /\bdesi\b/.test(desc) || desc.includes('naatu');
             const isExpense = desc.includes('exp') || desc.includes('marketing') || desc.includes('design');
             if (isExpense) return false;
             return isPurchaseKeyword;
@@ -312,7 +317,8 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
 
     const supplierSummary = useMemo(() => {
         const summary = allTimePurchases.reduce((acc, curr) => {
-            const sName = String(curr.customerName || curr.supplier || 'Unknown').toUpperCase().trim();
+            // Include originalDesc in fallback so valid items aren't grouped as UNKNOWN if customerName is empty
+            const sName = String(curr.customerName || curr.supplier || curr.originalDesc || 'Unknown').toUpperCase().trim();
             if (!acc[sName]) acc[sName] = { amount: 0, invoiceSet: new Set(), paid: 0, balance: 0, payments: [] };
             acc[sName].amount += (curr.parsedAmount || curr.amount || 0);
             

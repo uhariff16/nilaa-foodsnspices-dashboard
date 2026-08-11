@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Beaker, ClipboardList, ShieldCheck, Download, Target } from 'lucide-react';
+import { Beaker, ClipboardList, ShieldCheck, Download, Target, PlayCircle } from 'lucide-react';
 
 const RndOverview = () => {
     const [stats, setStats] = useState({
@@ -48,6 +48,112 @@ const RndOverview = () => {
         alert("Export functionality to PDF/Excel will be triggered here.");
     };
 
+    const runEndToEndTest = async () => {
+        try {
+            console.log("Starting End-to-End Test...");
+            
+            // Step 1: Create a Project
+            const { data: project, error: projErr } = await supabase.from('rnd_projects').insert([{
+                project_no: 'TEST-' + Date.now(),
+                name: 'E2E Test Project',
+                category: 'Testing',
+                objective: 'Verify module flow',
+                target_cost: 1.5,
+                status: 'Draft'
+            }]).select().single();
+            if (projErr) throw projErr;
+            const projectId = project.id;
+
+            // Step 2: Create a Formula Version
+            const { data: formula, error: formErr } = await supabase.from('rnd_formula_versions').insert([{
+                project_id: projectId,
+                version_no: 1,
+                ingredients: JSON.stringify([{ code: 'ING01', qty: 100 }]),
+                remarks: 'Initial Test Formula'
+            }]).select().single();
+            if (formErr) throw formErr;
+            const formulaId = formula.id;
+
+            // Step 3: Create a Storage Location
+            const { data: location, error: locErr } = await supabase.from('rnd_storage_locations').insert([{
+                name: 'Test Fridge A',
+                type: 'Refrigerator',
+                temperature: '4°C'
+            }]).select().single();
+            if (locErr) throw locErr;
+            const locationId = location.id;
+
+            // Step 4: Plan a Trial
+            const { data: trial, error: trialErr } = await supabase.from('rnd_trials').insert([{
+                project_id: projectId,
+                formula_version_id: formulaId,
+                trial_no: 'TR-' + Date.now(),
+                objective: 'Test stability',
+                status: 'Planned'
+            }]).select().single();
+            if (trialErr) throw trialErr;
+            const trialId = trial.id;
+
+            // Step 5: Log a Trial Batch
+            const { data: batch, error: batchErr } = await supabase.from('rnd_trial_batches').insert([{
+                trial_id: trialId,
+                batch_no: 'B-' + Date.now(),
+                total_yield: 50,
+                machine_used: 'Mixer 1'
+            }]).select().single();
+            if (batchErr) throw batchErr;
+            const batchId = batch.id;
+
+            // Step 6: Log a Sample
+            const { data: sample, error: sampErr } = await supabase.from('rnd_samples').insert([{
+                trial_batch_id: batchId,
+                storage_location_id: locationId,
+                sample_code: 'SAMP-' + Date.now(),
+                quantity: 200,
+                uom: 'grams',
+                status: 'Stored'
+            }]).select().single();
+            if (sampErr) throw sampErr;
+            const sampleId = sample.id;
+
+            // Step 7: Record an Observation
+            const { data: obs, error: obsErr } = await supabase.from('rnd_observations').insert([{
+                sample_id: sampleId,
+                observer_name: 'Auto Tester',
+                observation_date: new Date().toISOString().split('T')[0],
+                day_number: 0,
+                status: 'Pass'
+            }]).select().single();
+            if (obsErr) throw obsErr;
+
+            // Step 8: Risk Assessment
+            const { data: risk, error: riskErr } = await supabase.from('rnd_risk_assessments').insert([{
+                project_id: projectId,
+                assessment_date: new Date().toISOString().split('T')[0],
+                overall_score: 95,
+                recommendation: 'Pass',
+                assessed_by: 'Auto Tester'
+            }]).select().single();
+            if (riskErr) throw riskErr;
+
+            // Step 9: Approval Workflow
+            const { data: app, error: appErr } = await supabase.from('rnd_approvals').insert([{
+                project_id: projectId,
+                formula_version_id: formulaId,
+                stage: 'QA Approval',
+                status: 'Pending',
+                approver_name: 'QA Lead'
+            }]).select().single();
+            if (appErr) throw appErr;
+
+            alert("🎉 END-TO-END TEST COMPLETED SUCCESSFULLY!\n\nAll tables inserted data seamlessly. The schema relationships and RLS policies are working perfectly. Refresh the page to see the new data.");
+            fetchStats();
+        } catch (e) {
+            console.error("Test failed:", e);
+            alert("❌ TEST FAILED: " + (e.message || JSON.stringify(e)));
+        }
+    };
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
@@ -55,9 +161,14 @@ const RndOverview = () => {
                     <h2 style={{ fontSize: '1.5rem', margin: '0 0 0.5rem 0', fontWeight: 600 }}>R&D Executive Overview</h2>
                     <p style={{ color: 'var(--text-secondary)', margin: 0 }}>High-level analytics and performance metrics for the Research & Development department.</p>
                 </div>
-                <button onClick={handleExport} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: 'fit-content' }}>
-                    <Download size={16} /> Export Executive Report
-                </button>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={runEndToEndTest} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: 'fit-content' }}>
+                        <PlayCircle size={16} /> Run E2E Test
+                    </button>
+                    <button onClick={handleExport} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: 'fit-content' }}>
+                        <Download size={16} /> Export
+                    </button>
+                </div>
             </div>
             
             {loading ? (

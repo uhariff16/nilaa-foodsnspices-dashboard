@@ -30,6 +30,22 @@ const RndApprovals = () => {
         }
     };
 
+    const handleApprove = async (id) => {
+        if (!window.confirm("Are you sure you want to approve this stage?")) return;
+        try {
+            const { error } = await supabase
+                .from('rnd_approvals')
+                .update({ status: 'Approved', signature_date: new Date().toISOString() })
+                .eq('id', id);
+            
+            if (error) throw error;
+            fetchApprovals(); // Refresh list
+        } catch (err) {
+            console.error("Error approving:", err);
+            alert("Failed to approve: " + err.message);
+        }
+    };
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -71,8 +87,12 @@ const RndApprovals = () => {
                                         </span>
                                     </td>
                                     <td style={{ padding: '0.75rem 1rem' }}>
-                                        <button style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', marginRight: '0.5rem' }}><CheckCircle size={16} /></button>
-                                        <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><Edit2 size={16} /></button>
+                                        {appr.status === 'Pending' && (
+                                            <button onClick={() => handleApprove(appr.id)} style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', marginRight: '0.5rem' }} title="Approve">
+                                                <CheckCircle size={16} />
+                                            </button>
+                                        )}
+                                        <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} title="Edit"><Edit2 size={16} /></button>
                                     </td>
                                 </tr>
                             ))}

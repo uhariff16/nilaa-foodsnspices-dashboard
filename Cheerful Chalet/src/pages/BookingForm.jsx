@@ -415,6 +415,7 @@ export default function BookingForm() {
   };
 
   useEffect(() => {
+    if (bookingForm.is_loading_edit) return;
     calculateBasePrice();
   }, [bookingForm.check_in_date, bookingForm.check_out_date, bookingForm.booking_type, bookingForm.cottage_id, JSON.stringify(bookingForm.room_ids), cottages, rooms]);
 

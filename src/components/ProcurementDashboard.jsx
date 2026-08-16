@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, L
 import { Package, Truck, IndianRupee, Layers } from 'lucide-react';
 import gingerIcon from '../assets/ginger.png';
 import garlicIcon from '../assets/garlic.png';
+import PurchasePendingWidget from './PurchasePendingWidget';
 
 const COLORS = ['#FCD34D', '#E0E7FF', '#34D399', '#F87171', '#60A5FA', '#A78BFA', '#F471B5'];
 
@@ -441,26 +442,11 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                     );
                 })}
 
-                <MetricCard
-                    title="Total Spend"
-                    titleBadge={`${filteredPurchases.length} Bills`}
-                    badgeColor="#fda4af" // Pastel Red (Opaque)
-                    badgeTextColor="#881337" // Dark Red Text
-                    value={`₹${totalSpent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
-                    subtext=""
-                    icon={IndianRupee}
-                    color="#F43F5E"
-                    background="linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(20, 20, 25, 0.6))"
-                    borderColor="rgba(244, 63, 94, 0.3)"
-                    iconColor="#F43F5E"
-                    valueHighlightStyle={{
-                        background: 'rgba(0, 0, 0, 0.3)', // Darker box behind the number
-                        padding: '4px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(244, 63, 94, 0.4)',
-                        width: 'fit-content',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
+                <PurchasePendingWidget 
+                    purchases={purchases}
+                    supplierPayments={supplierPayments}
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
                 />
             </div>
 
@@ -598,13 +584,13 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                                 
                                 {/* Expanded Payment History */}
                                 {expandedSupplier === supplier && (
-                                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(0,0,0,0.2)', fontSize: '0.75rem' }}>
-                                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', paddingBottom: '0.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
+                                    <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', fontSize: '0.8rem' }}>
+                                        <div style={{ marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between' }}>
                                             <span>Payment History</span>
-                                            <span>Date</span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{stats.payments.length} Records</span>
                                         </div>
-                                        {(!stats.payments || stats.payments.length === 0) ? (
-                                            <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', padding: '0.5rem 0' }}>No payments found.</div>
+                                        {stats.payments.length === 0 ? (
+                                            <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.5rem 0' }}>No payment records found.</div>
                                         ) : (
                                             stats.payments.sort((a, b) => (b.parsedDate || b.date).localeCompare(a.parsedDate || a.date)).map((pay, i) => (
                                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', color: 'var(--text-secondary)', borderBottom: i < stats.payments.length - 1 ? '1px dashed rgba(255,255,255,0.05)' : 'none' }}>
@@ -617,6 +603,22 @@ const ProcurementDashboard = ({ stockIn = [], purchases = [], summaryData = [], 
                                 )}
                             </div>
                         ))}
+                    </div>
+                    {/* Summary Row */}
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.75rem 1rem', background: 'rgba(56, 189, 248, 0.05)', borderTop: '1px solid rgba(56, 189, 248, 0.2)'
+                    }}>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.9rem' }}>TOTAL SUMMARY</div>
+                        <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.95rem', textAlign: 'right' }}>
+                            ₹{supplierSummary.reduce((sum, [_, s]) => sum + (s.amount || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.95rem', textAlign: 'right' }}>
+                            ₹{supplierSummary.reduce((sum, [_, s]) => sum + (s.paid || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ fontWeight: 800, color: supplierSummary.reduce((sum, [_, s]) => sum + (s.balance || 0), 0) > 0 ? '#f43f5e' : (supplierSummary.reduce((sum, [_, s]) => sum + (s.balance || 0), 0) < 0 ? '#34D399' : 'var(--text-secondary)'), fontSize: '0.95rem', textAlign: 'right' }}>
+                            ₹{supplierSummary.reduce((sum, [_, s]) => sum + (s.balance || 0), 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        </div>
                     </div>
                 </div>
 

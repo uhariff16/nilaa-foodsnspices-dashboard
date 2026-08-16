@@ -37,7 +37,7 @@ export const Card = ({ title, value, icon: Icon, trend, color, isPercentage, typ
     </div>
 );
 
-const SummaryCards = ({ data = [], manualExpenses = {}, overrideSales, overrideInvoiceCount, totalReturns = 0, serviceRevenue = 0, customerBalance = 0, pendingSupplierPayments = 0, totalPaidToSuppliers = 0, prevMonthProfit = 0, currentMonthProfit = 0, lastMonthPaidProfit = 0, isAdmin = false, isOverall = false }) => {
+const SummaryCards = ({ data = [], manualExpenses = {}, overrideSales, overrideInvoiceCount, totalReturns = 0, serviceRevenue = 0, customerBalance = 0, pendingSupplierPayments = 0, totalPaidToSuppliers = 0, prevMonthProfit = 0, currentMonthProfit = 0, lastMonthPaidProfit = 0, isAdmin = false, isOverall = false, children }) => {
     const stats = useMemo(() => {
         let summarySales = 0;
         let summaryProfit = 0;
@@ -167,6 +167,7 @@ const SummaryCards = ({ data = [], manualExpenses = {}, overrideSales, overrideI
             <Card title="Total Sales" value={stats.sales} subtext={salesSubtext} icon={IndianRupee} color="59, 130, 246" type="sales" />
             <Card title="Sales Returns" value={totalReturns} icon={TrendingDown} color="239, 68, 68" type="return" />
             <Card title="Total Expenses" value={stats.expenses} icon={Wallet} color="239, 68, 68" type="expense" />
+            {children}
             <Card title="Net Profit" value={stats.netProfit} icon={TrendingUp} color="16, 185, 129" type="profit" />
             <Card title="Profit Margin" value={stats.margin} icon={TrendingDown} color="245, 158, 11" isPercentage type="margin" />
             {isAdmin && isOverall && <Card title="Fund balance on Bank" value={bankFundBalance} subtext={bankSubtext} icon={Wallet} color="168, 85, 247" type="profit" />}

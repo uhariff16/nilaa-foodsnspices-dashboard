@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -25,6 +24,7 @@ import { supabase } from '../lib/supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import CustomerInsights from './CustomerInsights';
 import InvestmentsDashboard from './InvestmentsDashboard';
+import PurchasePendingWidget from './PurchasePendingWidget';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -2371,7 +2371,14 @@ const Dashboard = (props) => {
                             prevMonthProfit={prevMonthProfit}
                             isAdmin={isAdmin || hasPermission('dashboard.bank_balance')}
                             isOverall={selectedMonth === 'Overall'}
-                        />
+                        >
+                            <PurchasePendingWidget 
+                                purchases={props.purchaseData || []} 
+                                supplierPayments={props.supplierPayments || []} 
+                                selectedMonth={selectedMonth} 
+                                selectedYear={selectedYear} 
+                            />
+                        </SummaryCards>
 
                         {(() => {
                             const alerts = [];

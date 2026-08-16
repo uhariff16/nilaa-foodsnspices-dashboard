@@ -19,9 +19,11 @@ const SuperAdmin = React.lazy(() => import('./pages/SuperAdmin'));
 const InvestmentAnalysis = React.lazy(() => import('./pages/InvestmentAnalysis'));
 const Staff = React.lazy(() => import('./pages/Staff'));
 const Auth = React.lazy(() => import('./pages/Auth'));
-
+const Home = React.lazy(() => import('./pages/Home'));
+const HowItWorks = React.lazy(() => import('./pages/HowItWorks'));
+const Pricing = React.lazy(() => import('./pages/Pricing'));
 function App() {
-  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans } = useSettingsStore();
+  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans, setLandingPageContent, setWebsitePricing, setOnboardingWizardEnabled } = useSettingsStore();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -45,6 +47,29 @@ function App() {
 
   const handleAuthChange = async (session) => {
     setSession(session);
+
+    // Fetch global settings (pricing, landing page) for all users regardless of auth
+    try {
+      const { data: superAdmins } = await supabase.from('profiles').select('global_settings').eq('role', 'super_admin').limit(1);
+      if (superAdmins && superAdmins.length > 0) {
+        const settings = superAdmins[0].global_settings || {};
+        if (settings.pricing) {
+          setGlobalPlans(settings.pricing);
+        }
+        if (settings.landing_page) {
+          setLandingPageContent(settings.landing_page);
+        }
+        if (settings.website_pricing) {
+          setWebsitePricing(settings.website_pricing);
+        }
+        if (settings.onboarding_wizard_enabled !== undefined) {
+          setOnboardingWizardEnabled(settings.onboarding_wizard_enabled !== false);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch global settings:", err);
+    }
+
     if (session) {
       // Fetch profile first to get the correct role and tenant_id
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
@@ -58,26 +83,26 @@ function App() {
             .select('*')
             .eq('tenant_id', profile.tenant_id);
           
-          setResorts(resorts || []);
-          if (resorts?.length > 0) {
+          if (resorts && resorts.length > 0) {
+            try {
+              const [{ count: cottagesCount }, { count: roomsCount }] = await Promise.all([
+                supabase.from('cottages').select('*', { count: 'exact', head: true }).eq('resort_id', resorts[0].id),
+                supabase.from('rooms').select('*', { count: 'exact', head: true }).eq('resort_id', resorts[0].id)
+              ]);
+              resorts[0].cottagesCount = cottagesCount || 0;
+              resorts[0].roomsCount = roomsCount || 0;
+            } catch (err) {
+              console.error("Error fetching onboarding counts:", err);
+            }
+            setResorts(resorts);
             setActiveResortId(resorts[0].id);
+          } else {
+            setResorts([]);
+            setActiveResortId(null);
           }
         } else {
           setResorts([]);
           setActiveResortId(null);
-        }
-        
-        // Fetch global plans (from super_admin) for all users
-        try {
-          const { data: superAdmins } = await supabase.from('profiles').select('global_settings').eq('role', 'super_admin').limit(1);
-          if (superAdmins && superAdmins.length > 0) {
-            const settings = superAdmins[0].global_settings;
-            if (settings && settings.pricing) {
-              setGlobalPlans(settings.pricing);
-            }
-          }
-        } catch (err) {
-          console.error("Failed to fetch global plans:", err);
         }
       }
     } else {
@@ -86,7 +111,6 @@ function App() {
       setResorts([]);
       setActiveResortId(null);
       setIsRecovering(false);
-      setGlobalPlans(null);
     }
   };
 
@@ -128,8 +152,11 @@ function App() {
             element={session && !isRecovering && !window.location.hash.includes('type=recovery') ? <Navigate to="/dashboard" replace /> : <Auth />} 
           />
           
-          <Route path="/" element={session ? <AppLayout /> : <Navigate to="/auth" replace />}>
-            <Route index element={profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/" element={!session ? <Home /> : (profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />)} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/pricing" element={<Pricing />} />
+          
+          <Route element={session ? <AppLayout /> : <Navigate to="/auth" replace />}>
             <Route path="dashboard" element={profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Dashboard />} />
             <Route path="setup" element={<CottagesRooms />} />
             <Route path="bookings" element={<Bookings />} />

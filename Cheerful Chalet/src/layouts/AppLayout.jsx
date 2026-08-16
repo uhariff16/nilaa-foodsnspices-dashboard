@@ -4,19 +4,12 @@ import { LayoutDashboard, Home, CalendarDays, Wallet, Settings as SettingsIcon, 
 import { useSettingsStore } from '../lib/store';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import OnboardingWizard from '../components/OnboardingWizard';
 
 export default function AppLayout() {
-  const { resortName, logoUrl, profile, resorts, activeResortId, setActiveResortId, logout } = useSettingsStore();
+  const { resortName, logoUrl, profile, resorts, activeResortId, setActiveResortId, logout, onboardingWizardEnabled } = useSettingsStore();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const location = useLocation();
-
-  const activeResort = resorts.find(r => r.id === activeResortId);
-
-  const isStaff = profile?.role === 'staff';
-  const isAdmin = profile?.role === 'tenant_admin';
-  const isSuper = profile?.role === 'super_admin';
-
-  let navLinks = [];
 
   const isManagementActive = ['/resorts', '/setup', '/staff'].includes(location.pathname);
   const [isManagementOpen, setIsManagementOpen] = React.useState(isManagementActive);
@@ -26,6 +19,27 @@ export default function AppLayout() {
       setIsManagementOpen(true);
     }
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  const activeResort = (resorts || []).find(r => r.id === activeResortId) || null;
+
+  const isStaff = profile?.role === 'staff';
+  const isAdmin = profile?.role === 'tenant_admin';
+  const isSuper = profile?.role === 'super_admin';
+
+  const needsOnboarding = onboardingWizardEnabled !== false && profile?.role === 'tenant_admin' && (
+    !resorts || resorts.length === 0 || 
+    (resorts.length === 1 && resorts[0] && (resorts[0].cottagesCount === 0 || resorts[0].roomsCount === 0))
+  );
+
+  if (needsOnboarding) {
+    return <OnboardingWizard />;
+  }
+
+  let navLinks = [];
 
   if (isStaff) {
     // Staff only see Bookings, Calendar, and Settings
@@ -67,10 +81,7 @@ export default function AppLayout() {
     navLinks.push({ to: '/admin', label: 'System Admin', icon: <ShieldAlert size={20} color="var(--danger)" /> });
   }
 
-  // Close sidebar on navigation change (for mobile)
-  React.useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
+
 
   return (
     <div className="app-container">
@@ -83,13 +94,8 @@ export default function AppLayout() {
       {/* Sidebar */}
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="brand" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {activeResort?.logo_url || logoUrl ? (
-              <img src={activeResort?.logo_url || logoUrl} alt="Logo" className="brand-logo" style={{ height: '32px' }} />
-            ) : (
-              <div className="brand-logo" style={{ background: 'var(--primary)', borderRadius: '4px', width: '32px', height: '32px' }}></div>
-            )}
-            <span className="brand-text" style={{ fontWeight: 700, fontSize: '1rem' }}>{activeResort?.name || resortName}</span>
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '0.25rem 0' }}>
+            <img src="/stay-pilot-logo.png" alt="Stay Pilot" style={{ height: 'auto', width: '100%', maxWidth: '240px', objectFit: 'contain' }} />
           </div>
           
           <button 
@@ -101,7 +107,7 @@ export default function AppLayout() {
           </button>
         </div>
 
-        {resorts.length > 1 && (
+        {(resorts || []).length > 1 && (
           <div style={{ padding: '0 1rem 1rem' }}>
             <select 
               className="form-select" 
@@ -109,7 +115,7 @@ export default function AppLayout() {
               value={activeResortId || ''}
               onChange={(e) => setActiveResortId(e.target.value)}
             >
-              {resorts.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {(resorts || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
         )}
@@ -211,12 +217,27 @@ export default function AppLayout() {
             <button className="menu-toggle" onClick={() => setIsSidebarOpen(true)}>
               <Menu size={24} />
             </button>
-            <h2 style={{ fontSize: '1.25rem' }}>{activeResort?.name || 'Welcome'}</h2>
+            <div className="header-brand-wrap" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <style dangerouslySetInnerHTML={{__html: `
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+                
+                @media (max-width: 640px) {
+                  .header-brand-sep, .header-brand-tag {
+                    display: none !important;
+                  }
+                }
+              `}} />
+              <h2 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 800, color: '#0F2C59', fontFamily: "'Outfit', sans-serif" }}>Stay Pilot</h2>
+              <span className="header-brand-sep" style={{ color: '#cbd5e1', fontWeight: 300 }}>|</span>
+              <span className="header-brand-tag" style={{ fontSize: '0.9rem', color: '#059669', fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '0.02em', marginTop: '2px' }}>
+                Know Your Bookings. Know Your Numbers.
+              </span>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', fontSize: '0.75rem' }}>
               <span style={{ fontWeight: 'bold' }}>{profile?.full_name}</span>
-              <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{profile?.role.replace('_', ' ')}</span>
+              <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{profile?.role?.replace('_', ' ') || ''}</span>
             </div>
             <button 
               className="btn btn-outline" 

@@ -5,7 +5,7 @@ export const useSettingsStore = create(
   persist(
     (set) => ({
       theme: 'light',
-      resortName: 'Hotel Manager',
+      resortName: 'Stay Pilot',
       primaryColor: '#2f855a',
       contactPhone: '',
       contactEmail: '',
@@ -18,6 +18,9 @@ export const useSettingsStore = create(
       activeResortId: null,
       isRecovering: false,
       globalPlans: null,
+      landingPageContent: null,
+      websitePricing: null,
+      onboardingWizardEnabled: true,
       
       updateSettings: (newSettings) => set((state) => ({ ...state, ...newSettings })),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
@@ -28,7 +31,10 @@ export const useSettingsStore = create(
       setActiveResortId: (id) => set({ activeResortId: id }),
       setIsRecovering: (isRecovering) => set({ isRecovering }),
       setGlobalPlans: (globalPlans) => set({ globalPlans }),
-      logout: () => set({ session: null, profile: null, resorts: [], activeResortId: null, isRecovering: false, globalPlans: null })
+      setLandingPageContent: (landingPageContent) => set({ landingPageContent }),
+      setWebsitePricing: (websitePricing) => set({ websitePricing }),
+      setOnboardingWizardEnabled: (enabled) => set({ onboardingWizardEnabled: enabled }),
+      logout: () => set({ session: null, profile: null, resorts: [], activeResortId: null, isRecovering: false, globalPlans: null, landingPageContent: null, websitePricing: null, onboardingWizardEnabled: true })
     }),
     {
       name: 'hotel-manager-settings',

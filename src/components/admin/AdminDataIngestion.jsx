@@ -8,6 +8,15 @@ import { loadGapi, loadGis, createPicker, downloadDriveFile } from '../../utils/
 
 const AdminDataIngestion = () => {
     const [status, setStatus] = useState({ type: 'idle', message: '' });
+    const [lockedMonths, setLockedMonths] = useState([]);
+
+    React.useEffect(() => {
+        const fetchLocked = async () => {
+            const { data } = await supabase.from('system_settings').select('value').eq('key', 'locked_months').maybeSingle();
+            if (data && data.value) setLockedMonths(JSON.parse(data.value));
+        };
+        fetchLocked();
+    }, []);
     const [loading, setLoading] = useState(false);
     const [dbReport, setDbReport] = useState(null);
     const [uploadMode, setUploadMode] = useState('file'); // 'file' | 'folder'

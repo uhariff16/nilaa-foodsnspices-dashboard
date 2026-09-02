@@ -123,9 +123,9 @@ const SummaryCards = ({ data = [], manualExpenses = {}, overrideSales, overrideI
             sales = overrideSales;
         }
 
-        let netProfit = sales - expenses;
+        let netProfit = sales - expenses - (totalReturns || 0);
         if (summarySales > 0) {
-            // [FIX] User Request: Net Profit MUST be (Sales - Expenses).
+            // [FIX] User Request: Net Profit MUST be (Sales - Expenses - Returns).
         }
 
         const margin = sales > 0 ? (netProfit / sales) * 100 : 0;

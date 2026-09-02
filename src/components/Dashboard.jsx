@@ -845,9 +845,11 @@ const Dashboard = (props) => {
 
     // [NEW] Calculate Previous Month and Current Month Profit for Bank Reconciliation
     const currentMonthProfit = React.useMemo(() => {
-        if (selectedMonth === 'Overall') return salesRevenue - grandTotalExpenses;
+        if (selectedMonth === 'Overall') {
+            return (salesRevenue - totalReturns) - grandTotalExpenses;
+        }
         return calculateMonthProfitHelper(selectedMonth);
-    }, [selectedMonth, salesRevenue, grandTotalExpenses, calculateMonthProfitHelper]);
+    }, [selectedMonth, salesRevenue, totalReturns, grandTotalExpenses, calculateMonthProfitHelper]);
 
     const prevMonthProfit = React.useMemo(() => {
         if (!selectedMonth || selectedMonth === 'Overall') {

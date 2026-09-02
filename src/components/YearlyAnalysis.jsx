@@ -2818,7 +2818,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                                                     value={status}
                                                                                     onChange={async (e) => {
                                                                                         const newVal = e.target.value;
-                                                                                        if (p) await supabase.from('profit_payouts').update({ status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null }).eq('id', p.id);
+                                                                                        if (p) await supabase.from('profit_payouts').update({ status: newVal, amount: share, paid_at: newVal === 'paid' ? new Date().toISOString() : null }).eq('id', p.id);
                                                                                         else await supabase.from('profit_payouts').insert({ stakeholder_id: s.id, month_year: `${month.name} ${selectedYear}`, amount: share, status: newVal, paid_at: newVal === 'paid' ? new Date().toISOString() : null });
                                                                                         await logProfitHubAction('Status Change', { month: `${month.name} ${selectedYear}`, stakeholder: s.name, status: newVal });
                                                                                         await fetchProfitHubData();

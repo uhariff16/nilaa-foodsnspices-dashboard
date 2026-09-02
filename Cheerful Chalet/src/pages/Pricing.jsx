@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 import { useSettingsStore } from '../lib/store';
 
 export default function Pricing() {
-  const { websitePricing, profile } = useSettingsStore();
+  const { websitePricing, profile, globalPlans } = useSettingsStore();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const isPreviewParam = searchParams.get('preview') === 'true';
@@ -22,7 +22,26 @@ export default function Pricing() {
     
     // Filter and sort plans
     const activePlans = Object.entries(sourceData)
-      .map(([key, plan]) => ({ key, ...plan }))
+      .map(([key, plan]) => {
+        if (isPreview && globalPlans) {
+          const internal = globalPlans[key] || {};
+          return {
+            key,
+            ...plan,
+            monthlyPrice: internal.price || 0,
+            originalPrice: internal.offerPrice ? internal.price : '',
+            promotionalPrice: internal.offerPrice || '',
+            offerText: internal.offerPrice && internal.price ? `Save ${Math.round(((internal.price - internal.offerPrice) / internal.price) * 100)}%` : '',
+            offerStartDate: internal.offerStartDate || '',
+            offerEndDate: internal.offerEndDate || '',
+            offerActive: internal.offerActive || false,
+            publicFeatures: internal.features 
+              ? internal.features.filter(f => f.enabled !== false).map(f => f.name)
+              : plan.publicFeatures,
+          };
+        }
+        return { key, ...plan };
+      })
       .filter(plan => plan.showOnWebsite !== false)
       .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99));
 
@@ -30,19 +49,35 @@ export default function Pricing() {
   };
 
   const isPromoActive = (plan) => {
-    if (!plan.promotionalPrice) return false;
+    console.log("Checking promo for", plan.key, plan);
+    if (!plan.promotionalPrice) {
+      console.log("Failed: no promotionalPrice");
+      return false;
+    }
+    if (plan.offerActive === false) {
+      console.log("Failed: offerActive is false");
+      return false;
+    }
+    
     const now = new Date().setHours(0,0,0,0);
     
     if (plan.offerStartDate) {
       const start = new Date(plan.offerStartDate).setHours(0,0,0,0);
-      if (now < start) return false;
+      if (now < start) {
+        console.log("Failed: now < start", new Date(now), new Date(start));
+        return false;
+      }
     }
     
     if (plan.offerEndDate) {
       const end = new Date(plan.offerEndDate).setHours(23,59,59,999);
-      if (now > end) return false;
+      if (now > end) {
+        console.log("Failed: now > end", new Date(now), new Date(end));
+        return false;
+      }
     }
     
+    console.log("Success: Promo is active!");
     return true;
   };
 
@@ -90,16 +125,16 @@ export default function Pricing() {
           <img src="/stay-pilot-logo.png" alt="Stay Pilot Logo" style={{ height: '36px', width: 'auto', display: 'block' }} />
         </Link>
         
-        <nav style={{ display: 'flex', gap: '2.5rem', fontWeight: 600, color: '#334155', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>Home</Link>
-          <Link to="/#features" style={{ color: 'inherit', textDecoration: 'none' }}>Features</Link>
-          <Link to="/how-it-works" style={{ color: 'inherit', textDecoration: 'none' }}>How It Works</Link>
+        <nav className="desktop-nav" style={{ display: 'flex', gap: '2.5rem', alignItems: 'center', fontWeight: 600, color: '#334155', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <Link to="/" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Home</Link>
+          <a href="/#features" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Features</a>
+          <Link to="/how-it-works" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>How It Works</Link>
           <Link to="/pricing" style={{ color: '#059669', textDecoration: 'none' }}>Pricing</Link>
         </nav>
         
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <Link to="/auth" style={{ padding: '0.5rem 1rem', fontWeight: 600, color: '#0F2C59', textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign In</Link>
-          <Link to="/auth?mode=signup" style={{ 
+          <Link to="/auth" className="desktop-btn" style={{ padding: '0.5rem 1rem', fontWeight: 600, color: '#0F2C59', textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign In</Link>
+          <Link to="/auth?mode=signup" className="btn" style={{ 
             padding: '0.65rem 1.6rem', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', 
             color: 'white', borderRadius: '8px', fontWeight: 700, textDecoration: 'none',
             boxShadow: '0 4px 15px rgba(5, 150, 105, 0.25)', fontFamily: "'Plus Jakarta Sans', sans-serif"
@@ -132,9 +167,9 @@ export default function Pricing() {
           <div style={{ 
             display: 'flex', 
             flexWrap: 'wrap', 
-            gap: '2rem', 
+            gap: '1.5rem', 
             justifyContent: 'center', 
-            maxWidth: '1200px', 
+            maxWidth: '1400px', 
             margin: '0 auto',
             alignItems: 'stretch'
           }}>
@@ -146,7 +181,7 @@ export default function Pricing() {
               
               return (
                 <div key={plan.key} style={{ 
-                  flex: '1 1 300px',
+                  flex: '1 1 250px',
                   maxWidth: '380px',
                   background: plan.highlightPlan ? 'linear-gradient(135deg, #0F2C59 0%, #173b75 100%)' : 'rgba(255, 255, 255, 0.75)', 
                   backdropFilter: 'blur(10px)',
@@ -157,9 +192,8 @@ export default function Pricing() {
                   display: 'flex',
                   flexDirection: 'column',
                   position: 'relative',
-                  transform: plan.highlightPlan ? 'scale(1.03)' : 'none',
                   zIndex: plan.highlightPlan ? 2 : 1,
-                  transition: 'transform 0.3s ease'
+                  transition: 'all 0.3s ease'
                 }}>
                   
                   {plan.pricingLabel && (
@@ -270,21 +304,23 @@ export default function Pricing() {
                     </ul>
                   </div>
 
-                  <Link 
-                    to={plan.highlightPlan ? "/auth?mode=signup" : "/auth"} 
-                    style={{ 
-                      display: 'block', width: '100%', padding: '1rem', textAlign: 'center', borderRadius: '12px',
-                      background: plan.highlightPlan ? 'white' : 'transparent',
-                      color: plan.highlightPlan ? '#0F2C59' : '#059669',
-                      border: plan.highlightPlan ? 'none' : '2px solid #059669',
-                      fontWeight: 700, textDecoration: 'none', fontSize: '1.05rem',
-                      transition: 'all 0.2s',
-                      fontFamily: "'Plus Jakarta Sans', sans-serif",
-                      boxShadow: plan.highlightPlan ? '0 4px 15px rgba(0,0,0,0.1)' : 'none'
-                    }}
-                  >
-                    {plan.ctaButtonText || 'Choose Plan'}
-                  </Link>
+                  <div style={{ marginTop: 'auto' }}>
+                    <Link 
+                      to={plan.highlightPlan ? "/auth?mode=signup" : "/auth"} 
+                      style={{ 
+                        display: 'block', width: '100%', padding: '1rem', textAlign: 'center', borderRadius: '12px',
+                        background: plan.highlightPlan ? 'white' : 'transparent',
+                        color: plan.highlightPlan ? '#0F2C59' : '#059669',
+                        border: plan.highlightPlan ? 'none' : '2px solid #059669',
+                        fontWeight: 700, textDecoration: 'none', fontSize: '1.05rem',
+                        transition: 'all 0.2s',
+                        fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        boxShadow: plan.highlightPlan ? '0 4px 15px rgba(0,0,0,0.1)' : 'none'
+                      }}
+                    >
+                      {plan.ctaButtonText || 'Choose Plan'}
+                    </Link>
+                  </div>
                 </div>
               );
             })}

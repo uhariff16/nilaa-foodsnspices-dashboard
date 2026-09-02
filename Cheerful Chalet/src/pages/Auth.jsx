@@ -3,10 +3,18 @@ import { useLocation, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useSettingsStore } from '../lib/store';
 import { LogIn, UserPlus, ShieldCheck, Mail, Lock, User, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Preferences } from '@capacitor/preferences';
 
 export default function Auth() {
   const { isRecovering, setIsRecovering } = useSettingsStore();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isLogin, setIsLogin] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -21,29 +29,20 @@ export default function Auth() {
     fullName: ''
   });
 
-  useEffect(() => {
-    // 1. Check for errors in URL hash (e.g., expired links)
-    const hash = window.location.hash;
-    if (hash) {
-      const params = new URLSearchParams(hash.substring(1));
-      const error_description = params.get('error_description');
-      const error_code = params.get('error_code');
-      
-      if (error_description) {
-        setError(error_description.replace(/\+/g, ' '));
-        // Clear hash so error doesn't persist on refresh
-        window.history.replaceState(null, null, window.location.pathname);
-      }
-    }
-  }, []);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  const location = useLocation();
+
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('mode') === 'signup') {
-      setIsLogin(false);
-    }
-  }, [location.search]);
+    const initAuth = async () => {
+      const savedEmail = await Preferences.get({ key: 'rememberMeEmail' });
+      const savedPassword = await Preferences.get({ key: 'rememberMePassword' });
+      if (savedEmail.value && savedPassword.value) {
+        setFormData(prev => ({ ...prev, email: savedEmail.value, password: savedPassword.value }));
+        setRememberMe(true);
+      }
+    };
+    initAuth();
+  }, []);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -84,6 +83,14 @@ export default function Auth() {
           password: formData.password,
         });
         if (error) throw error;
+        
+        if (rememberMe) {
+          await Preferences.set({ key: 'rememberMeEmail', value: loginEmail });
+          await Preferences.set({ key: 'rememberMePassword', value: formData.password });
+        } else {
+          await Preferences.remove({ key: 'rememberMeEmail' });
+          await Preferences.remove({ key: 'rememberMePassword' });
+        }
       } else {
         if (formData.password !== formData.confirmPassword) {
           throw new Error("Passwords do not match");
@@ -100,10 +107,22 @@ export default function Auth() {
         });
         if (authError) throw authError;
 
-        alert("Signup successful! Please check your email for verification.");
+        // Supabase returns an empty identities array if the email is already taken 
+        // (when "Prevent Email Enumeration" is enabled in settings)
+        if (authData?.user?.identities && authData.user.identities.length === 0) {
+          throw new Error("An account with this email already exists. Please sign in instead.");
+        }
+
+        setMessage("Signup successful! Please check your email for a verification link before signing in.");
+        setIsLogin(true);
+        setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
       }
     } catch (err) {
-      setError(err.message);
+      if (err.message === 'Email not confirmed') {
+        setError('Please verify your email address before signing in.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -115,26 +134,40 @@ export default function Auth() {
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center', 
-      background: 'linear-gradient(135deg, #111418 0%, #1e2329 100%)',
-      padding: '1.5rem'
+      background: isMobile 
+        ? 'var(--bg-color)' 
+        : 'linear-gradient(rgba(17,20,24,0.6), rgba(17,20,24,0.8)), url(/hotel_auth_bg.jpg) center/cover no-repeat',
+      padding: isMobile ? '0' : '1.5rem'
     }}>
       <div className="card" style={{ 
         width: '100%', 
-        maxWidth: '450px', 
-        padding: '2.5rem', 
-        border: '1px solid var(--border)',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+        maxWidth: isMobile ? '100%' : '450px', 
+        minHeight: isMobile ? '100vh' : 'auto',
+        padding: isMobile ? '2rem 1.5rem' : '2.5rem', 
+        border: isMobile ? 'none' : undefined,
+        boxShadow: isMobile ? 'none' : undefined,
+        borderRadius: isMobile ? '0' : undefined,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center'
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div style={{ margin: '0 auto 1.5rem', display: 'flex', justifyContent: 'center' }}>
-            <Link to="/">
-              <img src="/stay-pilot-logo-full.jpg" alt="Stay Pilot Logo" style={{ width: '100%', maxWidth: '280px', height: 'auto', objectFit: 'contain' }} />
+        <div style={{ textAlign: 'center', marginBottom: isMobile ? '1.5rem' : '2rem' }}>
+          <div style={{ margin: isMobile ? '0 auto 1.5rem' : '0 auto 2rem', display: 'flex', justifyContent: 'center' }}>
+            <Link to="/" style={{ 
+              display: 'inline-block', 
+              background: '#ffffff', 
+              padding: '1.25rem', 
+              borderRadius: '24px', 
+              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05)',
+              border: '1px solid rgba(0,0,0,0.05)'
+            }}>
+              <img src="/stay-pilot-logo-full.jpg" alt="Stay Pilot Logo" style={{ width: '100%', maxWidth: isMobile ? '120px' : '180px', height: 'auto', objectFit: 'contain', display: 'block' }} />
             </Link>
           </div>
-          <h1 style={{ fontSize: '2rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-            {isRecovering ? 'Set New Password' : (isForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome to Stay Pilot' : 'Sign up as Tenant'))}
+          <h1 style={{ fontSize: isMobile ? '1.5rem' : '2rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+            {isRecovering ? 'Reset Password' : (isForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome to Stay Pilot' : 'Create an Account'))}
           </h1>
-          <p style={{ color: 'var(--text-muted)' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.9rem' : '1rem' }}>
             {isRecovering 
               ? 'Enter your new secure password below'
               : (isForgotPassword 
@@ -261,6 +294,20 @@ export default function Auth() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {isLogin && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                  <input 
+                    type="checkbox" 
+                    id="rememberMe" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    style={{ width: 'auto', margin: 0, accentColor: 'var(--primary)' }}
+                  />
+                  <label htmlFor="rememberMe" style={{ fontSize: '0.875rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                    Remember Me
+                  </label>
+                </div>
+              )}
             </div>
           )}
 

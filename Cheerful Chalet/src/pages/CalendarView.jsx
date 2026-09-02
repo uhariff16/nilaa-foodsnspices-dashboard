@@ -55,9 +55,10 @@ export default function CalendarView() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [viewType, setViewType] = useState('timeline'); // 'timeline', 'monthly', 'agenda'
+  const [viewType, setViewType] = useState('monthly'); // 'monthly', 'timeline', 'agenda'
   const [currentDate, setCurrentDate] = useState(startOfMonth(new Date()));
   const [dragSelection, setDragSelection] = useState(null);
+  const [monthSelection, setMonthSelection] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -551,8 +552,34 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
       prefill.cottage_id = cottageId;
       prefill.room_ids = [itemId];
     }
-    setDragSelection(null);
     navigate('/bookings/new', { state: { prefill } });
+  };
+
+  const handleMonthCellClick = (date, cottageId) => {
+    if (startOfDay(date) < startOfDay(new Date())) return; // Cannot book past dates
+
+    if (!monthSelection || monthSelection.cottageId !== cottageId || monthSelection.end) {
+      // Start new selection
+      setMonthSelection({ start: date, end: null, cottageId });
+    } else {
+      // Complete selection, show range, then navigate
+      setMonthSelection({ ...monthSelection, end: date });
+      
+      const datesArr = [monthSelection.start, date].sort((a, b) => a - b);
+      const inDate = datesArr[0];
+      const outDate = addDays(datesArr[1], 1); // Checkout is next day
+      let prefill = {
+         check_in_date: format(inDate, 'yyyy-MM-dd'),
+         check_out_date: format(outDate, 'yyyy-MM-dd'),
+         booking_type: 'Room',
+         cottage_id: cottageId
+      };
+      
+      setTimeout(() => {
+        setMonthSelection(null);
+        navigate('/bookings/new', { state: { prefill } });
+      }, 400); // 400ms delay to let user see the selection
+    }
   };
 
   const goToToday = () => {
@@ -598,24 +625,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
     };
   }, [bookings, cottages, rooms]);
 
-  const handleExport = () => {
-    const exportData = bookings.map(b => ({
-      'Guest Name': b.guest_name,
-      'Phone': b.phone_number,
-      'Check-in': b.check_in_date,
-      'Check-out': b.check_out_date,
-      'Reference': b.reference_number,
-      'Status': b.status,
-      'Total Amount': b.total_amount,
-      'Type': b.booking_type,
-      'Property': cottages.find(c => c.id === b.cottage_id)?.name || 'N/A'
-    }));
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Bookings');
-    XLSX.writeFile(wb, `Bookings_Calendar_Export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
 
   if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80vh', gap: '1rem', color: 'var(--text-muted)' }}><Clock className="animate-spin" /> Loading Availability...</div>;
 
@@ -624,7 +634,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
     { label: 'Entire Property', color: 'var(--cottage-block)' },
     { label: 'Room Booking', color: 'var(--room-block)' },
     { label: 'Pending', color: 'var(--pending-block)' },
-    { label: 'Selected', color: 'var(--primary)' },
+    { label: 'Selected', color: '#3182ce' },
   ];
 
   return (
@@ -649,14 +659,14 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
     }}>
       
       {/* HEADER SECTION */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', flexWrap: 'wrap', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: isMobile ? '1rem' : '2rem', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', width: '100%' }}>
           <div>
-            <h1 style={{ fontSize: '2.25rem', marginBottom: '0.5rem', fontWeight: 800 }}>Availability Calendar</h1>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Monitor and manage resort occupancy across all units</p>
+            <h1 style={{ fontSize: isMobile ? '1.5rem' : '2.25rem', marginBottom: '0.5rem', fontWeight: 800 }}>Availability Calendar</h1>
+            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: isMobile ? '0.85rem' : '1rem' }}>Monitor and manage resort occupancy across all units</p>
           </div>
           
-          <div style={{ display: 'flex', gap: '1rem', padding: '0.75rem 1.5rem', background: 'var(--bg-secondary)', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', gap: '1rem', padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem', background: 'var(--bg-secondary)', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', alignSelf: isMobile ? 'stretch' : 'auto', justifyContent: isMobile ? 'space-around' : 'flex-start' }}>
              <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Occupancy</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--primary)' }}>{occupancyStats.percent}%</div>
@@ -674,8 +684,8 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
           </div>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-           <div className="search-bar" style={{ position: 'relative', width: '300px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
+           <div className="search-bar" style={{ position: 'relative', width: isMobile ? '100%' : '300px' }}>
               <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
@@ -683,10 +693,10 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                 placeholder="Find guest or reference..." 
                 value={searchTerm} 
                 onChange={e => setSearchTerm(e.target.value)}
-                style={{ paddingLeft: '2.75rem', height: '44px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+                style={{ paddingLeft: '2.75rem', height: '44px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', width: '100%' }}
               />
            </div>
-           <button className="btn btn-primary" onClick={() => navigate('/bookings/new')} style={{ height: '44px' }}>
+           <button className="btn btn-primary" onClick={() => navigate('/bookings/new')} style={{ height: '44px', width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
              <Calendar size={18} /> New Booking
            </button>
         </div>
@@ -697,10 +707,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
         {/* CONTROL BAR */}
         <div style={{ padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
-             <button className="btn btn-outline" onClick={handleExport} style={{ height: '38px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flex: isMobile ? '1' : 'none', justifyContent: 'center' }}>
-                <Globe size={16} /> <span className={isMobile ? "desktop-only" : ""}>Export</span>
-             </button>
-             
+
              <button 
                 className="btn btn-outline" 
                 onClick={() => setIsFullScreen(!isFullScreen)} 
@@ -733,11 +740,11 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                 <Copy size={16} /> <span className={isMobile ? "desktop-only" : ""}>Screenshot</span>
              </button>
              <div className="view-switcher" style={{ display: 'flex', background: 'var(--bg-color)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
-                <button onClick={() => setViewType('timeline')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'timeline' ? 'var(--primary)' : 'transparent', color: viewType === 'timeline' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
-                    <Columns size={14} /> Timeline
-                </button>
                 <button onClick={() => setViewType('monthly')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'monthly' ? 'var(--primary)' : 'transparent', color: viewType === 'monthly' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
                     <LayoutGrid size={14} /> Month
+                </button>
+                <button onClick={() => setViewType('timeline')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'timeline' ? 'var(--primary)' : 'transparent', color: viewType === 'timeline' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
+                    <Columns size={14} /> Timeline
                 </button>
                 <button onClick={() => setViewType('agenda')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'agenda' ? 'var(--primary)' : 'transparent', color: viewType === 'agenda' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
                     <List size={14} /> Agenda
@@ -894,35 +901,59 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                           const isCurrentMonth = d.getMonth() === currentDate.getMonth();
                           const isTodayDate = isToday(d);
                           // Filter bookings specifically for this property
-                          const dayBookings = filteredBookings.filter(b => b.cottage_id === c.id && isWithinInterval(d, { start: startOfDay(new Date(b.check_in_date)), end: startOfDay(new Date(b.check_out_date)) }));
+                          const dayBookings = filteredBookings.filter(b => {
+                            if (b.cottage_id !== c.id) return false;
+                            const bIn = startOfDay(new Date(b.check_in_date));
+                            const bOut = startOfDay(new Date(b.check_out_date));
+                            return d >= bIn && d < bOut;
+                          });
+                          // Determine color coding based on occupancy
+                          const cottageRooms = rooms.filter(r => r.cottage_id === c.id);
+                          const totalRooms = cottageRooms.length;
+                          const bookedRoomIds = new Set(dayBookings.flatMap(b => b.room_ids || []));
+                          const isEntirePropertyBooked = dayBookings.some(b => !b.room_ids || b.room_ids.length === 0 || b.booking_type === 'Entire Property');
+                          const hasPending = dayBookings.some(b => b.status === 'Pending');
+
+                          let occupancyColor = isCurrentMonth ? 'var(--available)' : 'var(--bg-secondary)'; // available
+                          if (dayBookings.length > 0) {
+                            if (hasPending) {
+                              occupancyColor = 'var(--pending-block)';
+                            } else if (isEntirePropertyBooked || (totalRooms > 0 && bookedRoomIds.size >= totalRooms)) {
+                              occupancyColor = 'var(--cottage-block)'; // fully booked (red)
+                            } else {
+                              occupancyColor = 'var(--room-block)'; // partially booked (light red)
+                            }
+                          }
+
+                          const isSelected = monthSelection?.cottageId === c.id && monthSelection?.start && 
+                            (monthSelection.end 
+                              ? (d >= Math.min(monthSelection.start, monthSelection.end) && d <= Math.max(monthSelection.start, monthSelection.end))
+                              : isSameDay(d, monthSelection.start));
+
+                          if (isSelected) {
+                            occupancyColor = '#3182ce';
+                          }
+                          
+                          const isPast = startOfDay(d) < startOfDay(new Date());
                           
                           return (
-                            <div key={d.toString()} style={{ minWidth: 0, overflow: 'hidden', minHeight: isMobile ? '60px' : '120px', padding: isMobile ? '0.25rem' : '0.5rem', background: isCurrentMonth ? 'white' : 'var(--bg-color)', opacity: isCurrentMonth ? 1 : 0.4, position: 'relative', transition: 'all 0.2s' }}>
-                              <div style={{ fontWeight: '900', marginBottom: isMobile ? '0.25rem' : '0.5rem', fontSize: isMobile ? '0.85rem' : '1rem', color: isTodayDate ? 'var(--primary)' : 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'space-between' }}>
+                            <div key={d.toString()} 
+                                 onClick={() => { if (!isPast) handleMonthCellClick(d, c.id) }}
+                                 style={{ 
+                                   minWidth: 0, 
+                                   overflow: 'hidden', 
+                                   minHeight: isMobile ? '45px' : '55px', 
+                                   padding: isMobile ? '0.25rem' : '0.4rem', 
+                                   background: (isPast && occupancyColor === (isCurrentMonth ? 'var(--available)' : 'var(--bg-secondary)')) ? 'var(--border)' : occupancyColor, 
+                                   opacity: isPast ? 0.5 : (isCurrentMonth ? 1 : 0.4), 
+                                   filter: isPast ? 'grayscale(80%)' : 'none',
+                                   position: 'relative', 
+                                   transition: 'all 0.2s', 
+                                   cursor: isPast ? 'not-allowed' : 'pointer' 
+                                 }}>
+                              <div style={{ fontWeight: '900', marginBottom: isMobile ? '0.25rem' : '0.5rem', fontSize: isMobile ? '0.8rem' : '0.9rem', color: isSelected || (occupancyColor !== 'var(--available)' && occupancyColor !== 'var(--bg-secondary)') ? 'white' : (isTodayDate ? 'var(--primary)' : 'var(--text-main)'), display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'space-between' }}>
                                   {format(d, 'd')}
-                                  {isTodayDate && !isMobile && <span style={{ fontSize: '0.5rem', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '10px', textTransform: 'uppercase' }}>Today</span>}
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                {dayBookings.slice(0, isMobile ? 2 : 3).map(b => (
-                                  <div key={b.id} 
-                                       onClick={() => setSelectedBooking(b)} 
-                                       onMouseEnter={(e) => { setHoveredBooking(b); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
-                                       onMouseLeave={() => setHoveredBooking(null)}
-                                       style={{ 
-                                          fontSize: isMobile ? '0.55rem' : '0.75rem', padding: isMobile ? '0.15rem' : '0.35rem 0.6rem', borderRadius: '4px', 
-                                          background: b.status === 'Checked-in' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-                                          color: b.status === 'Checked-in' ? '#6366f1' : '#10b981', 
-                                          borderLeft: `2px solid ${b.status === 'Checked-in' ? '#6366f1' : '#10b981'}`, 
-                                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
-                                          fontWeight: 700,
-                                          transform: hoveredBooking?.id === b.id ? 'translateX(4px)' : 'none',
-                                          transition: 'transform 0.2s',
-                                          textAlign: isMobile ? 'center' : 'left'
-                                       }}>
-                                    {isMobile ? b.guest_name.split(' ')[0] : b.guest_name}
-                                  </div>
-                                ))}
-                                {dayBookings.length > (isMobile ? 2 : 3) && <small style={{ color: 'var(--text-muted)', fontWeight: 700, textAlign: 'center', display: 'block', marginTop: '0.25rem', fontSize: isMobile ? '0.55rem' : '0.7rem' }}>+ {dayBookings.length - (isMobile ? 2 : 3)}</small>}
+                                  {isTodayDate && !isMobile && <span style={{ fontSize: '0.5rem', background: isSelected ? 'white' : 'var(--primary)', color: isSelected ? '#3182ce' : 'white', padding: '1px 4px', borderRadius: '10px', textTransform: 'uppercase' }}>Today</span>}
                               </div>
                             </div>
                           );
@@ -952,7 +983,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                   const monthStart = startOfMonth(currentDate);
                   const monthEnd = endOfMonth(currentDate);
                   return checkIn <= monthEnd && checkOut >= monthStart;
-                }).sort((a,b) => new Date(a.check_in_date.replace(/-/g, '/')) - new Date(b.check_in_date.replace(/-/g, '/')));
+                }).sort((a,b) => new Date(b.check_in_date.replace(/-/g, '/')) - new Date(a.check_in_date.replace(/-/g, '/')));
                 
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -964,35 +995,36 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                       <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', paddingLeft: '0.5rem' }}>No bookings for this property in this period.</p>
                     ) : cottageBookings.map(b => (
                       <div key={b.id} className="card" onClick={() => setSelectedBooking(b)} style={{ padding: '1.25rem', cursor: 'pointer', borderLeft: `8px solid ${b.status === 'Checked-in' ? '#6366f1' : (b.status === 'Confirmed' ? 'var(--primary)' : 'var(--warning)')}`, transition: 'all 0.2s', margin: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                            <div style={{ textAlign: 'center', minWidth: '60px', padding: '0.5rem', background: 'var(--bg-color)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '1rem' : '0' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', width: '100%' }}>
+                            <div style={{ textAlign: 'center', minWidth: '60px', padding: '0.5rem', background: 'var(--bg-color)', borderRadius: '12px', border: '1px solid var(--border)', flexShrink: 0 }}>
                               <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{format(new Date(b.check_in_date), 'MMM')}</div>
                               <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{format(new Date(b.check_in_date), 'dd')}</div>
                             </div>
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '0.25rem' }}>{b.guest_name}</div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Calendar size={14} /> {format(new Date(b.check_in_date), 'dd MMM')} - {format(new Date(b.check_out_date), 'dd MMM')}</span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Home size={14} /> {c.name}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                <div style={{ fontWeight: 800, fontSize: isMobile ? '1.1rem' : '1.25rem', marginBottom: '0.25rem', wordBreak: 'break-word' }}>{b.guest_name}</div>
+                                {isMobile && (
+                                  <span className={`badge badge-${b.status === 'Cancelled' ? 'danger' : b.status === 'Completed' ? 'success' : 'info'}`} style={{ fontSize: '0.65rem', flexShrink: 0, marginTop: '0.2rem' }}>{b.status}</span>
+                                )}
                               </div>
+                              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '0.4rem' : '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}><Calendar size={14} /> {format(new Date(b.check_in_date), 'dd MMM')} - {format(new Date(b.check_out_date), 'dd MMM')}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}><Home size={14} /> {c.name}</span>
+                              </div>
+                              {isMobile && (
+                                <div style={{ marginTop: '0.75rem', fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{b.total_amount?.toLocaleString()}</div>
+                              )}
                             </div>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
-                              <span style={{ padding: '0.2rem 0.75rem', borderRadius: '12px', fontSize: '0.65rem', fontWeight: 800, background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                                {(() => {
-                                  const { isAgent, name, phone } = parseAgentSource(b.booking_source);
-                                  if (isAgent) {
-                                    return `Agent: ${name}${phone ? `, Contact: ${phone}` : ''}`;
-                                  }
-                                  return b.booking_source || 'Direct';
-                                })()}
-                              </span>
-                              <span className={`badge badge-${b.status === 'Cancelled' ? 'danger' : b.status === 'Completed' ? 'success' : 'info'}`} style={{ fontSize: '0.65rem' }}>{b.status}</span>
+                          {!isMobile && (
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                                <span className={`badge badge-${b.status === 'Cancelled' ? 'danger' : b.status === 'Completed' ? 'success' : 'info'}`} style={{ fontSize: '0.65rem' }}>{b.status}</span>
+                              </div>
+                              <div style={{ marginTop: '0.75rem', fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{b.total_amount?.toLocaleString()}</div>
                             </div>
-                            <div style={{ marginTop: '0.75rem', fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{b.total_amount?.toLocaleString()}</div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1101,7 +1133,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
         )}
       </div>
 
-      {hoveredBooking && (
+      {hoveredBooking && !window.Capacitor?.isNativePlatform() && (
         <CalendarTooltip 
             booking={hoveredBooking} 
             cottageName={cottages.find(c => c.id === hoveredBooking.cottage_id)?.name} 
@@ -1294,7 +1326,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                   className="form-input" 
                   placeholder="e.g. +919876543210" 
                   value={whatsappNumber}
-                  onChange={e => setWhatsappNumber(e.target.value)}
+                  onChange={e => setWhatsappe.target.value === '' ? '' : Number(e.target.value)}
                   style={{ paddingLeft: '2.5rem', height: '40px', fontSize: '0.85rem' }}
                 />
               </div>

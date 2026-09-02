@@ -30,6 +30,31 @@ export default function Home() {
     subheadline: "Bookings. Income. Expenses. Simplified.",
     description: "Stay Pilot makes it simple to manage your property bookings, track income and expenses, and understand your business — all in one place.",
     target: "Built for cottages, homestays, villas, guest houses and independent stays.",
+    comparisonHeadline: "Stop Managing Your Property in Pieces.",
+    comparisonDescription: "Move away from scattered notebooks, messy spreadsheets, and payment records. Stay Pilot provides you with one clean, unified environment to manage your bookings and understand your numbers.",
+    deepDives: [
+      {
+        image: 'booking_management.png',
+        tagline: 'Reservation Control',
+        title: 'Seamless Booking Management, Zero Friction.',
+        description: 'Say goodbye to scattered notebooks and messy spreadsheets. Manage every guest reservation centrally, track check-ins, and keep your property running smoothly. Ensure nothing ever falls through the cracks again.',
+        bullets: ['Live status tracking (Pending, Confirmed)', 'Centralized guest overview', 'Effortless room assignments']
+      },
+      {
+        image: 'calendar.png',
+        tagline: 'Visual Timeline',
+        title: 'Never Double Book Again.',
+        description: "Get an instant, visual overview of your property's availability. Our elegant timeline calendar lets you spot open rooms in seconds, map out upcoming weeks, and prevent costly scheduling errors effortlessly.",
+        bullets: ['Color-coded booking statuses', 'Multi-room & multi-property views', 'Instant availability tracking']
+      },
+      {
+        image: 'financials.png',
+        tagline: 'Revenue Intelligence',
+        title: 'Turn Operations into Profitability.',
+        description: 'Understand exactly how much money your property is making. Track all income sources, log operational expenses automatically, and let Stay Pilot calculate your net profit with laser precision.',
+        bullets: ['Automated revenue & profit charting', 'Clean expense category breakdowns', 'Real-time occupancy metrics']
+      }
+    ],
     features: [
       { title: "Smart Dashboard", description: "Real-time metrics, monthly performance, and revenue breakdowns at a glance." },
       { title: "Booking Management", description: "Track, manage, and organize all your guest reservations effortlessly." },
@@ -45,7 +70,8 @@ export default function Home() {
   const content = {
     ...DEFAULT_CONTENT,
     ...(landingPageContent || {}),
-    features: landingPageContent?.features?.length > 3 ? landingPageContent.features : DEFAULT_CONTENT.features
+    features: landingPageContent?.features?.length > 0 ? landingPageContent.features : DEFAULT_CONTENT.features,
+    deepDives: landingPageContent?.deepDives?.length > 0 ? landingPageContent.deepDives : DEFAULT_CONTENT.deepDives
   };
 
   // Helper to map dynamic icons to the features list
@@ -131,6 +157,15 @@ export default function Home() {
           50% { box-shadow: 0 0 30px rgba(5, 150, 105, 0.3); }
           100% { box-shadow: 0 0 15px rgba(5, 150, 105, 0.15); }
         }
+
+        @media (max-width: 992px) {
+          .desktop-nav {
+            display: none !important;
+          }
+          .desktop-btn {
+            display: none !important;
+          }
+        }
       `}} />
 
       {/* Header */}
@@ -152,7 +187,7 @@ export default function Home() {
         </Link>
         
         {/* Desktop Navigation (Center) */}
-        <nav style={{ gap: '2.5rem', alignItems: 'center', fontWeight: 600, color: '#334155', fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="d-md-flex">
+        <nav className="desktop-nav" style={{ display: 'flex', gap: '2.5rem', alignItems: 'center', fontWeight: 600, color: '#334155', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           <Link to="/" style={{ color: '#059669', textDecoration: 'none' }}>Home</Link>
           <Link to="/#features" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Features</Link>
           <Link to="/how-it-works" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>How It Works</Link>
@@ -160,7 +195,7 @@ export default function Home() {
         </nav>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <Link to="/auth" style={{ padding: '0.5rem 1rem', fontWeight: 600, color: '#0F2C59', textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign In</Link>
+          <Link to="/auth" className="desktop-btn" style={{ padding: '0.5rem 1rem', fontWeight: 600, color: '#0F2C59', textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign In</Link>
           <Link to="/auth?mode=signup" className="btn" style={{ padding: '0.65rem 1.6rem', fontWeight: 700, borderRadius: '8px', color: 'white', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none', boxShadow: '0 4px 15px rgba(5, 150, 105, 0.25)', textDecoration: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Get Started</Link>
         </div>
       </header>
@@ -207,13 +242,7 @@ export default function Home() {
               letterSpacing: '-0.025em',
               fontFamily: "'Outfit', sans-serif"
             }}>
-              Know Your Bookings. <br />
-              Know Your <span style={{ 
-                background: 'linear-gradient(135deg, #059669 0%, #0ea5e9 100%)', 
-                WebkitBackgroundClip: 'text', 
-                WebkitTextFillColor: 'transparent',
-                display: 'inline-block' 
-              }}>Numbers.</span>
+              {content.headline || DEFAULT_CONTENT.headline}
             </h1>
 
             {/* Sub-headline Text */}
@@ -235,7 +264,7 @@ export default function Home() {
               margin: 0,
               fontFamily: "'Plus Jakarta Sans', sans-serif"
             }}>
-              {DEFAULT_CONTENT.description}
+              {content.description || DEFAULT_CONTENT.description}
             </p>
 
             {/* Small built-for target */}
@@ -246,7 +275,7 @@ export default function Home() {
               fontWeight: 500,
               margin: '0 0 0.5rem 0'
             }}>
-              ✨ {DEFAULT_CONTENT.target}
+              ✨ {content.target || DEFAULT_CONTENT.target}
             </p>
 
             {/* Key checklists */}
@@ -409,77 +438,56 @@ export default function Home() {
 
         </div>
 
-        {/* COMPARISON VALUE PROPOSITION SECTION */}
-        <section style={{ 
-          padding: '6rem 2rem 4rem', 
-          background: 'transparent', 
-          textAlign: 'center', 
-          position: 'relative', 
-          zIndex: 1, 
-          width: '100%' 
-        }}>
-          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '2.4rem', fontWeight: 800, color: '#0F2C59', marginBottom: '1rem', fontFamily: "'Outfit', sans-serif" }}>
-              Stop Managing Your Property in Pieces.
-            </h2>
-            <p style={{ fontSize: '1.15rem', color: '#475569', marginBottom: '4rem', fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.6 }}>
-              Move away from scattered notebooks, messy spreadsheets, and payment records. Stay Pilot provides you with one clean, unified environment to manage your bookings and understand your numbers.
-            </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem' }}>
-              
-              {/* Scattered Pieces Row */}
-              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                  <Smartphone size={18} color="#25D366" /> WhatsApp Chats
+
+        {/* DEEP DIVE FEATURE SECTIONS */}
+        <section style={{ width: '100%', maxWidth: '1200px', padding: '2rem 2rem 6rem', display: 'flex', flexDirection: 'column', gap: '8rem', position: 'relative', zIndex: 1 }}>
+          
+          {(content.deepDives || DEFAULT_CONTENT.deepDives).map((dive, idx) => {
+            const isReversed = idx % 2 !== 0;
+            const primaryColor = idx === 0 ? '#059669' : idx === 1 ? '#0ea5e9' : '#f59e0b';
+            const bgColor = idx === 0 ? 'rgba(5, 150, 105, 0.08)' : idx === 1 ? 'rgba(14, 165, 233, 0.08)' : 'rgba(245, 158, 11, 0.08)';
+
+            return (
+              <div key={idx} style={{ display: 'flex', flexWrap: isReversed ? 'wrap-reverse' : 'wrap', alignItems: 'center', gap: '4rem', flexDirection: 'row' }}>
+                {!isReversed && (
+                  <div style={{ flex: '1 1 400px' }}>
+                    <img src={`/${dive.image}`} alt={dive.title} style={{ width: '100%', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(15, 44, 89, 0.12)' }} />
+                  </div>
+                )}
+                
+                <div style={{ flex: '1 1 400px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.75rem', background: bgColor, borderRadius: '20px', color: primaryColor, fontWeight: 700, fontSize: '0.75rem', marginBottom: '1rem', textTransform: 'uppercase' }}>
+                    <Sparkles size={14} /> {dive.tagline}
+                  </div>
+                  <h3 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#0F2C59', marginBottom: '1rem', fontFamily: "'Outfit', sans-serif", lineHeight: 1.2 }}>
+                    {dive.title}
+                  </h3>
+                  <p style={{ fontSize: '1.1rem', color: '#475569', marginBottom: '1.5rem', fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.6 }}>
+                    {dive.description}
+                  </p>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    {(dive.bullets || []).map((bullet, bIdx) => (
+                      <li key={bIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#334155', fontWeight: 600 }}>
+                        <CheckCircle2 size={18} color={primaryColor} /> {bullet}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                  <Receipt size={18} color="#f59e0b" /> Paper Notebooks
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                  <FileSpreadsheet size={18} color="#10b981" /> Spreadsheets
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                  <Calculator size={18} color="#0ea5e9" /> Physical Calculators
-                </div>
+
+                {isReversed && (
+                  <div style={{ flex: '1 1 400px' }}>
+                    <img src={`/${dive.image}`} alt={dive.title} style={{ width: '100%', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(15, 44, 89, 0.12)' }} />
+                  </div>
+                )}
               </div>
+            );
+          })}
 
-              {/* Animated/Arrow transition */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', color: '#cbd5e1' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Replaced By</span>
-                <ArrowRight size={28} color="#059669" style={{ transform: 'rotate(90deg)', animation: 'float 3s infinite' }} />
-              </div>
-
-              {/* STAY PILOT Unified Box */}
-              <div style={{ 
-                padding: '2.5rem 4rem', 
-                background: 'linear-gradient(135deg, #0F2C59 0%, #173b75 100%)', 
-                borderRadius: '24px', 
-                color: 'white', 
-                boxShadow: '0 25px 50px rgba(15, 44, 89, 0.15)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                width: '100%',
-                maxWidth: '650px'
-              }}>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.5rem', fontFamily: "'Outfit', sans-serif" }}>STAY PILOT</div>
-                <div style={{ fontSize: '0.9rem', color: '#a5f3fc', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem' }}>One Unified System</div>
-                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center', color: '#cbd5e1', fontSize: '1.05rem', fontWeight: 600 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><LayoutDashboard size={16} color="#059669" /> Dashboard</span>
-                  <span>&bull;</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CalendarDays size={16} color="#0ea5e9" /> Calendar</span>
-                  <span>&bull;</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Wallet size={16} color="#f59e0b" /> Financials</span>
-                  <span>&bull;</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={16} color="#10b981" /> Reports</span>
-                </div>
-              </div>
-
-            </div>
-          </div>
         </section>
 
         {/* FEATURES GRID SECTION */}
-        <div id="features" style={{ width: '100%', maxWidth: '1150px', marginTop: '6rem', position: 'relative', zIndex: 1, scrollMarginTop: '120px' }}>
+        <div id="features" style={{ width: '100%', maxWidth: '1150px', marginTop: '4rem', position: 'relative', zIndex: 1, scrollMarginTop: '120px' }}>
           
           <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
             
@@ -578,6 +586,75 @@ export default function Home() {
 
         </div>
 
+        {/* COMPARISON VALUE PROPOSITION SECTION */}
+        <section style={{ 
+          padding: '6rem 2rem 4rem', 
+          background: 'transparent', 
+          textAlign: 'center', 
+          position: 'relative', 
+          zIndex: 1, 
+          width: '100%' 
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <h2 style={{ fontSize: '2.4rem', fontWeight: 800, color: '#0F2C59', marginBottom: '1rem', fontFamily: "'Outfit', sans-serif" }}>
+              {content.comparisonHeadline || DEFAULT_CONTENT.comparisonHeadline}
+            </h2>
+            <p style={{ fontSize: '1.15rem', color: '#475569', marginBottom: '4rem', fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.6 }}>
+              {content.comparisonDescription || DEFAULT_CONTENT.comparisonDescription}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem' }}>
+              
+              {/* Scattered Pieces Row */}
+              <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                  <Smartphone size={18} color="#25D366" /> WhatsApp Chats
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                  <Receipt size={18} color="#f59e0b" /> Paper Notebooks
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                  <FileSpreadsheet size={18} color="#10b981" /> Spreadsheets
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.85rem 1.5rem', background: 'white', borderRadius: '12px', color: '#64748B', fontWeight: 600, boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                  <Calculator size={18} color="#0ea5e9" /> Physical Calculators
+                </div>
+              </div>
+
+              {/* Animated/Arrow transition */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', color: '#cbd5e1' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Replaced By</span>
+                <ArrowRight size={28} color="#059669" style={{ transform: 'rotate(90deg)', animation: 'float 3s infinite' }} />
+              </div>
+
+              {/* STAY PILOT Unified Box */}
+              <div style={{ 
+                padding: '2.5rem 4rem', 
+                background: 'linear-gradient(135deg, #0F2C59 0%, #173b75 100%)', 
+                borderRadius: '24px', 
+                color: 'white', 
+                boxShadow: '0 25px 50px rgba(15, 44, 89, 0.15)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                width: '100%',
+                maxWidth: '650px'
+              }}>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.5rem', fontFamily: "'Outfit', sans-serif" }}>STAY PILOT</div>
+                <div style={{ fontSize: '0.9rem', color: '#a5f3fc', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '1.5rem' }}>One Unified System</div>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center', color: '#cbd5e1', fontSize: '1.05rem', fontWeight: 600 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><LayoutDashboard size={16} color="#059669" /> Dashboard</span>
+                  <span>&bull;</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CalendarDays size={16} color="#0ea5e9" /> Calendar</span>
+                  <span>&bull;</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Wallet size={16} color="#f59e0b" /> Financials</span>
+                  <span>&bull;</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={16} color="#10b981" /> Reports</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
       </main>
 
       {/* Footer */}
@@ -602,6 +679,7 @@ export default function Home() {
             <a href="#features" style={{ color: 'inherit', textDecoration: 'none' }}>Features</a>
             <Link to="/how-it-works" style={{ color: 'inherit', textDecoration: 'none' }}>How It Works</Link>
             <Link to="/pricing" style={{ color: 'inherit', textDecoration: 'none' }}>Pricing</Link>
+            <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy Policy</Link>
           </div>
 
           <div style={{ color: '#94a3b8' }}>

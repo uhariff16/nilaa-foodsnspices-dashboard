@@ -4,6 +4,7 @@ import { Download, FileText, Filter, Table as TableIcon, CreditCard, Wallet, Tre
 import html2pdf from 'html2pdf.js';
 import { useSettingsStore } from '../lib/store';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
+import toast from 'react-hot-toast';
 
 export default function Reports() {
   const { activeResortId, resorts, session, profile, globalPlans } = useSettingsStore();
@@ -35,6 +36,7 @@ export default function Reports() {
   const [sourceFilter, setSourceFilter] = useState('All');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('All');
+  const [exportFormat, setExportFormat] = useState('pdf');
 
   useEffect(() => {
     fetchReports();
@@ -234,6 +236,28 @@ export default function Reports() {
     return <span style={{ marginLeft: '4px', color: 'var(--primary)' }}>{bookingSort.direction === 'ascending' ? '↑' : '↓'}</span>;
   };
 
+  const handleNativeShare = async (fileName, base64Data, mimeType) => {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const { Share } = await import('@capacitor/share');
+      
+      const savedFile = await Filesystem.writeFile({
+        path: fileName,
+        data: base64Data,
+        directory: Directory.Cache,
+      });
+
+      await Share.share({
+        title: fileName,
+        url: savedFile.uri,
+        dialogTitle: 'Share or Download Report',
+      });
+    } catch (err) {
+      console.error('Error sharing file:', err);
+      toast.error("Failed to share file on your device.");
+    }
+  };
+
   const handleExportPDF = () => {
     import('jspdf').then(({ default: jsPDF }) => {
       import('jspdf-autotable').then(({ default: autoTable }) => {
@@ -267,6 +291,11 @@ export default function Reports() {
           const bookingsRows = sortedBookings.map(b => [
             b.reference_number,
             b.guest_name,
+            b.guest_phone || '-',
+            `${b.adults_count || 1}/${b.kids_count || 0}`,
+            b.vehicle_number || '-',
+            b.id_proof_type ? `${b.id_proof_type}: ${b.id_proof_number || 'N/A'}` : '-',
+            Array.isArray(b.additional_guests) && b.additional_guests.length > 0 ? b.additional_guests.map(g => g.name).filter(Boolean).join(', ') : '-',
             data.cottages.find(c => c.id === b.cottage_id)?.name || '-',
             b.status,
             b.check_in_date,
@@ -275,11 +304,11 @@ export default function Reports() {
             Number(b.advance_paid || 0),
             Number(b.total_amount || 0) - Number(b.advance_paid || 0)
           ]);
-          const totalBookingValue = bookingsRows.reduce((sum, r) => sum + r[6], 0);
-          const totalBookingPaid = bookingsRows.reduce((sum, r) => sum + r[7], 0);
-          const totalBookingBalance = bookingsRows.reduce((sum, r) => sum + r[8], 0);
+          const totalBookingValue = bookingsRows.reduce((sum, r) => sum + r[11], 0);
+          const totalBookingPaid = bookingsRows.reduce((sum, r) => sum + r[12], 0);
+          const totalBookingBalance = bookingsRows.reduce((sum, r) => sum + r[13], 0);
           bookingsRows.push([
-            { content: 'TOTAL', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: 'TOTAL', colSpan: 11, styles: { halign: 'right', fontStyle: 'bold' } },
             { content: totalBookingValue, styles: { fontStyle: 'bold' } },
             { content: totalBookingPaid, styles: { fontStyle: 'bold' } },
             { content: totalBookingBalance, styles: { fontStyle: 'bold' } }
@@ -287,10 +316,10 @@ export default function Reports() {
           
           autoTable(doc, {
             startY: 32,
-            head: [["Ref #", "Guest", "Property", "Status", "Check-in", "Check-out", "Total (₹)", "Paid (₹)", "Balance (₹)"]],
+            head: [["Ref #", "Guest", "Phone", "A/K", "Vehicle", "ID Details", "Add'l Guests", "Property", "Status", "Check-in", "Check-out", "Total", "Paid", "Bal"]],
             body: bookingsRows,
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [5, 150, 105] },
+            styles: { fontSize: 6, cellPadding: 1 },
+            headStyles: { fillColor: [5, 150, 105], fontSize: 6 },
             theme: 'grid'
           });
         } else if (activeReportType === 'guests') {
@@ -357,7 +386,14 @@ export default function Reports() {
           });
         }
         
-        doc.save(`${resortName.replace(/\s+/g, '_')}_${activeReportType}_Report_${format(new Date(range.start), 'MMM_dd_yyyy')}.pdf`);
+        const fileName = `${resortName.replace(/\s+/g, '_')}_${activeReportType}_Report_${format(new Date(range.start), 'MMM_dd_yyyy')}.pdf`;
+        if (window.Capacitor?.isNativePlatform()) {
+          const pdfData = doc.output('datauristring');
+          const base64Data = pdfData.split(',')[1];
+          handleNativeShare(fileName, base64Data, 'application/pdf');
+        } else {
+          doc.save(fileName);
+        }
       });
     });
   };
@@ -444,16 +480,30 @@ export default function Reports() {
          if(cell) cell.s = { font: { bold: true, name: "Arial", sz: 10 } };
       }
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
-      XLSX.writeFile(workbook, `${resortStr}_Summary_Report_${periodStr}.xlsx`);
+      const fileName = `${resortStr}_Summary_Report_${periodStr}.xlsx`;
+      if (window.Capacitor?.isNativePlatform()) {
+        const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+        handleNativeShare(fileName, excelData, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        XLSX.writeFile(workbook, fileName);
+      }
 
     } else if (activeReportType === 'bookings') {
-      const bookingsHeaders = ["Ref #", "Guest Name", "Property", "Source", "Status", "Check-in", "Check-out", "Total Value", "Paid", "Balance"];
+      const bookingsHeaders = ["Ref #", "Guest Name", "Phone", "Email", "Adults", "Kids", "Vehicle No", "ID Type", "ID Number", "Add'l Guests", "Property", "Source", "Status", "Check-in", "Check-out", "Total Value", "Paid", "Balance"];
       const bookingsRows = sortedBookings.map(b => {
         const total = Number(b.total_amount || 0);
         const paid = Number(b.advance_paid || 0);
         return [
           b.reference_number,
           b.guest_name,
+          b.guest_phone || '-',
+          b.guest_email || '-',
+          b.adults_count || 1,
+          b.kids_count || 0,
+          b.vehicle_number || '-',
+          b.id_proof_type || '-',
+          b.id_proof_number || '-',
+          Array.isArray(b.additional_guests) && b.additional_guests.length > 0 ? b.additional_guests.map(g => g.name).filter(Boolean).join(', ') : '-',
           data.cottages.find(c => c.id === b.cottage_id)?.name || '-',
           b.booking_source || 'Direct',
           b.status,
@@ -464,12 +514,18 @@ export default function Reports() {
           total - paid
         ];
       });
-      const totalBookingValue = bookingsRows.reduce((sum, r) => sum + r[7], 0);
-      const totalBookingPaid = bookingsRows.reduce((sum, r) => sum + r[8], 0);
-      const totalBookingBalance = bookingsRows.reduce((sum, r) => sum + r[9], 0);
-      const bookingsAOA = [bookingsHeaders, ...bookingsRows, ["", "", "", "", "", "", "TOTAL", totalBookingValue, totalBookingPaid, totalBookingBalance]];
-      XLSX.utils.book_append_sheet(workbook, createStyledSheet(bookingsAOA, [{wch:15}, {wch:25}, {wch:15}, {wch:15}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}], true), "Bookings");
-      XLSX.writeFile(workbook, `${resortStr}_Bookings_Report_${periodStr}.xlsx`);
+      const totalBookingValue = bookingsRows.reduce((sum, r) => sum + r[15], 0);
+      const totalBookingPaid = bookingsRows.reduce((sum, r) => sum + r[16], 0);
+      const totalBookingBalance = bookingsRows.reduce((sum, r) => sum + r[17], 0);
+      const bookingsAOA = [bookingsHeaders, ...bookingsRows, ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "TOTAL", totalBookingValue, totalBookingPaid, totalBookingBalance]];
+      XLSX.utils.book_append_sheet(workbook, createStyledSheet(bookingsAOA, [{wch:15}, {wch:25}, {wch:15}, {wch:25}, {wch:8}, {wch:8}, {wch:15}, {wch:12}, {wch:15}, {wch:25}, {wch:15}, {wch:15}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}], true), "Bookings");
+      const fileName = `${resortStr}_Bookings_Report_${periodStr}.xlsx`;
+      if (window.Capacitor?.isNativePlatform()) {
+        const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+        handleNativeShare(fileName, excelData, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        XLSX.writeFile(workbook, fileName);
+      }
 
     } else if (activeReportType === 'guests') {
       const guestHeaders = ["Guest Name", "Email", "Phone", "Bookings Count", "Latest Booking Ref", "Latest Stay Date"];
@@ -482,7 +538,13 @@ export default function Reports() {
         g.latestBookingDate
       ]);
       XLSX.utils.book_append_sheet(workbook, createStyledSheet([guestHeaders, ...guestRows], [{wch:25}, {wch:30}, {wch:20}, {wch:15}, {wch:20}, {wch:15}]), "Guests Directory");
-      XLSX.writeFile(workbook, `${resortStr}_Guest_Contacts_${periodStr}.xlsx`);
+      const fileName = `${resortStr}_Guest_Contacts_${periodStr}.xlsx`;
+      if (window.Capacitor?.isNativePlatform()) {
+        const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+        handleNativeShare(fileName, excelData, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        XLSX.writeFile(workbook, fileName);
+      }
 
     } else if (activeReportType === 'finance') {
       const incomeHeaders = ["Date", "Ref #", "Guest Name", "Property", "Amount (₹)", "Method", "Notes"];
@@ -512,7 +574,13 @@ export default function Reports() {
       const expenseAOA = [expenseHeaders, ...expenseRows, ["", "", "TOTAL EXPENSES", totalExpenseAmount, "", ""]];
       XLSX.utils.book_append_sheet(workbook, createStyledSheet(expenseAOA, [{wch:12}, {wch:20}, {wch:15}, {wch:15}, {wch:20}, {wch:35}], true), "Expense Log");
 
-      XLSX.writeFile(workbook, `${resortStr}_Financials_${periodStr}.xlsx`);
+      const fileName = `${resortStr}_Financials_${periodStr}.xlsx`;
+      if (window.Capacitor?.isNativePlatform()) {
+        const excelData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+        handleNativeShare(fileName, excelData, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      } else {
+        XLSX.writeFile(workbook, fileName);
+      }
     }
   };
 
@@ -534,22 +602,46 @@ export default function Reports() {
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.5rem', fontWeight: 800 }}>
             <FileText size={28} color="var(--primary)" /> Reports & Analytics
           </h2>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            {allowedReports?.exportExcel !== false && (
-              <button className="btn btn-outline" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <TableIcon size={18}/> <span className="desktop-only">Export Excel</span>
-              </button>
-            )}
-            {allowedReports?.exportPdf !== false && (
-              <button className="btn btn-primary" onClick={handleExportPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Download size={18}/> <span className="desktop-only">Export PDF</span>
-              </button>
-            )}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <select 
+              className="form-select" 
+              style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.9rem' }}
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value)}
+            >
+              {allowedReports?.exportPdf !== false && <option value="pdf">PDF Format</option>}
+              {allowedReports?.exportExcel !== false && <option value="excel">Excel Format</option>}
+            </select>
+            
+            <button 
+              className="btn btn-primary" 
+              onClick={exportFormat === 'pdf' ? handleExportPDF : handleExportExcel} 
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Download size={18}/> <span className="desktop-only">Download</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="reports-layout" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '2rem', alignItems: 'start' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .reports-layout {
+          display: grid;
+          grid-template-columns: 320px 1fr;
+          gap: 2rem;
+          align-items: start;
+        }
+        @media (max-width: 768px) {
+          .reports-layout {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+          .reports-layout aside {
+            position: static !important;
+          }
+        }
+      `}} />
+      <div className="reports-layout">
         <aside style={{ position: 'sticky', top: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
           {/* Select Property */}
@@ -568,44 +660,6 @@ export default function Reports() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-          </div>
-
-          {/* Select Report View */}
-          <div className="card" style={{ border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', padding: '1.25rem' }}>
-            <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <FileText size={16} color="var(--primary)"/> Report Type
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              {[
-                { id: 'summary', label: 'Performance Summary' },
-                { id: 'bookings', label: 'Booking Details' },
-                { id: 'guests', label: 'Guest Contacts' },
-                { id: 'finance', label: 'Income & Expenses' }
-              ].filter(opt => allowedReports[opt.id] !== false).map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => {
-                    setReportType(opt.id);
-                    setSearchTerm('');
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    border: 'none',
-                    textAlign: 'left',
-                    background: activeReportType === opt.id ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
-                    color: activeReportType === opt.id ? 'var(--primary)' : 'var(--text-main)',
-                    fontWeight: activeReportType === opt.id ? 800 : 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    borderLeft: activeReportType === opt.id ? '4px solid var(--primary)' : '4px solid transparent'
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Date Picker Range */}
@@ -648,7 +702,7 @@ export default function Reports() {
                       fontWeight: 700, 
                       borderRadius: '6px',
                       border: currentMonthIdx === i ? '1px solid var(--primary)' : '1px solid var(--border)',
-                      background: currentMonthIdx === i ? 'var(--primary)' : 'white',
+                      background: currentMonthIdx === i ? 'var(--primary)' : 'var(--bg-secondary)',
                       color: currentMonthIdx === i ? 'white' : 'var(--text-main)',
                       cursor: 'pointer',
                       transition: 'all 0.2s'
@@ -672,6 +726,44 @@ export default function Reports() {
             </div>
           </div>
 
+          {/* Select Report View */}
+          <div className="card" style={{ border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FileText size={16} color="var(--primary)"/> Report Type
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {[
+                { id: 'summary', label: 'Performance Summary' },
+                { id: 'bookings', label: 'Booking Details' },
+                { id: 'guests', label: 'Guest Contacts' },
+                { id: 'finance', label: 'Income & Expenses' }
+              ].filter(opt => allowedReports[opt.id] !== false).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    setReportType(opt.id);
+                    setSearchTerm('');
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    textAlign: 'left',
+                    background: activeReportType === opt.id ? 'rgba(5, 150, 105, 0.08)' : 'transparent',
+                    color: activeReportType === opt.id ? 'var(--primary)' : 'var(--text-main)',
+                    fontWeight: activeReportType === opt.id ? 800 : 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    borderLeft: activeReportType === opt.id ? '4px solid var(--primary)' : '4px solid transparent'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Quick Metrics */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="card" style={{ border: 'none', background: 'linear-gradient(135deg, #2f855a 0%, #48bb78 100%)', color: 'white', padding: '1.25rem' }}>
@@ -682,7 +774,7 @@ export default function Reports() {
               <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0 }}>₹{(totalCollections || 0).toLocaleString()}</h2>
             </div>
 
-            <div className="card" style={{ border: 'none', background: 'white', padding: '1.25rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <div className="card" style={{ border: 'none', background: 'var(--bg-color)', padding: '1.25rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>EXPENSES</span>
                 <TrendingDown size={20} color="var(--danger)" />
@@ -700,16 +792,17 @@ export default function Reports() {
               </h2>
             </div>
           </div>
-        </aside>
+          </aside>
 
-        <main>
-          {loading ? (
-            <div className="card" style={{ textAlign: 'center', padding: '5rem', border: 'none' }}>
+          {!window.Capacitor?.isNativePlatform() && (
+            <main>
+              {loading ? (
+                <div className="card" style={{ textAlign: 'center', padding: '5rem', border: 'none' }}>
               <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 1rem' }}></div>
               <p style={{ color: 'var(--text-muted)' }}>Generating report data...</p>
             </div>
           ) : (
-            <div id="report-container" className="card" style={{ padding: '2rem', background: 'white', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+            <div id="report-container" className="card" style={{ padding: '2rem', background: 'var(--bg-color)', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
               
               {/* Header section */}
               <div style={{ textAlign: 'center', marginBottom: '2.5rem', borderBottom: '1px solid #eee', paddingBottom: '2rem' }}>
@@ -745,15 +838,15 @@ export default function Reports() {
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>VALID BOOKINGS</span>
                       <h3 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0.25rem 0 0' }}>{validBookings.length}</h3>
                     </div>
-                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>COMPLETED STAYS</span>
                       <h3 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0.25rem 0 0' }}>{completedBookings.length}</h3>
                     </div>
-                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL GUESTS SERVED</span>
                       <h3 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0.25rem 0 0' }}>{completedGuests}</h3>
                     </div>
@@ -765,14 +858,14 @@ export default function Reports() {
               {/* REPORT VIEW: BOOKING DETAILS */}
               {activeReportType === 'bookings' && (
                 <div>
-                  <div className="no-print" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                  <div className="no-print" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
                     <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
                       <input 
                         type="text" 
                         placeholder="Search guest or ref..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', width: '100%' }}
+                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', width: '100%' }}
                       />
                       <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#a0aec0' }} />
                     </div>
@@ -796,10 +889,16 @@ export default function Reports() {
 
                   <div className="table-container" style={{ border: '1px solid #f0f0f0', borderRadius: '12px', overflowX: 'auto', overflowY: 'auto', maxHeight: '600px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                      <thead style={{ background: '#fafafa' }}>
+                      <thead style={{ background: 'var(--bg-secondary)' }}>
                         <tr style={{ borderBottom: '2px solid #f0f0f0' }}>
                           <th onClick={() => requestSort('reference_number')} style={{ padding: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>REF # <SortIcon column="reference_number"/></th>
                           <th onClick={() => requestSort('guest_name')} style={{ padding: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>GUEST NAME <SortIcon column="guest_name"/></th>
+                          <th onClick={() => requestSort('guest_phone')} style={{ padding: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>PHONE <SortIcon column="guest_phone"/></th>
+                          <th onClick={() => requestSort('guest_email')} style={{ padding: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>EMAIL <SortIcon column="guest_email"/></th>
+                          <th style={{ padding: '0.8rem', textAlign: 'center' }}>GUESTS (A/K)</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>VEHICLE</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>ID DETAILS</th>
+                          <th style={{ padding: '0.8rem', textAlign: 'left' }}>ADD'L GUESTS</th>
                           <th style={{ padding: '0.8rem', textAlign: 'left' }}>PROPERTY</th>
                           <th style={{ padding: '0.8rem', textAlign: 'left' }}>SOURCE</th>
                           <th style={{ padding: '0.8rem', textAlign: 'center' }}>STATUS</th>
@@ -820,8 +919,18 @@ export default function Reports() {
                             <tr key={b.id} style={{ borderBottom: '1px solid #f9f9f9' }}>
                               <td style={{ padding: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{b.reference_number}</td>
                               <td style={{ padding: '0.8rem' }}>{b.guest_name}</td>
+                              <td style={{ padding: '0.8rem' }}>{b.guest_phone || '-'}</td>
+                              <td style={{ padding: '0.8rem' }}>{b.guest_email || '-'}</td>
+                              <td style={{ padding: '0.8rem', textAlign: 'center' }}>{b.adults_count || 1} / {b.kids_count || 0}</td>
+                              <td style={{ padding: '0.8rem' }}>{b.vehicle_number || '-'}</td>
+                              <td style={{ padding: '0.8rem', fontSize: '0.7rem' }}>{b.id_proof_type ? `${b.id_proof_type}: ${b.id_proof_number || 'N/A'}` : '-'}</td>
+                              <td style={{ padding: '0.8rem', fontSize: '0.7rem' }}>
+                                {Array.isArray(b.additional_guests) && b.additional_guests.length > 0 
+                                  ? b.additional_guests.map(g => g.name).filter(Boolean).join(', ') 
+                                  : '-'}
+                              </td>
                               <td style={{ padding: '0.8rem' }}>
-                                <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#f3f4f6', color: '#374151', fontWeight: 700 }}>
+                                <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontWeight: 700 }}>
                                   {data.cottages.find(c => c.id === b.cottage_id)?.name || '-'}
                                 </span>
                               </td>
@@ -842,8 +951,8 @@ export default function Reports() {
                           );
                         })}
                         {sortedBookings.length > 0 && (
-                          <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0', fontWeight: 800 }}>
-                            <td colSpan="7" style={{ padding: '0.8rem', textAlign: 'right' }}>TOTAL</td>
+                          <tr style={{ background: 'var(--bg-secondary)', borderTop: '2px solid var(--border)', fontWeight: 800 }}>
+                            <td colSpan="13" style={{ padding: '0.8rem', textAlign: 'right' }}>TOTAL</td>
                             <td style={{ padding: '0.8rem', textAlign: 'right', color: 'var(--text-main)' }}>₹{sortedBookings.reduce((sum, b) => sum + Number(b.total_amount || 0), 0).toLocaleString()}</td>
                             <td style={{ padding: '0.8rem', textAlign: 'right', color: 'var(--success)' }}>₹{sortedBookings.reduce((sum, b) => sum + Number(b.advance_paid || 0), 0).toLocaleString()}</td>
                             <td style={{ padding: '0.8rem', textAlign: 'right', color: 'var(--danger)' }}>₹{sortedBookings.reduce((sum, b) => sum + (Number(b.total_amount || 0) - Number(b.advance_paid || 0)), 0).toLocaleString()}</td>
@@ -858,14 +967,14 @@ export default function Reports() {
               {/* REPORT VIEW: GUEST CONTACTS */}
               {activeReportType === 'guests' && (
                 <div>
-                  <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                  <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
                     <div style={{ flex: 1, position: 'relative' }}>
                       <input 
                         type="text" 
                         placeholder="Search by guest name, email, or phone number..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', width: '100%' }}
+                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', width: '100%' }}
                       />
                       <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#a0aec0' }} />
                     </div>
@@ -873,7 +982,7 @@ export default function Reports() {
 
                   <div className="table-container" style={{ border: '1px solid #f0f0f0', borderRadius: '12px', overflowX: 'auto', overflowY: 'auto', maxHeight: '600px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                      <thead style={{ background: '#fafafa' }}>
+                      <thead style={{ background: 'var(--bg-secondary)' }}>
                         <tr style={{ borderBottom: '2px solid #f0f0f0' }}>
                           <th style={{ padding: '0.8rem', textAlign: 'left' }}>GUEST NAME</th>
                           <th style={{ padding: '0.8rem', textAlign: 'left' }}>EMAIL ADDRESS</th>
@@ -921,14 +1030,14 @@ export default function Reports() {
                     </div>
                   </div>
 
-                  <div className="no-print" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
+                  <div className="no-print" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
                     <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
                       <input 
                         type="text" 
                         placeholder="Search logs by ref, categories, names..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', width: '100%' }}
+                        style={{ padding: '0.5rem 1rem', paddingLeft: '2.25rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.85rem', width: '100%' }}
                       />
                       <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#a0aec0' }} />
                     </div>
@@ -959,7 +1068,7 @@ export default function Reports() {
                       </h4>
                       <div className="table-container" style={{ border: '1px solid #f0f0f0', borderRadius: '12px', overflowX: 'auto', overflowY: 'auto', maxHeight: '500px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                          <thead style={{ background: '#fafafa' }}>
+                          <thead style={{ background: 'var(--bg-secondary)' }}>
                              <tr>
                                <th style={{ padding: '0.6rem', textAlign: 'left' }}>DATE</th>
                                <th style={{ padding: '0.6rem', textAlign: 'left' }}>GUEST / REF</th>
@@ -979,7 +1088,7 @@ export default function Reports() {
                                    <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{i.bookings?.reference_number || '-'}</div>
                                  </td>
                                  <td style={{ padding: '0.6rem' }}>
-                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f3f4f6', color: '#374151', fontWeight: 700, display: 'inline-block', marginBottom: '2px' }}>
+                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontWeight: 700, display: 'inline-block', marginBottom: '2px' }}>
                                       {data.cottages.find(c => c.id === (i.cottage_id || i.bookings?.cottage_id))?.name || 'General'}
                                     </span>
                                     {i.notes?.toLowerCase().includes('advance') && (
@@ -1020,7 +1129,7 @@ export default function Reports() {
                       </h4>
                       <div className="table-container" style={{ border: '1px solid #f0f0f0', borderRadius: '12px', overflowX: 'auto', overflowY: 'auto', maxHeight: '500px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                          <thead style={{ background: '#fafafa' }}>
+                          <thead style={{ background: 'var(--bg-secondary)' }}>
                              <tr>
                                <th style={{ padding: '0.6rem', textAlign: 'left' }}>DATE</th>
                                <th style={{ padding: '0.6rem', textAlign: 'left' }}>CATEGORY</th>
@@ -1037,7 +1146,7 @@ export default function Reports() {
                                  <td style={{ padding: '0.6rem' }}>{e.date}</td>
                                  <td style={{ padding: '0.6rem', fontWeight: 700 }}>{e.category}</td>
                                  <td style={{ padding: '0.6rem' }}>
-                                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: '#f3f4f6', color: '#374151', fontWeight: 700 }}>
+                                   <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontWeight: 700 }}>
                                      {data.cottages.find(c => c.id === e.cottage_id)?.name || 'General'}
                                    </span>
                                  </td>
@@ -1069,8 +1178,9 @@ export default function Reports() {
               </div>
 
             </div>
-          )}
-        </main>
+            )}
+          </main>
+        )}
       </div>
     </div>
   );

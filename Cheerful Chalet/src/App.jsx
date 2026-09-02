@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { useSettingsStore } from './lib/store';
 import AppLayout from './layouts/AppLayout';
+import toast, { Toaster } from 'react-hot-toast';
 
 // Mock empty pages for now
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -18,19 +19,50 @@ const Subscription = React.lazy(() => import('./pages/Subscription'));
 const SuperAdmin = React.lazy(() => import('./pages/SuperAdmin'));
 const InvestmentAnalysis = React.lazy(() => import('./pages/InvestmentAnalysis'));
 const Staff = React.lazy(() => import('./pages/Staff'));
+const Support = React.lazy(() => import('./pages/Support'));
 const Auth = React.lazy(() => import('./pages/Auth'));
 const Home = React.lazy(() => import('./pages/Home'));
 const HowItWorks = React.lazy(() => import('./pages/HowItWorks'));
 const Pricing = React.lazy(() => import('./pages/Pricing'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
+const OnboardingWizard = React.lazy(() => import('./components/OnboardingWizard'));
+
 function App() {
-  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans, setLandingPageContent, setWebsitePricing, setOnboardingWizardEnabled } = useSettingsStore();
+  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans, setLandingPageContent, setWebsitePricing, setOnboardingWizardEnabled, setIsDataLoaded } = useSettingsStore();
+  const [isNewlyVerified, setIsNewlyVerified] = React.useState(false);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const applyTheme = () => {
+      const isSystemDark = mediaQuery.matches;
+      const appliedTheme = theme === 'system' || !theme ? (isSystemDark ? 'dark' : 'light') : theme;
+      document.documentElement.setAttribute('data-theme', appliedTheme);
+      
+      if (window.Capacitor?.isNativePlatform()) {
+        if (window.Capacitor.getPlatform() === 'android') {
+          document.body.classList.add('capacitor-android');
+        }
+        import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+          StatusBar.setStyle({ style: appliedTheme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
+        }).catch(() => {});
+      }
+    };
+
+    applyTheme();
+    
+    const listener = () => applyTheme();
+    mediaQuery.addEventListener('change', listener);
+    return () => mediaQuery.removeEventListener('change', listener);
   }, [theme]);
 
   useEffect(() => {
+    if (window.location.href.includes('type=signup') || window.location.href.includes('type=invite')) {
+      setIsNewlyVerified(true);
+    }
+
     // Auth Listener
+    setIsDataLoaded(false);
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleAuthChange(session);
     });
@@ -39,7 +71,29 @@ function App() {
       if (event === 'PASSWORD_RECOVERY' || window.location.hash.includes('type=recovery')) {
         setIsRecovering(true);
       }
-      handleAuthChange(session);
+      
+      const { profile } = useSettingsStore.getState();
+      
+      if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
+        if (event === 'INITIAL_SESSION' && session?.user?.id) {
+          // Update last login on page load if session exists
+          supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', session.user.id).then();
+        }
+        if (!profile) setIsDataLoaded(false);
+        handleAuthChange(session);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          // Update last login
+          supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', session.user.id).then();
+        }
+        // If we already have a profile, DO ABSOLUTELY NOTHING.
+        // Updating the Zustand store causes a full app re-render (shivering).
+        // The Supabase client internally manages the refreshed token anyway.
+        if (!profile) {
+           setIsDataLoaded(false);
+           handleAuthChange(session);
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -50,7 +104,7 @@ function App() {
 
     // Fetch global settings (pricing, landing page) for all users regardless of auth
     try {
-      const { data: superAdmins } = await supabase.from('profiles').select('global_settings').eq('role', 'super_admin').limit(1);
+      const { data: superAdmins } = await supabase.from('profiles').select('global_settings').eq('role', 'super_admin').order('created_at', { ascending: true }).limit(1);
       if (superAdmins && superAdmins.length > 0) {
         const settings = superAdmins[0].global_settings || {};
         if (settings.pricing) {
@@ -111,8 +165,31 @@ function App() {
       setResorts([]);
       setActiveResortId(null);
       setIsRecovering(false);
+      setSession(null);
     }
+    
+    setIsDataLoaded(true);
   };
+
+  if (isNewlyVerified) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <div style={{ background: 'white', padding: '3rem', borderRadius: '1rem', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', textAlign: 'center', maxWidth: '400px', width: '90%' }}>
+          <div style={{ background: '#10b981', color: 'white', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem auto' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: '#0f172a', marginBottom: '1rem' }}>Email Verified!</h1>
+          <p style={{ color: '#64748b', marginBottom: '2rem', fontSize: '1.1rem' }}>Your email has been successfully confirmed.</p>
+          <button 
+            onClick={() => setIsNewlyVerified(false)}
+            style={{ background: '#0F2C59', color: 'white', padding: '0.75rem 2rem', borderRadius: '0.5rem', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '1rem', width: '100%' }}
+          >
+            Continue to Setup
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (session && profile?.subscription_status === 'suspended') {
     return (
@@ -145,6 +222,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster position="top-right" />
       <React.Suspense fallback={<div style={{ padding: '2rem' }}>Loading...</div>}>
         <Routes>
           <Route 
@@ -152,9 +230,10 @@ function App() {
             element={session && !isRecovering && !window.location.hash.includes('type=recovery') ? <Navigate to="/dashboard" replace /> : <Auth />} 
           />
           
-          <Route path="/" element={!session ? <Home /> : (profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />)} />
+          <Route path="/" element={!session ? (window.Capacitor?.isNativePlatform() ? <Navigate to="/auth" replace /> : <Home />) : (profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />)} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           
           <Route element={session ? <AppLayout /> : <Navigate to="/auth" replace />}>
             <Route path="dashboard" element={profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Dashboard />} />
@@ -167,11 +246,14 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="resorts" element={<Resorts />} />
             <Route path="staff" element={<Staff />} />
+            <Route path="support" element={<Support />} />
             <Route path="subscription" element={<Subscription />} />
             <Route path="admin" element={<SuperAdmin />} />
             <Route path="investment-analysis" element={<InvestmentAnalysis />} />
             <Route path="settings" element={<Settings />} />
           </Route>
+
+          <Route path="/wizard" element={session ? <OnboardingWizard /> : <Navigate to="/auth" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

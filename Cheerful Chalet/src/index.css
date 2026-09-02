@@ -57,6 +57,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Typography Links */
@@ -338,6 +340,25 @@ a {
 .badge-indigo { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
 .badge-info { background: rgba(49, 130, 206, 0.1); color: #3182ce; }
 
+/* Grids */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   :root {
@@ -356,8 +377,9 @@ a {
     left: -280px; /* Off-screen */
     width: 280px;
     height: 100vh;
-    z-index: 100;
+    z-index: 1002;
     box-shadow: 20px 0 50px rgba(0,0,0,0.1);
+    padding-top: env(safe-area-inset-top);
   }
 
   .sidebar.open {
@@ -422,7 +444,7 @@ a {
     width: 100vw;
     height: 100vh;
     background: rgba(0,0,0,0.4);
-    z-index: 90;
+    z-index: 1001;
     backdrop-filter: blur(2px);
   }
 }
@@ -452,7 +474,7 @@ a {
 /* Page Fade-In Animation */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes spin {
@@ -514,7 +536,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2500;
   animation: fadeInModal 0.2s ease-out;
 }
 
@@ -615,7 +637,7 @@ a {
   
   /* Glassmorphism for mobile header */
   .top-header {
-    background: rgba(255, 255, 255, 0.9) !important;
+    background: var(--bg-secondary) !important;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
@@ -646,15 +668,22 @@ a {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 72px;
-    background: #ffffff;
+    min-height: 72px;
+    height: calc(72px + env(safe-area-inset-bottom, 0px));
+    padding: 0 0.25rem env(safe-area-inset-bottom, 0px) 0.25rem;
+    background: var(--bg-secondary);
     display: flex;
     justify-content: space-around;
     align-items: center;
     border-top: 1px solid var(--border);
     z-index: 2000;
-    padding: 0 0.25rem;
     box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
+  }
+
+  /* Capacitor Android specific fallback for 3-button navs that don't report safe area properly */
+  body.capacitor-android .mobile-bottom-nav {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    height: calc(72px + max(env(safe-area-inset-bottom, 0px), 16px));
   }
 
   .mobile-nav-item {
@@ -702,7 +731,7 @@ a {
   .mobile-form-header {
     display: flex !important;
   }
-  .bookings-layout {
+  .bookings-layout, .analysis-layout {
     grid-template-columns: 1fr !important;
     display: flex !important;
     flex-direction: column !important;
@@ -820,4 +849,41 @@ input:checked + .slider:before {
 
 .slider.round:before {
   border-radius: 50%;
+}
+
+
+/* Landing Page Global Responsive Classes */
+@media (max-width: 992px) {
+  .desktop-nav { display: none !important; }
+  .desktop-btn { display: none !important; }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-receipt-container, .print-receipt-container * {
+    visibility: visible;
+  }
+  .print-receipt-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+  }
+}
+
+@media print {
+  .a5-format {
+    font-size: 12px;
+  }
+  .a5-format h3 {
+    font-size: 14px !important;
+  }
+  .a5-format table th, .a5-format table td {
+    padding: 8px !important;
+  }
 }

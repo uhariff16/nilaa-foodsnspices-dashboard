@@ -269,25 +269,42 @@ const StockAdjustmentModal = ({ isOpen, onClose, onSave, isAdmin, calculatedClos
     };
 
     useEffect(() => {
-        if (mode === 'transfer' && isOpen) {
-            const sKey = dbToKey[formData.sourceMaterial];
-            const sSys = calculatedClosings?.[sKey] || 0;
-            const sPhysObj = monthlyPhysical?.[sKey];
-            const shortage = sPhysObj 
-                ? Math.max(0, sSys - sPhysObj.weight) 
-                : (sSys < 0 ? -sSys : 0);
-            setFormData(prev => ({
-                ...prev,
-                weight: shortage > 0.01 ? shortage.toFixed(2) : ''
-            }));
+        if (isOpen) {
+            let targetDate = new Date().toISOString().split('T')[0];
+            if (selectedMonth && selectedMonth !== 'Overall') {
+                const [sMonth, sYear] = selectedMonth.split(' ');
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const mIdx = monthNames.indexOf(sMonth);
+                if (mIdx !== -1) {
+                    const lastDay = new Date(parseInt(sYear), mIdx + 1, 0);
+                    targetDate = lastDay.toISOString().split('T')[0];
+                }
+            }
+            
+            if (mode === 'transfer') {
+                const sKey = dbToKey[formData.sourceMaterial];
+                const sSys = calculatedClosings?.[sKey] || 0;
+                const sPhysObj = monthlyPhysical?.[sKey];
+                const shortage = sPhysObj 
+                    ? Math.max(0, sSys - sPhysObj.weight) 
+                    : (sSys < 0 ? -sSys : 0);
+                setFormData(prev => ({
+                    ...prev,
+                    date: targetDate,
+                    weight: shortage > 0.01 ? shortage.toFixed(2) : ''
+                }));
+            } else {
+                setFormData(prev => ({ ...prev, date: targetDate }));
+            }
         }
-    }, [mode, isOpen, formData.sourceMaterial, calculatedClosings, monthlyPhysical]);
+    }, [isOpen, selectedMonth, mode, formData.sourceMaterial, calculatedClosings, monthlyPhysical]);
 
     if (!isOpen) return null;
 
     const materials = [
         'GINGER RAW', 'GARLIC RAW',
         'GINGER PEELED', 'GARLIC PEELED',
+        'GINGER PEELED(PROCESSED)', 'GARLIC PEELED(PROCESSED)',
         'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 
@@ -632,12 +649,13 @@ const PhysicalCountModal = ({ isOpen, onClose, onSave, isAdmin }) => {
         remarks: ''
     });
     const [isSaving, setIsSaving] = useState(false);
-
+    
     if (!isOpen) return null;
 
     const materials = [
         'GINGER RAW', 'GARLIC RAW',
         'GINGER PEELED', 'GARLIC PEELED',
+        'GINGER PEELED(PROCESSED)', 'GARLIC PEELED(PROCESSED)',
         'G&G PASTE (MIX)', 'GINGER PASTE', 'GARLIC PASTE'
     ];
 

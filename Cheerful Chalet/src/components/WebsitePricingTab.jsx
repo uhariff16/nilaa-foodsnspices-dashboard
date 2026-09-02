@@ -86,6 +86,7 @@ export default function WebsitePricingTab({
       offerText: defaultData.offerPrice && defaultData.price ? `Save ${Math.round(((defaultData.price - defaultData.offerPrice) / defaultData.price) * 100)}%` : '',
       offerStartDate: defaultData.offerStartDate || '',
       offerEndDate: defaultData.offerEndDate || '',
+      offerActive: defaultData.offerActive || false,
       ctaButtonText: 'Get Started Free',
       publicFeatures: defaultData.features?.map(f => f.name) || [],
       highlightPlan: false,
@@ -97,6 +98,7 @@ export default function WebsitePricingTab({
       <WebsitePlanEditor 
         planKey={editingPlanKey}
         planData={currentData}
+        internalPlan={defaultData}
         onSave={(data) => handleSavePlanToDraft(editingPlanKey, data)}
         onCancel={() => setEditingPlanKey(null)}
       />
@@ -204,25 +206,11 @@ export default function WebsitePricingTab({
 }
 
 // Sub-component for editing a specific plan
-function WebsitePlanEditor({ planKey, planData, onSave, onCancel }) {
+function WebsitePlanEditor({ planKey, planData, internalPlan, onSave, onCancel }) {
   const [data, setData] = useState({ ...planData });
-  const [newFeature, setNewFeature] = useState('');
 
   const handleSave = () => {
     onSave(data);
-  };
-
-  const addFeature = () => {
-    if (newFeature.trim()) {
-      setData({ ...data, publicFeatures: [...(data.publicFeatures || []), newFeature.trim()] });
-      setNewFeature('');
-    }
-  };
-
-  const removeFeature = (idx) => {
-    const updated = [...(data.publicFeatures || [])];
-    updated.splice(idx, 1);
-    setData({ ...data, publicFeatures: updated });
   };
 
   return (
@@ -254,37 +242,40 @@ function WebsitePlanEditor({ planKey, planData, onSave, onCancel }) {
             <input type="text" className="form-input" value={data.shortDescription || ''} onChange={e => setData({...data, shortDescription: e.target.value})} placeholder="e.g. Perfect for small properties" />
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Monthly Price (₹)</label>
-              <input type="number" className="form-input" value={data.monthlyPrice || ''} onChange={e => setData({...data, monthlyPrice: Number(e.target.value)})} />
+          <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+            <h5 style={{ margin: '0 0 1rem 0', color: '#0F2C59', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>💰</span> Synced from Internal Pricing
+            </h5>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.9rem' }}>
+              <div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Base Rate</div>
+                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1e293b' }}>₹{internalPlan.price || 0}/mo</div>
+              </div>
+              <div>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Promotional Rate</div>
+                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: internalPlan.offerActive && internalPlan.offerPrice ? '#059669' : '#94a3b8' }}>
+                  {internalPlan.offerActive && internalPlan.offerPrice ? `₹${internalPlan.offerPrice}/mo` : 'N/A'}
+                </div>
+              </div>
+              
+              {internalPlan.offerActive && (
+                <>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Offer Starts</div>
+                    <div style={{ fontWeight: 600, color: '#475569' }}>{internalPlan.offerStartDate || 'Not Set'}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Offer Ends</div>
+                    <div style={{ fontWeight: 600, color: '#475569' }}>{internalPlan.offerEndDate || 'Not Set'}</div>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="form-group">
-              <label className="form-label">Original Price (optional)</label>
-              <input type="number" className="form-input" value={data.originalPrice || ''} onChange={e => setData({...data, originalPrice: Number(e.target.value)})} placeholder="e.g. 4999" />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Promotional Price (optional)</label>
-              <input type="number" className="form-input" value={data.promotionalPrice || ''} onChange={e => setData({...data, promotionalPrice: Number(e.target.value)})} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Offer Text</label>
-              <input type="text" className="form-input" value={data.offerText || ''} onChange={e => setData({...data, offerText: e.target.value})} placeholder="e.g. Save 40%" />
-            </div>
-          </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Offer Start Date (optional)</label>
-              <input type="date" className="form-input" value={data.offerStartDate || ''} onChange={e => setData({...data, offerStartDate: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Offer End Date (optional)</label>
-              <input type="date" className="form-input" value={data.offerEndDate || ''} onChange={e => setData({...data, offerEndDate: e.target.value})} />
-            </div>
+            {!internalPlan.offerActive && (
+              <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>
+                * Activate the offer in the Internal Pricing tab to display promotional pricing on the website.
+              </div>
+            )}
           </div>
         </div>
 
@@ -298,7 +289,7 @@ function WebsitePlanEditor({ planKey, planData, onSave, onCancel }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Display Order</label>
-              <input type="number" className="form-input" value={data.displayOrder || ''} onChange={e => setData({...data, displayOrder: Number(e.target.value)})} />
+              <input type="number" className="form-input" value={data.displayOrder || ''} onChange={e => setData({...data, displayOrder: e.target.value === '' ? '' : Number(e.target.value)})} />
             </div>
             <div className="form-group">
               <label className="form-label">CTA Button Text</label>
@@ -311,27 +302,23 @@ function WebsitePlanEditor({ planKey, planData, onSave, onCancel }) {
             <label htmlFor="markPopular" style={{ fontWeight: 600, margin: 0, cursor: 'pointer' }}>Mark as Highlighted / Most Popular</label>
           </div>
 
-          <div style={{ marginTop: '1rem' }}>
-            <label className="form-label">Public Feature List (Manually Defined)</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-              {(data.publicFeatures || []).map((feat, idx) => (
+          <div style={{ marginTop: '1rem', background: '#f8fafc', padding: '1.25rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            <h5 style={{ margin: '0 0 1rem 0', color: '#0F2C59', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>✨</span> Features (Synced from Internal)
+            </h5>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              {(internalPlan.features || []).filter(f => f.enabled !== false).map((feat, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: '6px' }}>
                   <CheckCircle size={16} color="#059669" />
-                  <span style={{ flex: 1, fontSize: '0.9rem' }}>{feat}</span>
-                  <button onClick={() => removeFeature(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
+                  <span style={{ flex: 1, fontSize: '0.85rem', color: '#334155' }}>{feat.name}</span>
                 </div>
               ))}
+              {(!internalPlan.features || internalPlan.features.filter(f => f.enabled !== false).length === 0) && (
+                <div style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>No features defined in Internal Pricing Tier.</div>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input 
-                type="text" 
-                className="form-input" 
-                placeholder="e.g. Up to 5 Rooms" 
-                value={newFeature} 
-                onChange={e => setNewFeature(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addFeature()}
-              />
-              <button className="btn btn-outline" onClick={addFeature}>Add</button>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', marginTop: '1rem' }}>
+              * To edit this list, go to the Internal Pricing Tiers tab.
             </div>
           </div>
         </div>

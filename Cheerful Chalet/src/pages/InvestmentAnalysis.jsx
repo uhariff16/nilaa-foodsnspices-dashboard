@@ -27,9 +27,20 @@ import { format } from 'date-fns';
 const PricePlanner = ({ data, setData, propertyInfo, saving, onSave }) => {
   const annualOperatingExpense = data.monthly_operating_expenses * 12;
   const annualTotalFixed = Number(data.annual_fixed_expenses);
-  const leaseInvestment = Number(data.total_investment);
+  const leaseInvestment = Number(data.total_investment || 0);
   
-  const totalAnnualCost = annualOperatingExpense + annualTotalFixed + leaseInvestment;
+  let recoveryYears = Number(data.recovery_period_years || 1);
+  if (data.property_ownership === 'leased' && data.lease_start_date && data.lease_end_date) {
+    const start = new Date(data.lease_start_date);
+    const end = new Date(data.lease_end_date);
+    const diffTime = Math.abs(end - start);
+    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    recoveryYears = diffYears > 0 ? diffYears : 1;
+  }
+  
+  const annualCapitalCost = leaseInvestment / recoveryYears;
+  
+  const totalAnnualCost = annualOperatingExpense + annualTotalFixed + annualCapitalCost;
   const targetAnnualNetProfit = leaseInvestment * (data.target_roi_percentage / 100);
   const requiredGrossAnnualRevenue = totalAnnualCost + targetAnnualNetProfit;
   
@@ -45,61 +56,167 @@ const PricePlanner = ({ data, setData, propertyInfo, saving, onSave }) => {
 
   return (
     <div className="analysis-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem', alignItems: 'start' }}>
+      
+      {/* LEFT COLUMN: Input Parameters */}
       <aside style={{ position: 'sticky', top: '1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <section className="card">
+        <section className="card" style={{ padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
             <Calculator size={18} color="var(--primary)" /> Input Parameters
           </h3>
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <label className="form-label" style={{ fontSize: '0.8rem' }}>Rental Model</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-color)', padding: '0.35rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <button className={`btn ${data.rental_model === 'room' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, rental_model: 'room'})}>Rooms</button>
-              <button className={`btn ${data.rental_model === 'property' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, rental_model: 'property'})}>Property</button>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            
+            {/* Group 1: Property Details */}
+            <div>
+              <h4 style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '1rem', opacity: 0.9 }}>1. Property Configuration</h4>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }}>Rental Model</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-color)', padding: '0.35rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <button className={`btn ${data.rental_model === 'room' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, rental_model: 'room'})}>Rooms</button>
+                  <button className={`btn ${data.rental_model === 'property' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, rental_model: 'property'})}>Property</button>
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }}>Property Ownership</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-color)', padding: '0.35rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                  <button className={`btn ${data.property_ownership === 'owned' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, property_ownership: 'owned', recovery_period_years: data.recovery_period_years === 1 ? 5 : data.recovery_period_years})}>Owned</button>
+                  <button className={`btn ${data.property_ownership === 'leased' ? 'btn-primary' : 'btn-link'}`} style={{ fontSize: '0.75rem', padding: '0.5rem', borderRadius: '8px' }} onClick={() => setData({...data, property_ownership: 'leased', recovery_period_years: data.recovery_period_years === 5 ? 1 : data.recovery_period_years})}>Leased</button>
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }}>Unit Count</label>
+                <input type="number" className="form-input" value={data.total_rooms} onChange={e => setData({...data, total_rooms: e.target.value === '' ? '' : Number(e.target.value)})} />
+              </div>
             </div>
-          </div>
-          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-            <label className="form-label" style={{ fontSize: '0.8rem' }}>Annual Investment/Lease (₹)</label>
-            <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>₹</div>
-              <input type="number" className="form-input" style={{ paddingLeft: '35px' }} value={data.total_investment} onChange={e => setData({...data, total_investment: Number(e.target.value)})} />
+
+            {/* Group 2: Investment & Timeline */}
+            <div style={{ paddingTop: '1.5rem', borderTop: '1px dashed var(--border)' }}>
+              <h4 style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '1rem', opacity: 0.9 }}>2. Investment & Timeline</h4>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }}>Total Investment (₹)</label>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>₹</div>
+                  <input type="number" className="form-input" style={{ paddingLeft: '35px' }} value={data.total_investment} onChange={e => setData({...data, total_investment: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+              </div>
+              
+              {data.property_ownership === 'owned' ? (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Recovery Period (Yrs)</label>
+                  <input type="number" className="form-input" value={data.recovery_period_years} onChange={e => setData({...data, recovery_period_years: e.target.value === '' ? '' : Number(e.target.value)})} min="1" step="0.5" />
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Lease Start</label>
+                    <input type="date" className="form-input" style={{ padding: '0.4rem', fontSize: '0.75rem' }} value={data.lease_start_date} onChange={e => setData({...data, lease_start_date: e.target.value})} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Lease End</label>
+                    <input type="date" className="form-input" style={{ padding: '0.4rem', fontSize: '0.75rem' }} value={data.lease_end_date} onChange={e => setData({...data, lease_end_date: e.target.value})} />
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Group 3: Operating Costs */}
+            <div style={{ paddingTop: '1.5rem', borderTop: '1px dashed var(--border)' }}>
+              <h4 style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '1rem', opacity: 0.9 }}>3. Operating Costs</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Monthly OpExp</label>
+                  <input type="number" className="form-input" value={data.monthly_operating_expenses} onChange={e => setData({...data, monthly_operating_expenses: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Annual Fixed</label>
+                  <input type="number" className="form-input" value={data.annual_fixed_expenses} onChange={e => setData({...data, annual_fixed_expenses: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+              </div>
+            </div>
+
+            {/* Group 4: Strategic Goals */}
+            <div style={{ paddingTop: '1.5rem', borderTop: '1px dashed var(--border)' }}>
+              <h4 style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '1rem', opacity: 0.9 }}>4. Strategic Goals</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Target ROI (%)</label>
+                  <input type="number" className="form-input" value={data.target_roi_percentage} onChange={e => setData({...data, target_roi_percentage: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem' }}>Occupancy Goal (%)</label>
+                  <input type="number" className="form-input" value={data.expected_occupancy_rate} onChange={e => setData({...data, expected_occupancy_rate: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem' }}>Expected Avg. Selling Price (₹)</label>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>₹</div>
+                  <input type="number" className="form-input" style={{ paddingLeft: '35px' }} value={data.average_selling_price} onChange={e => setData({...data, average_selling_price: e.target.value === '' ? '' : Number(e.target.value)})} placeholder="Optional for scenario testing" />
+                </div>
+              </div>
+            </div>
+            
           </div>
-          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-            <label className="form-label" style={{ fontSize: '0.8rem' }}>Unit Count</label>
-            <input type="number" className="form-input" value={data.total_rooms} onChange={e => setData({...data, total_rooms: Number(e.target.value)})} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-            <div className="form-group"><label className="form-label" style={{ fontSize: '0.8rem' }}>Monthly OpExp</label><input type="number" className="form-input" value={data.monthly_operating_expenses} onChange={e => setData({...data, monthly_operating_expenses: Number(e.target.value)})} /></div>
-            <div className="form-group"><label className="form-label" style={{ fontSize: '0.8rem' }}>Annual Fixed</label><input type="number" className="form-input" value={data.annual_fixed_expenses} onChange={e => setData({...data, annual_fixed_expenses: Number(e.target.value)})} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="form-group"><label className="form-label" style={{ fontSize: '0.8rem' }}>Target ROI (%)</label><input type="number" className="form-input" value={data.target_roi_percentage} onChange={e => setData({...data, target_roi_percentage: Number(e.target.value)})} /></div>
-            <div className="form-group"><label className="form-label" style={{ fontSize: '0.8rem' }}>Occupancy Goal (%)</label><input type="number" className="form-input" value={data.expected_occupancy_rate} onChange={e => setData({...data, expected_occupancy_rate: Number(e.target.value)})} /></div>
-          </div>
-          <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={onSave} disabled={saving}><Save size={18}/> {saving ? 'Saving...' : 'Save Configuration'}</button>
+
+          <button className="btn btn-primary" style={{ width: '100%', marginTop: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }} onClick={onSave} disabled={saving}><Save size={18}/> {saving ? 'Saving...' : 'Save Configuration'}</button>
         </section>
       </aside>
 
+      {/* RIGHT COLUMN: Strategy Projections */}
       <main style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div className="card">
           <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><TrendingUp size={20} color="var(--success)" /> Strategy Projections</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-            <div style={{ padding: '1.5rem', background: 'var(--bg-color)', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', fontWeight: 700 }}>Break-even Rate</p>
-              <h2 style={{ color: 'var(--warning)', margin: 0, fontSize: '2rem' }}>₹{Math.ceil(breakEvenDailyRatePerRoom).toLocaleString()}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`, gap: '1.5rem' }}>
+            
+            <div style={{ padding: '1.5rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <p style={{ color: 'var(--warning)', fontSize: '0.75rem', margin: 0, textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>Break-even Rate</p>
+              <h2 style={{ color: 'var(--warning)', margin: 0, fontSize: '2.25rem', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.25rem' }}>
+                ₹{Math.ceil(breakEvenDailyRatePerRoom).toLocaleString()}
+                <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ night</span>
+              </h2>
+              <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: '1.4', marginTop: 'auto', paddingTop: '0.5rem' }}>Minimum avg. nightly rate required to cover all costs at target occupancy (0% profit).</span>
             </div>
-            <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, var(--primary) 0%, #1e40af 100%)', borderRadius: '16px', color: 'white', textAlign: 'center' }}>
-              <p style={{ opacity: 0.9, fontSize: '0.85rem', marginBottom: '0.5rem', textTransform: 'uppercase', fontWeight: 700 }}>Suggested Rate</p>
-              <h2 style={{ margin: 0, fontSize: '2rem' }}>₹{Math.ceil(suggestedDailyRatePerRoom).toLocaleString()}</h2>
+            
+            <div style={{ padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: '16px', border: '2px solid var(--primary)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <p style={{ color: 'var(--primary)', fontSize: '0.75rem', margin: 0, textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>Suggested Rate</p>
+              <h2 style={{ color: 'var(--primary)', margin: 0, fontSize: '2.25rem', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.25rem' }}>
+                ₹{Math.ceil(suggestedDailyRatePerRoom).toLocaleString()}
+                <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 600 }}>/ night</span>
+              </h2>
+              <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: '1.4', marginTop: 'auto', paddingTop: '0.5rem' }}>Target avg. nightly rate required to achieve your desired {data.target_roi_percentage}% ROI.</span>
             </div>
+            
+            {Number(data.average_selling_price) > 0 && (
+              <div style={{ padding: '1.5rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.2)', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <p style={{ color: '#2563eb', fontSize: '0.75rem', margin: 0, textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>Required Occupancy</p>
+                <h2 style={{ color: '#2563eb', margin: 0, fontSize: '2.25rem', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '0.25rem' }}>
+                  {((requiredGrossAnnualRevenue / Number(data.average_selling_price)) / totalAvailableNights * 100).toFixed(1)}%
+                </h2>
+                <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: '1.4', marginTop: 'auto', paddingTop: '0.5rem' }}>(Scenario) Required occupancy if selling at expected avg price of ₹{Number(data.average_selling_price).toLocaleString()}.</span>
+              </div>
+            )}
+            
           </div>
+          
           <div style={{ marginTop: '2rem', background: 'var(--bg-color)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)' }}>
-            <h4 style={{ marginBottom: '1.25rem', fontSize: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>Annual Summary</h4>
+            <h4 style={{ marginBottom: '1.25rem', fontSize: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', color: 'var(--text-main)', opacity: 0.9 }}>Annual Core Metrics</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total Operational & Fixed Costs</span><span style={{ fontWeight: 600 }}>₹{(annualOperatingExpense + annualTotalFixed).toLocaleString()}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Lease/Investment Recovery</span><span style={{ fontWeight: 600 }}>₹{leaseInvestment.toLocaleString()}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Target Net Profit ({data.target_roi_percentage}% ROI)</span><span style={{ fontWeight: 600, color: 'var(--success)' }}>+ ₹{targetAnnualNetProfit.toLocaleString()}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'rgba(0,0,0,0.03)', borderRadius: '12px' }}><span style={{ fontWeight: 800 }}>Required Gross Revenue</span><span style={{ fontWeight: 900, color: 'var(--primary)', fontSize: '1.25rem' }}>₹{requiredGrossAnnualRevenue.toLocaleString()}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Total Operational & Fixed Costs</span>
+                <span style={{ fontWeight: 600 }}>₹{Math.ceil(annualOperatingExpense + annualTotalFixed).toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Amortized Capital Cost ({Math.round(recoveryYears * 10) / 10} yrs)</span>
+                <span style={{ fontWeight: 600 }}>₹{Math.ceil(annualCapitalCost).toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Target Net Profit ({data.target_roi_percentage}% ROI)</span>
+                <span style={{ fontWeight: 600, color: 'var(--success)' }}>+ ₹{Math.ceil(targetAnnualNetProfit).toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+                <span style={{ fontWeight: 800, color: 'var(--primary)' }}>Required Gross Revenue</span>
+                <span style={{ fontWeight: 900, color: 'var(--primary)', fontSize: '1.5rem' }}>₹{Math.ceil(requiredGrossAnnualRevenue).toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -136,13 +253,17 @@ const ROIPerformance = ({ investmentData, financials, range }) => {
     const monthlyAverageExpense = totalOperatingExpenses / actualMonthsElapsed;
     const monthlyAverageProfit = netProfit / actualMonthsElapsed;
     
+    const recoveryYears = Number(investmentData?.recovery_period_years) || 1;
     const yearsToPayback = monthlyAverageProfit > 0 ? (capitalOutlay / (monthlyAverageProfit * 12)) : 0;
 
-    const monthlyCapitalRecoveryGoal = capitalOutlay / 12;
+    const monthlyCapitalRecoveryGoal = capitalOutlay / (recoveryYears * 12);
     const monthlyROIGoal = (capitalOutlay * (targetROIPercent / 100)) / 12;
     
     // Revenue Goal = Recovery + ROI + Current Run Rate Expenses
     const totalMonthlyRevenueTarget = monthlyCapitalRecoveryGoal + monthlyROIGoal + monthlyAverageExpense;
+
+    const breakEvenRevenueTarget = (monthlyCapitalRecoveryGoal + monthlyAverageExpense) * actualMonthsElapsed;
+    const achievedBreakEven = totalIncome >= breakEvenRevenueTarget;
 
     // Calculate the suggested rate for sales targeting
     const annualOperatingExpense = Number(investmentData?.monthly_operating_expenses || 0) * 12;
@@ -154,98 +275,317 @@ const ROIPerformance = ({ investmentData, financials, range }) => {
     const totalUnits = investmentData?.rental_model === 'property' ? 1 : (investmentData?.total_rooms || 1); 
     const sellableRoomNights = (totalUnits * 365) * (Number(investmentData?.expected_occupancy_rate || 60) / 100);
     const suggestedRate = sellableRoomNights > 0 ? requiredGrossAnnualRevenue / sellableRoomNights : 0;
+    const breakEvenRate = sellableRoomNights > 0 ? totalAnnualCost / sellableRoomNights : 0;
+
+    const breakEvenMonthlyTarget = totalAnnualCost / 12;
+
+    const monthlyPerformance = {};
+    const initMonth = (date) => {
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+      if (!monthlyPerformance[monthKey]) {
+        monthlyPerformance[monthKey] = { 
+          label: date.toLocaleString('default', { month: 'short', year: '2-digit' }), 
+          revenue: 0, 
+          nightsSold: 0,
+          year: date.getFullYear(), 
+          month: date.getMonth() 
+        };
+      }
+      return monthKey;
+    };
+
+    financials.incomes.forEach(inc => {
+      const monthKey = initMonth(new Date(inc.date));
+      monthlyPerformance[monthKey].revenue += Number(inc.amount);
+    });
+
+    const validBookings = (financials.bookings || []).filter(b => b.status !== 'cancelled' && b.status !== 'no_show' && b.status !== 'Cancelled');
+    let totalNightsSold = 0;
+    validBookings.forEach(b => {
+      let nights = Number(b.night_count);
+      if (!(nights > 0)) {
+        const cin = new Date(b.check_in_date);
+        const cout = new Date(b.check_out_date);
+        nights = Math.max(1, Math.round((cout - cin) / (1000 * 60 * 60 * 24)));
+      }
+      totalNightsSold += nights;
+      
+      if (b.check_in_date) {
+        const monthKey = initMonth(new Date(b.check_in_date));
+        monthlyPerformance[monthKey].nightsSold += nights;
+      }
+    });
+
+    const monthlyBreakdown = Object.values(monthlyPerformance).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    }).map(m => ({
+      ...m,
+      achieved: m.revenue >= breakEvenMonthlyTarget,
+      occupancyRate: (m.nightsSold / (totalUnits * 30.4)) * 100
+    }));
+
+    const actualADR = totalNightsSold > 0 ? (totalIncome / totalNightsSold) : 0;
+    const requiredOccupancyRate = actualADR > 0 
+      ? (totalMonthlyRevenueTarget / actualADR) / (totalUnits * 30.4) * 100 
+      : (suggestedRate > 0 ? (totalMonthlyRevenueTarget / suggestedRate) / (totalUnits * 30.4) * 100 : 0);
+      
+    const breakEvenOccupancyRate = actualADR > 0
+      ? (breakEvenMonthlyTarget / actualADR) / (totalUnits * 30.4) * 100
+      : (suggestedRate > 0 ? (breakEvenMonthlyTarget / suggestedRate) / (totalUnits * 30.4) * 100 : 0);
+      
+    const totalAvailableNightsPast = totalUnits * actualMonthsElapsed * 30.4;
+    const actualOccupancyRate = totalAvailableNightsPast > 0 ? (totalNightsSold / totalAvailableNightsPast) * 100 : 0;
 
     return {
       totalIncome, totalOperatingExpenses, netProfit, actualROI, capitalOutlay, 
       targetROIPercent, targetPeriodProfit, monthlyAverageProfit, yearsToPayback,
       monthlyCapitalRecoveryGoal, monthlyROIGoal, 
       monthlyAverageRevenue, monthlyAverageExpense, totalMonthlyRevenueTarget, actualMonthsElapsed,
-      suggestedRate,
+      suggestedRate, breakEvenRate, breakEvenRevenueTarget, achievedBreakEven,
+      totalAnnualCost, breakEvenMonthlyTarget, monthlyBreakdown,
+      monthlyOperatingExpTarget: Number(investmentData?.monthly_operating_expenses || 0),
+      monthlyFixedExpTarget: Number(investmentData?.annual_fixed_expenses || 0) / 12,
+      monthlyCapitalRecoveryTarget: Number(investmentData?.total_investment || 0) / 12,
+      actualADR, requiredOccupancyRate, breakEvenOccupancyRate, actualOccupancyRate,
       performanceRatio: targetPeriodProfit > 0 ? (netProfit / targetPeriodProfit) * 100 : 0
     };
   }, [financials, investmentData, range]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-        <div className="card">
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Actual ROI</span>
-          <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary)' }}>{stats.actualROI.toFixed(1)}%</div>
-          <small style={{ color: 'var(--text-muted)' }}>Target: {stats.targetROIPercent}%</small>
-        </div>
-        <div className="card">
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Net Profit</span>
-          <div style={{ fontSize: '2.5rem', fontWeight: 900, color: stats.netProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>₹{stats.netProfit.toLocaleString()}</div>
-        </div>
-        <div className="card">
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Capital Recovery</span>
-          <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>{Math.max(0, stats.actualROI).toFixed(1)}%</div>
-          <div style={{ height: '6px', background: 'var(--bg-secondary)', borderRadius: '3px', marginTop: '1rem', overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(100, Math.max(0, stats.actualROI))}%`, height: '100%', background: 'var(--primary)' }}></div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      
+      {/* SECTION 1: YTD Performance & Overall Health */}
+      <div>
+        <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: 'var(--text-main)', opacity: 0.9 }}>1. YTD Performance & Overall Health</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Actual ROI</span>
+                <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary)', lineHeight: 1 }}>{stats.actualROI.toFixed(1)}%</div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>Target: {stats.targetROIPercent}%</small>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Capital Recovered</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: stats.netProfit >= 0 ? 'var(--success)' : 'var(--danger)', lineHeight: 1 }}>₹{stats.netProfit.toLocaleString()}</div>
+                <div style={{ height: '6px', background: 'var(--bg-secondary)', borderRadius: '3px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(100, Math.max(0, stats.actualROI))}%`, height: '100%', background: 'var(--success)' }}></div>
+                </div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                  {Math.max(0, stats.actualROI).toFixed(1)}% of ₹{stats.capitalOutlay.toLocaleString()}
+                </small>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Est. Payback Time</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>
+                  {stats.yearsToPayback > 0 ? `${stats.yearsToPayback.toFixed(1)} Years` : 'N/A'}
+                </div>
+                <small style={{ color: 'var(--text-muted)' }}>At current run rate</small>
+              </div>
+            </div>
           </div>
+          
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', border: `1px solid ${stats.achievedBreakEven ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Break-Even Status (YTD)</span>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, color: stats.achievedBreakEven ? 'var(--success)' : 'var(--warning)', marginTop: '0.25rem' }}>
+                  {stats.achievedBreakEven ? 'ACHIEVED' : 'NOT ACHIEVED'}
+                </div>
+              </div>
+              <span style={{ background: 'var(--bg-secondary)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, border: '1px solid var(--border)' }}>0% Profit Baseline</span>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem', marginTop: 'auto', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Actual YTD Revenue</small>
+                <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <strong style={{ fontSize: '1.1rem' }}>₹{Math.ceil(stats.totalIncome).toLocaleString()}</strong>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: stats.totalIncome >= stats.breakEvenRevenueTarget ? 'var(--success)' : 'var(--warning)' }}>
+                    ({stats.breakEvenRevenueTarget > 0 ? ((stats.totalIncome / stats.breakEvenRevenueTarget) * 100).toFixed(1) : 0}% Achieved so far)
+                  </span>
+                </div>
+              </div>
+              <div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Target YTD Revenue</small>
+                <strong style={{ fontSize: '1.1rem' }}>₹{Math.ceil(stats.breakEvenRevenueTarget).toLocaleString()}</strong>
+              </div>
+              <div>
+                <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.25rem' }}>Variance</small>
+                <strong style={{ fontSize: '1.1rem', color: stats.achievedBreakEven ? 'var(--success)' : 'var(--danger)' }}>
+                  {stats.achievedBreakEven ? '+' : '-'}₹{Math.abs(stats.totalIncome - stats.breakEvenRevenueTarget).toLocaleString()}
+                </strong>
+              </div>
+            </div>
+          </div>
+          
         </div>
       </div>
 
-      <div className="card" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(59, 130, 246, 0.02)' }}>
-        <h3 style={{ margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.1rem' }}><Target size={20} color="var(--primary)" /> Monthly Strategic Targets</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
-          <div>
-            <small style={{ color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Min. Recovery</small>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>₹{Math.ceil(stats.monthlyCapitalRecoveryGoal).toLocaleString()}</div>
-          </div>
-          <div>
-            <small style={{ color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Target ROI Profit</small>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>₹{Math.ceil(stats.monthlyROIGoal).toLocaleString()}</div>
-          </div>
-          <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '1.25rem', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+      {/* SECTION 2: Monthly Targets */}
+      <div>
+        <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: 'var(--text-main)', opacity: 0.9 }}>2. Monthly Targets</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          
+          <div className="card" style={{ borderLeft: '4px solid var(--warning)', background: 'rgba(245, 158, 11, 0.02)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <small style={{ color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase' }}>Monthly Revenue Goal</small>
-              <span style={{ 
-                padding: '0.25rem 0.6rem', 
-                borderRadius: '50px', 
-                fontSize: '0.65rem', 
-                fontWeight: 900,
-                background: (stats.totalIncome / (stats.totalIncome / stats.monthlyAverageProfit || 1)) >= stats.totalMonthlyRevenueTarget ? 'var(--success)' : 'var(--danger)',
-                color: 'white'
-              }}>
-                {(stats.totalIncome / (stats.totalIncome / stats.monthlyAverageProfit || 1)) >= stats.totalMonthlyRevenueTarget ? 'ON TRACK' : 'ACTION REQUIRED'}
-              </span>
+              <span style={{ color: 'var(--warning)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.85rem' }}>Goal 1: Break-Even Target</span>
+              <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', fontWeight: 700 }}>Covers Expenses + Recovery</span>
             </div>
-            <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', marginBottom: '1.25rem' }}>₹{Math.ceil(stats.totalMonthlyRevenueTarget).toLocaleString()}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--warning)', lineHeight: 1 }}>₹{Math.ceil(stats.breakEvenMonthlyTarget).toLocaleString()}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Actual Avg. Revenue</div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: stats.monthlyAverageRevenue >= stats.breakEvenMonthlyTarget ? 'var(--success)' : 'var(--danger)' }}>₹{Math.ceil(stats.monthlyAverageRevenue).toLocaleString()}</div>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.2rem 0.5rem', borderRadius: '4px', background: stats.monthlyAverageRevenue >= stats.breakEvenMonthlyTarget ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', color: stats.monthlyAverageRevenue >= stats.breakEvenMonthlyTarget ? 'var(--success)' : 'var(--warning)', marginTop: '0.15rem' }}>
+                  {stats.monthlyAverageRevenue >= stats.breakEvenMonthlyTarget ? 'ACHIEVED' : 'NOT ACHIEVED'}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid rgba(245, 158, 11, 0.1)', paddingTop: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Operating Expenses</span>
+                <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyOperatingExpTarget).toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Fixed Expenses</span>
+                <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyFixedExpTarget).toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Capital Recovery</span>
+                <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyCapitalRecoveryTarget).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(59, 130, 246, 0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <span style={{ color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.85rem' }}>Goal 2: Strategic Target</span>
+              <span style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 700 }}>Covers Actual Exp + Recovery + ROI</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--primary)', lineHeight: 1 }}>₹{Math.ceil(stats.totalMonthlyRevenueTarget).toLocaleString()}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Current Status</div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, padding: '0.3rem 0.6rem', borderRadius: '4px', background: (stats.totalIncome / (stats.totalIncome / stats.monthlyAverageProfit || 1)) >= stats.totalMonthlyRevenueTarget ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: (stats.totalIncome / (stats.totalIncome / stats.monthlyAverageProfit || 1)) >= stats.totalMonthlyRevenueTarget ? 'var(--success)' : 'var(--danger)' }}>
+                  {(stats.totalIncome / (stats.totalIncome / stats.monthlyAverageProfit || 1)) >= stats.totalMonthlyRevenueTarget ? 'ON TRACK' : 'ACTION REQUIRED'}
+                </div>
+              </div>
+            </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', borderTop: '1px solid rgba(59, 130, 246, 0.1)', paddingTop: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Avg. Monthly Expenses <small>(over {stats.actualMonthsElapsed} mos)</small></span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Actual Avg. Expenses</span>
                 <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyAverageExpense).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Min. Capital Recovery</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Capital Recovery</span>
                 <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyCapitalRecoveryGoal).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                 <span style={{ color: 'var(--text-muted)' }}>ROI Profit Target</span>
                 <span style={{ fontWeight: 600 }}>₹{Math.ceil(stats.monthlyROIGoal).toLocaleString()}</span>
               </div>
-              <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'var(--bg-color)', borderRadius: '8px', fontSize: '0.75rem', textAlign: 'center' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Required Sales: </span>
-                <strong style={{ color: 'var(--primary)' }}>
-                  {Math.ceil(stats.totalMonthlyRevenueTarget / (stats.suggestedRate || 1))} Bookings
-                </strong>
-                <span style={{ color: 'var(--text-muted)' }}> @ ₹{Math.ceil(stats.suggestedRate).toLocaleString()} avg rate</span>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+
+      {/* SECTION 3: Operational Metrics */}
+      <div>
+        <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: 'var(--text-main)', opacity: 0.9 }}>3. Operational Metrics & Timeline</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Avg. Sold Price (ADR)</span>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900 }}>₹{Math.ceil(stats.actualADR).toLocaleString()}</div>
+                <small style={{ color: 'var(--text-muted)' }}>Historical average</small>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Actual Occupancy</span>
+                <div style={{ fontSize: '1.75rem', fontWeight: 900, color: stats.actualOccupancyRate >= stats.breakEvenOccupancyRate ? 'var(--success)' : 'var(--warning)' }}>
+                  {stats.actualOccupancyRate.toFixed(1)}%
+                </div>
+                <small style={{ color: 'var(--text-muted)' }}>Historical average</small>
               </div>
             </div>
+            
+            <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Required for Break-Even (Goal 1):</span>
+                <span style={{ fontWeight: 700 }}>{stats.breakEvenOccupancyRate.toFixed(1)}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Required for Profit (Goal 2):</span>
+                <span style={{ fontWeight: 700 }}>{stats.requiredOccupancyRate.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+          
+          {stats.monthlyBreakdown && stats.monthlyBreakdown.length > 0 && (
+            <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: 700 }}>Monthly Break-Even Timeline</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.5rem' }}>
+                {stats.monthlyBreakdown.map((m, idx) => (
+                  <div key={idx} style={{ 
+                    padding: '0.35rem 0.6rem', 
+                    borderRadius: '8px', 
+                    background: m.achieved ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                    color: m.achieved ? 'var(--success)' : 'var(--warning)',
+                    border: `1px solid ${m.achieved ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {m.achieved ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', lineHeight: 1.2 }}>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.8 }}>{m.label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                          <span style={{ fontSize: '0.55rem', textTransform: 'uppercase', opacity: 0.7, fontWeight: 800 }}>Revenue</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 900 }}>₹{Math.ceil(m.revenue).toLocaleString()}</span>
+                        </div>
+                        {m.occupancyRate > 0 && (
+                          <>
+                            <span style={{ width: '1px', height: '18px', background: 'currentColor', opacity: 0.3 }}></span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                              <span style={{ fontSize: '0.55rem', textTransform: 'uppercase', opacity: 0.7, fontWeight: 800 }}>Occupancy</span>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 900 }}>{m.occupancyRate.toFixed(1)}%</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* SECTION 4: Profitability Breakdown */}
+      <div>
+        <div className="card">
+          <h3 style={{ margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Activity size={20} color="var(--primary)" /> Profitability Breakdown</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gross Revenue</span><span style={{ fontWeight: 700, color: 'var(--success)' }}>+ ₹{stats.totalIncome.toLocaleString()}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total Expenses</span><span style={{ fontWeight: 700, color: 'var(--danger)' }}>- ₹{stats.totalOperatingExpenses.toLocaleString()}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px' }}><span style={{ fontWeight: 800 }}>Net Period Profit</span><span style={{ fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{stats.netProfit.toLocaleString()}</span></div>
           </div>
         </div>
       </div>
 
-      <div className="card">
-        <h3 style={{ margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Activity size={20} color="var(--primary)" /> Profitability Breakdown</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gross Revenue</span><span style={{ fontWeight: 700, color: 'var(--success)' }}>+ ₹{stats.totalIncome.toLocaleString()}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total Expenses</span><span style={{ fontWeight: 700, color: 'var(--danger)' }}>- ₹{stats.totalOperatingExpenses.toLocaleString()}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px' }}><span style={{ fontWeight: 800 }}>Net Period Profit</span><span style={{ fontWeight: 900, fontSize: '1.25rem', color: 'var(--primary)' }}>₹{stats.netProfit.toLocaleString()}</span></div>
-        </div>
-      </div>
     </div>
   );
 };
@@ -263,9 +603,14 @@ export default function InvestmentHub() {
     target_roi_percentage: 12,
     expected_occupancy_rate: 60,
     total_rooms: 0,
-    rental_model: 'room'
+    rental_model: 'room',
+    property_ownership: 'leased',
+    recovery_period_years: 1,
+    lease_start_date: new Date().toISOString().split('T')[0],
+    lease_end_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+    average_selling_price: ''
   });
-  const [financials, setFinancials] = useState({ incomes: [], expenses: [] });
+  const [financials, setFinancials] = useState({ incomes: [], expenses: [], bookings: [] });
   const [propertyInfo, setPropertyInfo] = useState({ totalRooms: 0 });
 
   const [range, setRange] = useState({
@@ -283,14 +628,27 @@ export default function InvestmentHub() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [inv, inc, exp] = await Promise.all([
+      const [inv, inc, exp, bkg] = await Promise.all([
         supabase.from('investments').select('*').eq('resort_id', activeResortId).maybeSingle(),
         supabase.from('incomes').select('*').eq('resort_id', activeResortId).gte('date', range.start).lte('date', range.end),
-        supabase.from('expenses').select('*').eq('resort_id', activeResortId).gte('date', range.start).lte('date', range.end)
+        supabase.from('expenses').select('*').eq('resort_id', activeResortId).gte('date', range.start).lte('date', range.end),
+        supabase.from('bookings').select('check_in_date, check_out_date, total_amount, night_count, status')
+          .eq('resort_id', activeResortId)
+          .gte('check_in_date', range.start)
+          .lte('check_in_date', range.end)
       ]);
 
-      if (inv.data) setInvestmentData(inv.data);
-      setFinancials({ incomes: inc.data || [], expenses: exp.data || [] });
+      if (inv.data) {
+        setInvestmentData({
+          ...inv.data,
+          property_ownership: inv.data.property_ownership || 'leased',
+          recovery_period_years: inv.data.recovery_period_years || 1,
+          lease_start_date: inv.data.lease_start_date || new Date().toISOString().split('T')[0],
+          lease_end_date: inv.data.lease_end_date || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+          average_selling_price: inv.data.average_selling_price || ''
+        });
+      }
+      setFinancials({ incomes: inc.data || [], expenses: exp.data || [], bookings: bkg.data || [] });
     } catch (err) {
       console.error(err);
     } finally {
@@ -307,10 +665,17 @@ export default function InvestmentHub() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const { id, created_at, updated_at, ...dbPayload } = investmentData;
+      
+      // Convert empty strings to null for database compatibility
+      if (dbPayload.average_selling_price === '') dbPayload.average_selling_price = null;
+      if (dbPayload.lease_start_date === '') dbPayload.lease_start_date = null;
+      if (dbPayload.lease_end_date === '') dbPayload.lease_end_date = null;
+
       const { error } = await supabase.from('investments').upsert({
         tenant_id: profile.id,
         resort_id: activeResortId,
-        ...investmentData,
+        ...dbPayload,
         updated_at: new Date().toISOString()
       }, { onConflict: 'tenant_id,resort_id' });
       if (error) throw error;
@@ -342,10 +707,11 @@ export default function InvestmentHub() {
           </div>
 
           {/* Toggle Button Group */}
-          <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', flex: '1 1 250px', maxWidth: '400px', background: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
              <button 
                 onClick={() => setView('planner')}
                 style={{ 
+                  flex: 1,
                   padding: '0.5rem 1.25rem', 
                   borderRadius: '10px', 
                   fontSize: '0.85rem', 
@@ -362,6 +728,7 @@ export default function InvestmentHub() {
              <button 
                 onClick={() => setView('roi')}
                 style={{ 
+                  flex: 1,
                   padding: '0.5rem 1.25rem', 
                   borderRadius: '10px', 
                   fontSize: '0.85rem', 

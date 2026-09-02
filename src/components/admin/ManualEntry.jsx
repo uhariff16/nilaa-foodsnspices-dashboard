@@ -6,6 +6,15 @@ const ManualEntry = () => {
     const [entryType, setEntryType] = useState('transaction'); // 'transaction' | 'production'
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState({ type: 'idle', message: '' });
+    const [lockedMonths, setLockedMonths] = useState([]);
+
+    React.useEffect(() => {
+        const fetchLocked = async () => {
+            const { data } = await supabase.from('system_settings').select('value').eq('key', 'locked_months').maybeSingle();
+            if (data && data.value) setLockedMonths(JSON.parse(data.value));
+        };
+        fetchLocked();
+    }, []);
 
     // Financial state
     const [txnForm, setTxnForm] = useState({

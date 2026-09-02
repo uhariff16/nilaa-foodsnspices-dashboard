@@ -184,6 +184,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
 
     const [retailCustomersList, setRetailCustomersList] = React.useState(['cash', 'nfs delivery', 'market shop']);
     const [cogsEnabled, setCogsEnabled] = React.useState(false);
+    const [lockedMonths, setLockedMonths] = React.useState([]);
     const [customerFilterQuery, setCustomerFilterQuery] = React.useState('');
     const [showClassificationModal, setShowClassificationModal] = React.useState(false);
     const [showOperationalAnalysisModal, setShowOperationalAnalysisModal] = React.useState(false);
@@ -482,6 +483,22 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
         if (forceTab) setActiveAnalysisSubTab(forceTab);
     }, [forceTab]);
 
+    const toggleLockMonth = async (monthYearStr) => {
+        try {
+            const newLocked = lockedMonths.includes(monthYearStr) 
+                ? lockedMonths.filter(m => m !== monthYearStr) 
+                : [...lockedMonths, monthYearStr];
+            
+            const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'locked_months').maybeSingle();
+            if (existing) {
+                await supabase.from('system_settings').update({ value: JSON.stringify(newLocked) }).eq('id', existing.id);
+            } else {
+                await supabase.from('system_settings').insert({ key: 'locked_months', value: JSON.stringify(newLocked), description: 'Array of month-year strings that are locked' });
+            }
+            setLockedMonths(newLocked);
+        } catch (e) { console.error('Error toggling lock:', e); }
+    };
+
     const fetchProfitHubData = async () => {
         setIsProfitLoading(true);
         setIsTableMissing(false);
@@ -490,6 +507,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                 supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
                 supabase.from('profit_payouts').select('*').like('month_year', `%${selectedYear}%`),
                 supabase.from('system_settings').select('value').eq('key', 'profit_reserve_percentage').maybeSingle(),
+                supabase.from('system_settings').select('value').eq('key', 'locked_months').maybeSingle(),
                 supabase.from('profit_monthly_settings').select('*').like('month_year', `%${selectedYear}%`),
                 supabase.from('partner_investments').select('amount, investment_date, stakeholder_id')
             ]);
@@ -2804,7 +2822,16 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                             const reserved = (mProfit * activeReservePct) / 100;
                                                             return (
                                                                 <tr key={month.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 700 }}>{month.name}</td>
+                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                        {month.name}
+                                                                        <button 
+                                                                            onClick={() => toggleLockMonth(`${month.name} ${selectedYear}`)}
+                                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: lockedMonths.includes(`${month.name} ${selectedYear}`) ? '#ef4444' : 'var(--text-secondary)' }}
+                                                                            title={lockedMonths.includes(`${month.name} ${selectedYear}`) ? 'Unlock Month' : 'Lock Month'}
+                                                                        >
+                                                                            {lockedMonths.includes(`${month.name} ${selectedYear}`) ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>}
+                                                                        </button>
+                                                                    </td>
                                                                     <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: mProfit < 0 ? '#ef4444' : '#10b981' }}>{formatCurrency(mProfit)}</td>
                                                                     {profitStakeholders.map(s => {
                                                                         const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);

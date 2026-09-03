@@ -93,6 +93,7 @@ const AdminSystemSettings = () => {
             key,
             value: String(value)
         }));
+        upsertData.push({ key: 'locked_months', value: JSON.stringify(lockedMonths) });
 
         try {
             const { error } = await supabase

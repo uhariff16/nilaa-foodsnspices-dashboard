@@ -206,15 +206,15 @@ const DataManager = () => {
                         </button>
                     </div>
 
-                    <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', width: '100%' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+                        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%' }}>
                             <div style={{ position: 'relative' }}>
                                 <Calendar style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
                                 <input
                                     type="month"
                                     value={dateFilter}
                                     onChange={e => setDateFilter(e.target.value)}
-                                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '38px' }}
+                                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '38px', width: '160px' }}
                                 />
                             </div>
                             
@@ -223,7 +223,7 @@ const DataManager = () => {
                                     value={typeFilter}
                                     onChange={e => setTypeFilter(e.target.value)}
                                     className="glass-input"
-                                    style={{ height: '38px', padding: '0 1rem', fontSize: '0.875rem', minWidth: '150px' }}
+                                    style={{ height: '38px', padding: '0 1rem', fontSize: '0.875rem', width: '160px' }}
                                 >
                                     <option value="">All Types</option>
                                     <option value="Income">Sales Income</option>
@@ -232,7 +232,7 @@ const DataManager = () => {
                                 </select>
                             )}
 
-                            <div style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
+                            <div style={{ position: 'relative', flex: 1 }}>
                                 <Search style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
                                 <input
                                     type="text"
@@ -243,24 +243,26 @@ const DataManager = () => {
                                 />
                             </div>
                             
-                            <button type="submit" className="btn-primary" style={{ padding: '0 1.25rem', height: '38px' }}>
+                            <button type="submit" className="btn-primary" style={{ padding: '0 1.25rem', height: '38px', whiteSpace: 'nowrap' }}>
                                 <Filter size={16} style={{ marginRight: '0.5rem' }}/>
                                 Apply Filters
                             </button>
-                        </div>
+                        </form>
                         
                         {selectedTable === 'transactions' && (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={hideInvoiceTotals} 
-                                    onChange={(e) => setHideInvoiceTotals(e.target.checked)} 
-                                    style={{ accentColor: '#3b82f6' }}
-                                />
-                                Hide Invoice Totals (De-clutter)
-                            </label>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={hideInvoiceTotals} 
+                                        onChange={(e) => setHideInvoiceTotals(e.target.checked)} 
+                                        style={{ accentColor: '#3b82f6', width: '14px', height: '14px' }}
+                                    />
+                                    Hide Invoice Totals (De-clutter)
+                                </label>
+                            </div>
                         )}
-                    </form>
+                    </div>
                 </div>
             </div>
 

@@ -499,7 +499,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
         } catch (e) { console.error('Error toggling lock:', e); }
     };
 
-    const fetchProfitHubData = async () => {
+        const fetchProfitHubData = async () => {
         setIsProfitLoading(true);
         setIsTableMissing(false);
         try {
@@ -507,7 +507,6 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                 supabase.from('profit_stakeholders').select('*').order('created_at', { ascending: true }),
                 supabase.from('profit_payouts').select('*').like('month_year', `%${selectedYear}%`),
                 supabase.from('system_settings').select('value').eq('key', 'profit_reserve_percentage').maybeSingle(),
-                supabase.from('system_settings').select('value').eq('key', 'locked_months').maybeSingle(),
                 supabase.from('profit_monthly_settings').select('*').like('month_year', `%${selectedYear}%`),
                 supabase.from('partner_investments').select('amount, investment_date, stakeholder_id')
             ]);

@@ -15,6 +15,8 @@ const DataManager = () => {
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [hideInvoiceTotals, setHideInvoiceTotals] = useState(true);
 
     // Editing
     const [editingId, setEditingId] = useState(null);
@@ -196,29 +198,60 @@ const DataManager = () => {
                         </button>
                     </div>
 
-                    <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <div style={{ position: 'relative' }}>
-                            <Calendar style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
-                            <input
-                                type="date"
-                                value={dateFilter}
-                                onChange={e => setDateFilter(e.target.value)}
-                                style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '100%' }}
-                            />
+                    <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', width: '100%' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', flex: 1 }}>
+                            <div style={{ position: 'relative' }}>
+                                <Calendar style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
+                                <input
+                                    type="date"
+                                    value={dateFilter}
+                                    onChange={e => setDateFilter(e.target.value)}
+                                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '38px' }}
+                                />
+                            </div>
+                            
+                            {selectedTable === 'transactions' && (
+                                <select
+                                    value={typeFilter}
+                                    onChange={e => setTypeFilter(e.target.value)}
+                                    className="glass-input"
+                                    style={{ height: '38px', padding: '0 1rem', fontSize: '0.875rem', minWidth: '150px' }}
+                                >
+                                    <option value="">All Types</option>
+                                    <option value="Income">Sales Income</option>
+                                    <option value="Expense">Expenses</option>
+                                    <option value="Returns">Sales Returns</option>
+                                </select>
+                            )}
+
+                            <div style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
+                                <Search style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    placeholder={selectedTable === 'transactions' ? "Search Item, Customer, or Invoice..." : "Search..."}
+                                    style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '38px' }}
+                                />
+                            </div>
+                            
+                            <button type="submit" className="btn-primary" style={{ padding: '0 1.25rem', height: '38px' }}>
+                                <Filter size={16} style={{ marginRight: '0.5rem' }}/>
+                                Apply Filters
+                            </button>
                         </div>
-                        <div style={{ position: 'relative', minWidth: '250px' }}>
-                            <Search style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                                placeholder={selectedTable === 'transactions' ? "Search Item or Invoice..." : "Search Material..."}
-                                style={{ width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' }}
-                            />
-                        </div>
-                        <button type="submit" className="btn-action" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-                            Search
-                        </button>
+                        
+                        {selectedTable === 'transactions' && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={hideInvoiceTotals} 
+                                    onChange={(e) => setHideInvoiceTotals(e.target.checked)} 
+                                    style={{ accentColor: '#3b82f6' }}
+                                />
+                                Hide Invoice Totals (De-clutter)
+                            </label>
+                        )}
                     </form>
                 </div>
             </div>

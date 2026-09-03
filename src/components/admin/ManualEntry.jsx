@@ -44,6 +44,19 @@ const ManualEntry = () => {
         setLoading(true);
         setStatus({ type: 'idle', message: '' });
 
+        const checkDate = entryType === 'transaction' ? txnForm.date : prodForm.date;
+        const dateObj = new Date(checkDate);
+        if (!isNaN(dateObj)) {
+            const monthName = dateObj.toLocaleString('default', { month: 'short' });
+            const year = dateObj.getFullYear();
+            const monthYearStr = \ \;
+            if (lockedMonths.includes(monthYearStr)) {
+                setStatus({ type: 'error', message: \ is currently LOCKED. You cannot back-date entries into a locked month. });
+                setLoading(false);
+                return;
+            }
+        }
+
         try {
             if (entryType === 'transaction') {
                 if (!txnForm.item_name || !txnForm.amount) throw new Error("Item Name and Amount are required.");

@@ -38,6 +38,10 @@ const DataManager = () => {
                 query = supabase.from(selectedTable).select('*');
             }
 
+            if (dateFilter && selectedTable !== 'customer_receivables') {
+                query = query.like('date', `${dateFilter}%`);
+            }
+
             if (searchTerm) {
                 if (selectedTable === 'transactions' || selectedTable === 'payments') {
                     query = query.or(`item_name.ilike.%${searchTerm}%,invoice_no.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%`);
@@ -203,7 +207,7 @@ const DataManager = () => {
                             <div style={{ position: 'relative' }}>
                                 <Calendar style={{ position: 'absolute', left: '0.75rem', top: '0.625rem', color: '#64748b' }} size={16} />
                                 <input
-                                    type="date"
+                                    type="month"
                                     value={dateFilter}
                                     onChange={e => setDateFilter(e.target.value)}
                                     style={{ background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.5rem 1rem 0.5rem 2.5rem', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', height: '38px' }}

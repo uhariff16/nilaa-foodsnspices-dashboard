@@ -2822,16 +2822,7 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
                                                             const reserved = (mProfit * activeReservePct) / 100;
                                                             return (
                                                                 <tr key={month.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                        {month.name}
-                                                                        <button 
-                                                                            onClick={() => toggleLockMonth(`${month.name} ${selectedYear}`)}
-                                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: lockedMonths.includes(`${month.name} ${selectedYear}`) ? '#ef4444' : 'var(--text-secondary)' }}
-                                                                            title={lockedMonths.includes(`${month.name} ${selectedYear}`) ? 'Unlock Month' : 'Lock Month'}
-                                                                        >
-                                                                            {lockedMonths.includes(`${month.name} ${selectedYear}`) ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>}
-                                                                        </button>
-                                                                    </td>
+                                                                    <td style={{ padding: '1.25rem 1rem', fontWeight: 700 }}>{month.name}</td>
                                                                     <td style={{ padding: '1.25rem 1rem', fontWeight: 800, color: mProfit < 0 ? '#ef4444' : '#10b981' }}>{formatCurrency(mProfit)}</td>
                                                                     {profitStakeholders.map(s => {
                                                                         const p = profitPayouts.find(pa => pa.stakeholder_id === s.id && pa.month_year === `${month.name} ${selectedYear}`);

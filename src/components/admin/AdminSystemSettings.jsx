@@ -7,6 +7,8 @@ const AdminSystemSettings = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState(null);
     const [activeStockTab, setActiveStockTab] = useState('raw'); // 'raw' | 'processed'
+    const [lockedMonths, setLockedMonths] = useState([]);
+    const [lockYear, setLockYear] = useState(new Date().getFullYear());
 
     const [settings, setSettings] = useState({
         mobile_layout_enabled: 'true',
@@ -57,7 +59,11 @@ const AdminSystemSettings = () => {
             } else if (data) {
                 const loaded = { ...settings };
                 data.forEach(item => {
-                    loaded[item.key] = item.value;
+                    if (item.key === 'locked_months') {
+                        try { setLockedMonths(JSON.parse(item.value || '[]')); } catch(e) {}
+                    } else {
+                        loaded[item.key] = item.value;
+                    }
                 });
                 setSettings(loaded);
             }
@@ -66,6 +72,13 @@ const AdminSystemSettings = () => {
         }
     };
 
+    const toggleLockMonth = (monthName) => {
+        const str = `${monthName} ${lockYear}`;
+        setLockedMonths(prev => 
+            prev.includes(str) ? prev.filter(m => m !== str) : [...prev, str]
+        );
+    };
+    
     const handleChange = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
     };
@@ -222,7 +235,57 @@ const AdminSystemSettings = () => {
                     </div>
                 </div>
 
+                
+                {/* Section: Month Lock */}
+                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <ShieldAlert size={20} color="#ef4444" />
+                                Financial Data Locking
+                            </h3>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                                Lock historical months to prevent retroactive manual entries or bulk excel uploads. Perfect for freezing finalized accounting periods.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Year:</span>
+                            <select 
+                                className="glass-input" 
+                                value={lockYear} 
+                                onChange={(e) => setLockYear(Number(e.target.value))}
+                                style={{ padding: '0.4rem 0.75rem', fontSize: '0.9rem', width: '100px' }}
+                            >
+                                <option value={2024}>2024</option>
+                                <option value={2025}>2025</option>
+                                <option value={2026}>2026</option>
+                                <option value={2027}>2027</option>
+                                <option value={2028}>2028</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.75rem' }}>
+                        {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => {
+                            const str = `${m} ${lockYear}`;
+                            const isLocked = lockedMonths.includes(str);
+                            return (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => toggleLockMonth(m)}
+                                    className={`btn-toggle ${isLocked ? 'active red' : ''}`}
+                                    style={{ justifyContent: 'center' }}
+                                >
+                                    {isLocked ? <Check size={14} /> : <X size={14} opacity={0.3} />}
+                                    {m}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
                 {/* Section 2: Alerts Config Settings */}
+
                 <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <BadgeAlert size={20} color="#3b82f6" />

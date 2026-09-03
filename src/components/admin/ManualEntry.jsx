@@ -53,7 +53,9 @@ const ManualEntry = () => {
                     payment_mode: txnForm.type === 'Expense' ? 'Expense' : 'Online',
                     item_name: txnForm.item_name,
                     amount: parseFloat(txnForm.amount),
-                    invoice_no: txnForm.invoice_no
+                    invoice_no: txnForm.invoice_no,
+                    quantity: 1,
+                    profit: 0
                 }]);
                 if (error) throw error;
             } else if (entryType === 'production') {

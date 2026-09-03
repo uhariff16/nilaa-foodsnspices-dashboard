@@ -49,9 +49,9 @@ const ManualEntry = () => {
         if (!isNaN(dateObj)) {
             const monthName = dateObj.toLocaleString('default', { month: 'short' });
             const year = dateObj.getFullYear();
-            const monthYearStr = \ \;
+            const monthYearStr = `${monthName} ${year}`;
             if (lockedMonths.includes(monthYearStr)) {
-                setStatus({ type: 'error', message: \ is currently LOCKED. You cannot back-date entries into a locked month. });
+                setStatus({ type: 'error', message: `${monthYearStr} is currently LOCKED. You cannot back-date entries into a locked month.` });
                 setLoading(false);
                 return;
             }

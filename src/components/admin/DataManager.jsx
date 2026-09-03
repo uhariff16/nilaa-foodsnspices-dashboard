@@ -39,7 +39,11 @@ const DataManager = () => {
             }
 
             if (dateFilter && selectedTable !== 'customer_receivables') {
-                query = query.like('date', `${dateFilter}%`);
+                const startDate = `${dateFilter}-01`;
+                const [year, month] = dateFilter.split('-');
+                const endDay = new Date(year, month, 0).getDate();
+                const endDate = `${dateFilter}-${endDay}`;
+                query = query.gte('date', startDate).lte('date', endDate);
             }
 
             if (searchTerm) {

@@ -188,7 +188,8 @@ export default function SuperAdmin() {
     
     <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 25px 0;">
       <p style="margin: 0; color: #166534; font-size: 15px;"><strong>Plan:</strong> {{plan_name}}</p>
-      <p style="margin: 10px 0 0 0; color: #166534; font-size: 15px;"><strong>Valid Until:</strong> {{period_end}}</p>
+      <p style="margin: 10px 0 0 0; color: #166534; font-size: 15px;"><strong>Next Payment Date:</strong> {{next_payment_date}}</p>
+      <p style="margin: 10px 0 0 0; color: #166534; font-size: 15px;"><strong>Subscription End Date:</strong> {{subscription_end_date}}</p>
     </div>
 
     <p style="font-size: 16px; line-height: 1.6; color: #475569;">You now have access to premium features to take your hospitality business to the next level. Let's maximize your revenue!</p>
@@ -982,7 +983,7 @@ export default function SuperAdmin() {
                       t.bookingCount || 0,
                       pricingConfig[t.plan_type]?.name || t.plan_type || 'Free Starter',
                       t.subscription_status === 'active' ? 'Active' : 'Suspended',
-                      t.created_at ? new Date(t.created_at).toISOString().split('T')[0] : ''
+                      t.created_at ? new Date(t.created_at).toLocaleDateString('en-CA') : ''
                     ]);
 
                     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -1565,7 +1566,7 @@ export default function SuperAdmin() {
                     </div>
                     <div className="form-group" style={{ marginTop: '1rem' }}>
                       <label className="form-label">Test Key Secret</label>
-                      <input type="password" className="form-input" value={razorpayConfig.testKeySecret} onChange={e => setRazorpayConfig({...razorpayConfig, testKeySecret: e.target.value})} placeholder="••••••••••••••••" />
+                      <input type="text" className="form-input" value={razorpayConfig.testKeySecret} onChange={e => setRazorpayConfig({...razorpayConfig, testKeySecret: e.target.value})} placeholder="••••••••••••••••" />
                     </div>
                   </div>
 
@@ -1577,7 +1578,7 @@ export default function SuperAdmin() {
                     </div>
                     <div className="form-group" style={{ marginTop: '1rem' }}>
                       <label className="form-label">Live Key Secret</label>
-                      <input type="password" className="form-input" value={razorpayConfig.liveKeySecret} onChange={e => setRazorpayConfig({...razorpayConfig, liveKeySecret: e.target.value})} placeholder="••••••••••••••••" />
+                      <input type="text" className="form-input" value={razorpayConfig.liveKeySecret} onChange={e => setRazorpayConfig({...razorpayConfig, liveKeySecret: e.target.value})} placeholder="••••••••••••••••" />
                     </div>
                   </div>
 
@@ -1585,7 +1586,7 @@ export default function SuperAdmin() {
                     <h4 style={{ marginBottom: '1rem', color: '#334155' }}>Webhook Settings</h4>
                     <div className="form-group">
                       <label className="form-label">Webhook Secret</label>
-                      <input type="password" className="form-input" value={razorpayConfig.webhookSecret} onChange={e => setRazorpayConfig({...razorpayConfig, webhookSecret: e.target.value})} placeholder="••••••••••••••••" />
+                      <input type="text" className="form-input" value={razorpayConfig.webhookSecret} onChange={e => setRazorpayConfig({...razorpayConfig, webhookSecret: e.target.value})} placeholder="••••••••••••••••" />
                       <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>Used to verify incoming Razorpay webhook signatures.</p>
                     </div>
                   </div>

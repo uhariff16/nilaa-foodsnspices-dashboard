@@ -1,7 +1,45 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, BookOpenCheck, CalendarDays, Wallet, FileText, TrendingUp, Users, CreditCard, Sparkles, CheckCircle2, Save, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { LayoutDashboard, BookOpenCheck, CalendarDays, Wallet, FileText, TrendingUp, Users, CreditCard, Sparkles, CheckCircle2, Save, Plus, Trash2, ArrowUp, ArrowDown, Upload } from 'lucide-react';
 
 export default function WebsiteManagerTab({ landingContent, setLandingContent, onSave, isUpdating }) {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleImageUpload = async (event, type) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+      const filePath = `slider/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('public-assets')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('public-assets').getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+
+      const newUrls = type === 'web' 
+        ? [...(landingContent.webImages || []), publicUrl]
+        : [...(landingContent.mobileImages || []), publicUrl];
+
+      setLandingContent({ 
+        ...landingContent, 
+        [type === 'web' ? 'webImages' : 'mobileImages']: newUrls 
+      });
+
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setIsUploading(false);
+      event.target.value = '';
+    }
+  };
 
   const handleUpdateHero = (field, value) => {
     setLandingContent({ ...landingContent, [field]: value });
@@ -82,40 +120,78 @@ export default function WebsiteManagerTab({ landingContent, setLandingContent, o
         </div>
       </div>
 
-      {/* Deep Dives Section */}
+      {/* Image Sliders Section */}
       <div className="card" style={{ marginBottom: '2rem', background: 'white', borderRadius: '16px', padding: '2rem' }}>
-        <h3 style={{ marginBottom: '1.5rem', color: '#0F2C59', fontWeight: 800, fontFamily: "'Outfit', sans-serif", borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>2. Feature Deep Dives</h3>
-        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem' }}>These are the large, alternating sections with screenshots on the homepage.</p>
+        <h3 style={{ marginBottom: '1.5rem', color: '#0F2C59', fontWeight: 800, fontFamily: "'Outfit', sans-serif", borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>2. Homepage Slider Images</h3>
+        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem' }}>Paste URLs to images to show in the web and mobile mockup placeholders.</p>
         
-        {(landingContent.deepDives || []).map((dive, idx) => (
-          <div key={idx} style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
-            <h4 style={{ margin: '0 0 1rem', color: '#334155', fontWeight: 700, fontSize: '1.1rem' }}>Section {idx + 1} ({dive.image})</h4>
-            
-            <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
-              <div className="form-group">
-                <label className="form-label" style={{ fontSize: '0.8rem' }}>Small Tagline</label>
-                <input type="text" className="form-input" value={dive.tagline || ''} onChange={e => handleUpdateDeepDive(idx, 'tagline', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label" style={{ fontSize: '0.8rem' }}>Main Title</label>
-                <input type="text" className="form-input" value={dive.title || ''} onChange={e => handleUpdateDeepDive(idx, 'title', e.target.value)} />
-              </div>
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label" style={{ fontSize: '0.8rem' }}>Description Paragraph</label>
-                <textarea className="form-input" style={{ minHeight: '60px' }} value={dive.description || ''} onChange={e => handleUpdateDeepDive(idx, 'description', e.target.value)} />
+        <div style={{ display: 'grid', gap: '2rem', gridTemplateColumns: '1fr 1fr' }}>
+          {/* Web Images */}
+          <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, color: '#334155', fontWeight: 700, fontSize: '1.1rem' }}>Web Dashboard Images</h4>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <label className="btn btn-sm btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  {isUploading ? 'Uploading...' : <><Upload size={14} /> Upload Image</>}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleImageUpload(e, 'web')} disabled={isUploading} />
+                </label>
+                <button className="btn btn-sm btn-outline" onClick={() => setLandingContent({ ...landingContent, webImages: [...(landingContent.webImages || []), ''] })} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
+                  <Plus size={14} /> Add URL
+                </button>
               </div>
             </div>
-
-            <div style={{ marginTop: '1rem' }}>
-              <label className="form-label" style={{ fontSize: '0.8rem', color: '#059669' }}>Bullet Points</label>
-              <div style={{ display: 'grid', gap: '0.5rem' }}>
-                {(dive.bullets || []).map((bullet, bIdx) => (
-                  <input key={bIdx} type="text" className="form-input" style={{ background: 'white' }} value={bullet} onChange={e => handleUpdateDeepDiveBullet(idx, bIdx, e.target.value)} />
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {(!landingContent.webImages || landingContent.webImages.length === 0) && <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>No web images added yet.</span>}
+              {(landingContent.webImages || []).map((url, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input type="text" className="form-input" placeholder="https://example.com/image.png" value={url} onChange={e => {
+                    const newUrls = [...landingContent.webImages];
+                    newUrls[idx] = e.target.value;
+                    setLandingContent({ ...landingContent, webImages: newUrls });
+                  }} />
+                  <button type="button" onClick={() => {
+                    const newUrls = [...landingContent.webImages];
+                    newUrls.splice(idx, 1);
+                    setLandingContent({ ...landingContent, webImages: newUrls });
+                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
+
+          {/* Mobile Images */}
+          <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, color: '#334155', fontWeight: 700, fontSize: '1.1rem' }}>Mobile App Images</h4>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <label className="btn btn-sm btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  {isUploading ? 'Uploading...' : <><Upload size={14} /> Upload Image</>}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleImageUpload(e, 'mobile')} disabled={isUploading} />
+                </label>
+                <button className="btn btn-sm btn-outline" onClick={() => setLandingContent({ ...landingContent, mobileImages: [...(landingContent.mobileImages || []), ''] })} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
+                  <Plus size={14} /> Add URL
+                </button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {(!landingContent.mobileImages || landingContent.mobileImages.length === 0) && <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>No mobile images added yet.</span>}
+              {(landingContent.mobileImages || []).map((url, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input type="text" className="form-input" placeholder="https://example.com/image.png" value={url} onChange={e => {
+                    const newUrls = [...landingContent.mobileImages];
+                    newUrls[idx] = e.target.value;
+                    setLandingContent({ ...landingContent, mobileImages: newUrls });
+                  }} />
+                  <button type="button" onClick={() => {
+                    const newUrls = [...landingContent.mobileImages];
+                    newUrls.splice(idx, 1);
+                    setLandingContent({ ...landingContent, mobileImages: newUrls });
+                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Features Grid */}

@@ -1,7 +1,8 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { CalendarCheck, CheckCircle2, ArrowLeft, User, Users, Calendar, Info, Globe, Wallet } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, ArrowLeft, User, Users, Calendar, Info, Globe, Wallet, Edit2, Save, ChevronUp, ChevronDown, ListCollapse, Trash2 } from 'lucide-react';
 import { eachDayOfInterval, isWeekend, format } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
 
@@ -121,11 +122,67 @@ export default function BookingForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeResortId, profile } = useSettingsStore();
+  const { activeResortId, profile, globalPlans } = useSettingsStore();
   
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [collapsedSections, setCollapsedSections] = useState({ 1: false, 2: false, 3: false, 4: false, 5: false, 6: false });
+  const toggleSection = (id) => setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  
+  const handleSaveAgent = async () => {
+    if (!profile?.tenant_id || !bookingForm.agent_name) return;
+    try {
+      const { error } = await supabase.from('agents').upsert({
+        tenant_id: profile.tenant_id,
+        name: bookingForm.agent_name.trim(),
+        phone: bookingForm.agent_phone ? bookingForm.agent_phone.trim() : null
+      }, { onConflict: 'tenant_id,name' });
+      if (error) throw error;
+      toast.success("Agent saved to directory");
+      
+      // Update local state
+      if (!agents.includes(bookingForm.agent_name.trim())) {
+        setAgents([...agents, bookingForm.agent_name.trim()].sort());
+      }
+      setAgentPhones(prev => ({...prev, [bookingForm.agent_name.trim()]: bookingForm.agent_phone || ''}));
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save agent");
+    }
+  };
+
+  const handleDeleteAgent = async () => {
+    if (!profile?.tenant_id || !bookingForm.agent_name) return;
+    if (!window.confirm("Are you sure you want to delete this agent from your directory?")) return;
+    
+    try {
+      const { error } = await supabase.from('agents')
+        .delete()
+        .eq('tenant_id', profile.tenant_id)
+        .eq('name', bookingForm.agent_name.trim());
+      if (error) throw error;
+      toast.success("Agent deleted from directory");
+      
+      setAgents(agents.filter(a => a !== bookingForm.agent_name.trim()));
+      const newPhones = {...agentPhones};
+      delete newPhones[bookingForm.agent_name.trim()];
+      setAgentPhones(newPhones);
+      
+      setBookingForm({...bookingForm, agent_name: '', agent_phone: ''});
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to delete agent");
+    }
+  };
+
+  const toggleAllSections = () => {
+    const anyCollapsed = Object.values(collapsedSections).some(v => v);
+    if (anyCollapsed) setCollapsedSections({ 1: false, 2: false, 3: false, 4: false, 5: false, 6: false });
+    else setCollapsedSections({ 1: true, 2: true, 3: true, 4: true, 5: true, 6: true });
+  };
+
+  const [isEditing, setIsEditing] = useState(!id || new URLSearchParams(location.search).get('edit') === 'true');
   const [originalStatus, setOriginalStatus] = useState(null);
   const [settlementPaid, setSettlementPaid] = useState(0);
   const [settlementDiscount, setSettlementDiscount] = useState(0);
@@ -202,8 +259,30 @@ export default function BookingForm() {
         }));
       }
 
-      // Fetch agents and active bookings from existing bookings
+      // Fetch agents from the new agents table
       let fetchedAgents = [];
+      try {
+        if (profile?.tenant_id) {
+          const { data: dbAgents, error: agentsErr } = await supabase
+            .from('agents')
+            .select('name, phone')
+            .eq('tenant_id', profile.tenant_id);
+            
+          if (!agentsErr && dbAgents) {
+            const dbAgentsMap = {};
+            dbAgents.forEach(a => {
+              if (a.name) dbAgentsMap[a.name] = a.phone || '';
+            });
+            fetchedAgents = dbAgents.map(a => a.name).sort();
+            setAgentPhones(dbAgentsMap);
+          }
+        }
+      } catch (e) {
+        console.warn("Could not load agents from table:", e);
+      }
+      setAgents(fetchedAgents);
+
+      // Fetch active bookings
       try {
         const { data: bks, error: bksErr } = await supabase
           .from('bookings')
@@ -214,19 +293,10 @@ export default function BookingForm() {
           
         if (!bksErr && bks) {
           setActiveBookings(bks);
-          const dbAgentsMap = {};
-           bks.forEach(b => {
-             const { isAgent, name, phone } = parseAgentSource(b.booking_source);
-             if (isAgent && name) {
-               dbAgentsMap[name] = phone;
-             }
-           });
-           fetchedAgents = Array.from(new Set([...fetchedAgents, ...Object.keys(dbAgentsMap)]));
-           setAgentPhones(dbAgentsMap);
-        }      } catch (e) {
-        console.warn("Could not load agents from bookings:", e);
+        }
+      } catch (e) {
+        console.warn("Could not load active bookings:", e);
       }
-      setAgents(fetchedAgents);
 
       if (id) {
         // Fetch existing booking for edit
@@ -514,6 +584,21 @@ export default function BookingForm() {
         phone: g.phone_code + g.phone_raw
       }));
 
+      // Auto-upsert Agent if applicable
+      if (bookingForm.booking_source === 'Agent' && profile?.tenant_id) {
+        const agName = (bookingForm.agent_name || agents[0] || 'Unknown').trim();
+        const agPhone = bookingForm.agent_phone ? bookingForm.agent_phone.trim() : null;
+        if (agName && agName !== 'Unknown' && agName !== 'Other') {
+          supabase.from('agents').upsert({
+            tenant_id: profile.tenant_id,
+            name: agName,
+            phone: agPhone
+          }, { onConflict: 'tenant_id,name' }).then(({ error }) => {
+            if (error) console.error("Auto-upsert agent error:", error);
+          });
+        }
+      }
+
       const bookingData = {
         resort_id: activeResortId || null,
         tenant_id: profile?.tenant_id || profile?.id || null,
@@ -610,7 +695,7 @@ export default function BookingForm() {
                 notes: difference > 0 
                   ? `Advance Payment: ${bookingForm.guest_name} (${bookingForm.reference_number})`
                   : `Adjustment/Refund: ${bookingForm.guest_name} (${bookingForm.reference_number})`,
-                date: new Date().toISOString().split('T')[0],
+                date: new Date().toLocaleDateString('en-CA'),
                 payment_mode: 'UPI'
               }]);
             }
@@ -738,187 +823,7 @@ export default function BookingForm() {
 
   return (
     <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        
-        .booking-page-title {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 1.85rem;
-          font-weight: 800;
-          color: var(--text-color);
-          margin-bottom: 2rem;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-        
-        .booking-layout {
-          display: grid;
-          grid-template-columns: 7fr 4fr;
-          gap: 2.5rem;
-          align-items: start;
-        }
-        
-        .form-section-card {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 2.25rem;
-          margin-bottom: 2rem;
-          box-shadow: 0 4px 20px -2px rgba(15, 44, 89, 0.03);
-          transition: all 0.2s;
-        }
-        
-        .form-section-card:hover {
-          box-shadow: 0 10px 30px -5px rgba(15, 44, 89, 0.05);
-        }
-        
-        .form-section-title {
-          font-size: 1.15rem;
-          color: var(--primary);
-          font-weight: 700;
-          margin: 0 0 1.5rem 0;
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          border-bottom: 1px solid var(--border);
-          padding-bottom: 0.75rem;
-          text-transform: tracking-tight;
-        }
-        
-        .premium-label {
-          display: block;
-          font-size: 0.75rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          color: var(--text-muted);
-          margin-bottom: 0.5rem;
-        }
-        
-        .premium-input, .premium-select {
-          width: 100%;
-          padding: 0.8rem 1rem;
-          border-radius: 10px;
-          border: 1.5px solid var(--border);
-          background-color: var(--bg-color);
-          color: var(--text-color);
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          font-size: 0.9rem;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        
-        .premium-input:focus, .premium-select:focus {
-          outline: none;
-          border-color: var(--primary);
-          box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.1);
-        }
-        
-        /* Check-in / Check-out Timeline widget */
-        .timeline-widget {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: var(--bg-secondary);
-          border: 1px dashed var(--border);
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin-bottom: 1.5rem;
-        }
-        .timeline-col {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-        .timeline-label {
-          font-size: 0.7rem;
-          font-weight: 700;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .timeline-val {
-          font-size: 0.95rem;
-          font-weight: 800;
-          color: var(--text-color);
-        }
-        
-        .sticky-receipt {
-          position: sticky;
-          top: 2rem;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 2.25rem;
-          box-shadow: 0 15px 35px rgba(15, 44, 89, 0.06);
-        }
-        
-        .receipt-header {
-          font-size: 1rem;
-          font-weight: 800;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          border-bottom: 2px solid var(--border);
-          padding-bottom: 0.75rem;
-          margin-bottom: 1.5rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        
-        .receipt-row {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.9rem;
-          color: var(--text-muted);
-          margin-bottom: 0.85rem;
-          font-weight: 500;
-        }
-        .receipt-row.bold {
-          font-weight: 700;
-          color: var(--text-color);
-        }
-        
-        .receipt-total-box {
-          background: var(--bg-secondary);
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin: 1.5rem 0;
-          border: 1px solid var(--border);
-        }
-        
-        .badge-room {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.4rem;
-          background: var(--bg-secondary);
-          border: 1.5px solid var(--border);
-          color: var(--text-color);
-          font-size: 0.85rem;
-          font-weight: 600;
-          padding: 0.4rem 1rem;
-          border-radius: 20px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .badge-room.selected {
-          background: rgba(5, 150, 105, 0.08);
-          border-color: var(--primary);
-          color: var(--primary);
-        }
-        
-        @media (max-width: 991px) {
-          .booking-layout {
-            grid-template-columns: 1fr;
-          }
-          .sticky-receipt {
-            position: relative;
-            top: 0;
-          }
-        }
-      `}</style>
+      
 
       <button 
         className="btn btn-outline" 
@@ -928,9 +833,32 @@ export default function BookingForm() {
         <ArrowLeft size={16} /> Back to Reservations
       </button>
 
-      <h2 className="booking-page-title">
-        <CalendarCheck size={28} /> {id ? `Update Reservation: ${bookingForm.reference_number}` : 'Create New Reservation'}
-      </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <h2 className="booking-page-title" style={{ margin: 0 }}>
+            <CalendarCheck size={28} /> {id ? `Reservation: ${bookingForm.reference_number || ''}` : 'Create New Reservation'}
+          </h2>
+          {id && (
+            <button 
+              type="button" 
+              className={`btn-edit-toggle ${isEditing ? 'mode-save' : 'mode-edit'}`} 
+              onClick={(e) => {
+                e.preventDefault();
+                if (isEditing) {
+                  const form = document.getElementById('booking-form-main');
+                  if (form) {
+                    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                  }
+                } else {
+                  setIsEditing(true);
+                }
+              }}
+              
+            >
+              {isEditing ? <Save size={16} /> : <Edit2 size={16} />}
+              {isEditing ? 'Save' : 'Edit'}
+            </button>
+          )}
+      </div>
       
       {error && (
         <div style={{ color: 'var(--danger)', marginBottom: '1.5rem', padding: '1rem', background: 'rgba(229, 62, 62, 0.08)', borderRadius: '8px', border: '1px solid rgba(229, 62, 62, 0.15)', fontSize: '0.9rem' }}>
@@ -938,21 +866,41 @@ export default function BookingForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="booking-layout">
-        
+      <form id="booking-form-main" onSubmit={handleSubmit} className="booking-layout">
         {/* LEFT COLUMN: FORM DETAILS */}
         <div className="form-left-col">
+
+          {/* RESERVATION STATUS AT TOP */}
+          <div className="form-section-card" style={{ padding: '1.5rem 2.25rem', border: '1px solid var(--primary)', background: 'rgba(16, 185, 129, 0.02)' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="premium-label" style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--primary)', textTransform: 'uppercase' }}>Reservation Booking Status</label>
+              <select disabled={!isEditing} className="premium-select" style={{ border: '2px solid rgba(16,185,129,0.3) !important' }} value={bookingForm.status} onChange={e => setBookingForm({...bookingForm, status: e.target.value})}>
+                <option value="Confirmed">Confirmed</option>
+                <option value="Pending">Pending</option>
+                {id && originalStatus !== 'Pending' && (
+                  <>
+                    <option value="Checked-in">Checked-in</option>
+                    <option value="Checked-out">Checked-out</option>
+                    <option value="Completed">Completed</option>
+                  </>
+                )}
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
           
           {/* SECTION 1: PRIMARY GUEST DETAILS */}
-          <div className="form-section-card">
-            <h3 className="form-section-title">
-              <User size={18} style={{ color: 'var(--primary)' }} /> Primary Guest Details
+          <div className={`form-section-card ${collapsedSections[1] ? 'collapsed' : ''}`}>
+            <h3 className="form-section-title" onClick={() => toggleSection(1)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={18} style={{ color: 'var(--primary)' }} /> Primary Guest Details</span>
+              {collapsedSections[1] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
             
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Primary Guest Full Name</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="text" 
                   required 
                   className="premium-input" 
@@ -963,7 +911,7 @@ export default function BookingForm() {
               </div>
               <div className="form-group">
                 <label className="premium-label">Email Address (Optional)</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="email" 
                   className="premium-input" 
                   placeholder="guest@email.com" 
@@ -977,14 +925,14 @@ export default function BookingForm() {
               <div className="form-group">
                 <label className="premium-label">Mobile Contact Number (5/5 Layout)</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <input 
+                  <input disabled={!isEditing} 
                     list="country-codes"
                     className="premium-input" 
                     value={bookingForm.phone_code || '+91'} 
                     placeholder="Code (e.g. +91)"
                     onChange={e => setBookingForm(prev => ({ ...prev, phone_code: e.target.value, phone_number: e.target.value + prev.phone_raw }))}
                   />
-                  <input 
+                  <input disabled={!isEditing} 
                     type="text" 
                     required 
                     className="premium-input" 
@@ -996,7 +944,7 @@ export default function BookingForm() {
               </div>
               <div className="form-group">
                 <label className="premium-label">Booking Reference Number</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="text" 
                   required 
                   className="premium-input" 
@@ -1009,7 +957,7 @@ export default function BookingForm() {
 
             <div className="form-group" style={{ marginTop: '1.25rem' }}>
               <label className="premium-label">Guest Address (Optional)</label>
-              <textarea 
+              <textarea disabled={!isEditing} 
                 className="premium-input" 
                 placeholder="Enter guest's full address"
                 rows="2"
@@ -1018,15 +966,13 @@ export default function BookingForm() {
                 style={{ resize: 'vertical' }}
               />
             </div>
-          </div>
-
-          {/* SECTION 2: ADDITIONAL CONTACTS */}
-          <div className="form-section-card" style={{ background: 'var(--bg-secondary)' }}>
-            <h3 className="form-section-title">
-              <Users size={18} style={{ color: 'var(--primary)' }} /> Additional Occupants / Contacts
-            </h3>
-            
-            {bookingForm.additional_guests && bookingForm.additional_guests.map((guest, index) => (
+          
+            {/* ADDITIONAL OCCUPANTS MERGED */}
+            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px dashed var(--border)' }}>
+              <h4 style={{ margin: '0 0 1.25rem 0', fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Users size={16} /> Additional Occupants / Contacts
+              </h4>
+              {bookingForm.additional_guests && bookingForm.additional_guests.map((guest, index) => (
               <div key={index} style={{ border: '1px solid var(--border)', padding: '1.25rem', borderRadius: '12px', background: 'var(--bg-primary)', position: 'relative', marginBottom: '1rem' }}>
                 <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}>
                   <button 
@@ -1042,38 +988,46 @@ export default function BookingForm() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                   <div className="form-group">
                     <label className="premium-label" style={{ fontSize: '0.7rem' }}>Guest Name</label>
-                    <input type="text" required className="premium-input" placeholder="Name" value={guest.name} onChange={e => handleUpdateAdditionalGuest(index, 'name', e.target.value)} />
+                    <input disabled={!isEditing} type="text" required className="premium-input" placeholder="Name" value={guest.name} onChange={e => handleUpdateAdditionalGuest(index, 'name', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="premium-label" style={{ fontSize: '0.7rem' }}>Email Address</label>
-                    <input type="email" className="premium-input" placeholder="Email" value={guest.email} onChange={e => handleUpdateAdditionalGuest(index, 'email', e.target.value)} />
+                    <input disabled={!isEditing} type="email" className="premium-input" placeholder="Email" value={guest.email} onChange={e => handleUpdateAdditionalGuest(index, 'email', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="premium-label" style={{ fontSize: '0.7rem' }}>Mobile Number</label>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                      <input 
+                      <input disabled={!isEditing} 
                         list="country-codes"
                         className="premium-input" 
                         value={guest.phone_code || '+91'} 
                         placeholder="Code"
                         onChange={e => handleUpdateAdditionalGuest(index, 'phone_code', e.target.value)}
                       />
-                      <input type="text" className="premium-input" placeholder="Phone" value={guest.phone_raw} onChange={e => handleUpdateAdditionalGuest(index, 'phone_raw', e.target.value)} />
+                      <input disabled={!isEditing} type="text" className="premium-input" placeholder="Phone" value={guest.phone_raw} onChange={e => handleUpdateAdditionalGuest(index, 'phone_raw', e.target.value)} />
                     </div>
                   </div>
                 </div>
               </div>
             ))}
             
-            <button 
-              type="button" 
-              className="btn btn-outline" 
-              onClick={handleAddAdditionalGuest} 
-              style={{ height: '42px', width: '100%', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderStyle: 'dashed', borderRadius: '10px', fontWeight: 600 }}
-            >
-              + Add More Guest / Contact Detail
-            </button>
+            
+            <div style={{ textAlign: 'center' }}>
+                <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={handleAddAdditionalGuest} 
+                style={{ height: '38px', width: 'auto', padding: '0 1.25rem', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderStyle: 'dashed', borderRadius: '8px', fontWeight: 700, marginTop: '0.5rem' }}
+                >
+                + Add More Guest / Contact Detail
+                </button>
+            </div>
+          
+            </div>
+
           </div>
+
+          
 
           <datalist id="country-codes">
             {COUNTRY_CODES.map(c => (
@@ -1082,15 +1036,16 @@ export default function BookingForm() {
           </datalist>
 
           {/* SECTION 3: STAY SCHEDULE */}
-          <div className="form-section-card">
-            <h3 className="form-section-title">
-              <Calendar size={18} style={{ color: 'var(--primary)' }} /> Booking Schedule & Property
+          <div className={`form-section-card ${collapsedSections[3] ? 'collapsed' : ''}`}>
+            <h3 className="form-section-title" onClick={() => toggleSection(3)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} style={{ color: 'var(--primary)' }} /> Booking Schedule & Property</span>
+              {collapsedSections[3] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
             
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Check-in Date</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="date" 
                   required 
                   className="premium-input" 
@@ -1104,14 +1059,14 @@ export default function BookingForm() {
                     const inDate = new Date(newInDate);
                     const outDate = new Date(inDate);
                     outDate.setDate(outDate.getDate() + 1);
-                    const newOutDate = outDate.toISOString().split('T')[0];
+                    const newOutDate = outDate.toLocaleDateString('en-CA');
                     setBookingForm({...bookingForm, check_in_date: newInDate, check_out_date: newOutDate});
                   }} 
                 />
               </div>
               <div className="form-group">
                 <label className="premium-label">Check-out Date</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="date" 
                   required 
                   className="premium-input" 
@@ -1124,16 +1079,16 @@ export default function BookingForm() {
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Accommodation Booking Scope</label>
-                <select className="premium-select" value={bookingForm.booking_type} onChange={e => setBookingForm({...bookingForm, booking_type: e.target.value, room_ids: []})}>
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.booking_type} onChange={e => setBookingForm({...bookingForm, booking_type: e.target.value, room_ids: []})}>
                   <option value="Entire Property">Entire Property Booking</option>
                   <option value="Room">Individual Rooms Booking</option>
                 </select>
               </div>
               <div className="form-group">
                 <label className="premium-label">Select Property / Cottage</label>
-                <select className="premium-select" value={bookingForm.cottage_id} onChange={e => setBookingForm({...bookingForm, cottage_id: e.target.value})}>
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.cottage_id} onChange={e => setBookingForm({...bookingForm, cottage_id: e.target.value})}>
                   <option value="">Choose property...</option>
-                  {cottages.filter(c => c.status === 'Available' || c.status === 'Active' || c.id === bookingForm.cottage_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {cottages.filter(c => c.status === 'Available' || c.status === 'Active' || c.id === bookingForm.cottage_id).map(c => <option key={c.id} value={c.id} disabled={c.isPlanLocked}>{c.name} {c.isPlanLocked ? '(Locked by Plan)' : ''}</option>)}
                 </select>
               </div>
             </div>
@@ -1148,10 +1103,13 @@ export default function BookingForm() {
                     <label 
                       key={r.id} 
                       className={`badge-room ${bookingForm.room_ids.includes(r.id) ? 'selected' : ''}`}
+                      style={{ opacity: r.isPlanLocked ? 0.5 : 1, cursor: r.isPlanLocked ? 'not-allowed' : 'pointer', background: r.isPlanLocked ? '#f1f5f9' : '' }}
+                      title={r.isPlanLocked ? 'Locked by current plan limit' : ''}
                     >
                       <input 
                         type="checkbox" 
                         style={{ display: 'none' }}
+                        disabled={r.isPlanLocked}
                         checked={bookingForm.room_ids.includes(r.id)} 
                         onChange={e => {
                           const newIds = e.target.checked ? [...bookingForm.room_ids, r.id] : bookingForm.room_ids.filter(id => id !== r.id);
@@ -1199,7 +1157,7 @@ export default function BookingForm() {
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Breakfast Inclusions</label>
-                <select className="premium-select" value={bookingForm.breakfast} onChange={e => setBookingForm({...bookingForm, breakfast: e.target.value})}>
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.breakfast} onChange={e => setBookingForm({...bookingForm, breakfast: e.target.value})}>
                   <option value="NA">No Breakfast (NA)</option>
                   <option value="Included">Breakfast Included</option>
                 </select>
@@ -1208,29 +1166,30 @@ export default function BookingForm() {
           </div>
 
           {/* SECTION 4: OCCUPANCY DETAILS */}
-          <div className="form-section-card">
-            <h3 className="form-section-title">
-              <Info size={18} style={{ color: 'var(--primary)' }} /> Occupancy & Document Details
+          <div className={`form-section-card ${collapsedSections[4] ? 'collapsed' : ''}`}>
+            <h3 className="form-section-title" onClick={() => toggleSection(4)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Info size={18} style={{ color: 'var(--primary)' }} /> Occupancy & Document Details</span>
+              {collapsedSections[4] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
 
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Number of Guests (Adults & Children)</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <input type="number" min="1" placeholder="Adults" className="premium-input" value={bookingForm.adults_count} onChange={e => setBookingForm({...bookingForm, adults_count: e.target.value === '' ? '' : Number(e.target.value)})} />
-                  <input type="number" min="0" placeholder="Kids" className="premium-input" value={bookingForm.kids_count} onChange={e => setBookingForm({...bookingForm, kids_count: e.target.value === '' ? '' : Number(e.target.value)})} />
+                  <input disabled={!isEditing} type="number" min="1" placeholder="Adults" className="premium-input" value={bookingForm.adults_count} onChange={e => setBookingForm({...bookingForm, adults_count: e.target.value === '' ? '' : Number(e.target.value)})} />
+                  <input disabled={!isEditing} type="number" min="0" placeholder="Kids" className="premium-input" value={bookingForm.kids_count} onChange={e => setBookingForm({...bookingForm, kids_count: e.target.value === '' ? '' : Number(e.target.value)})} />
                 </div>
               </div>
               <div className="form-group">
                 <label className="premium-label">Guest Vehicle Number (Optional)</label>
-                <input type="text" className="premium-input" placeholder="E.g. KA-01-MX-1234" value={bookingForm.vehicle_number || ''} onChange={e => setBookingForm({...bookingForm, vehicle_number: e.target.value})} />
+                <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. KA-01-MX-1234" value={bookingForm.vehicle_number || ''} onChange={e => setBookingForm({...bookingForm, vehicle_number: e.target.value})} />
               </div>
             </div>
 
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: bookingForm.id_proof_type === 'Other' ? '1fr 1fr 2fr' : '1fr 2fr', gap: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Identification Document (ID Type)</label>
-                <select className="premium-select" value={bookingForm.id_proof_type || 'Aadhar'} onChange={e => {
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.id_proof_type || 'Aadhar'} onChange={e => {
                   const type = e.target.value;
                   let val = bookingForm.id_proof_number || '';
                   if (type === 'Aadhar') {
@@ -1253,12 +1212,12 @@ export default function BookingForm() {
               {bookingForm.id_proof_type === 'Other' && (
                 <div className="form-group">
                   <label className="premium-label">Specify Document Type</label>
-                  <input type="text" className="premium-input" placeholder="E.g. Company ID" value={bookingForm.id_proof_other_type || ''} onChange={e => setBookingForm({...bookingForm, id_proof_other_type: e.target.value})} />
+                  <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. Company ID" value={bookingForm.id_proof_other_type || ''} onChange={e => setBookingForm({...bookingForm, id_proof_other_type: e.target.value})} />
                 </div>
               )}
               <div className="form-group">
                 <label className="premium-label">ID Document Number</label>
-                <input 
+                <input disabled={!isEditing} 
                   type="text" 
                   className="premium-input" 
                   placeholder="Enter identification card number" 
@@ -1280,9 +1239,10 @@ export default function BookingForm() {
           </div>
 
           {/* SECTION 5: SERVICES & RESERVATION CHANNEL */}
-          <div className="form-section-card">
-            <h3 className="form-section-title">
-              <Globe size={18} style={{ color: 'var(--primary)' }} /> Services & Distribution Channels
+          <div className={`form-section-card ${collapsedSections[5] ? 'collapsed' : ''}`}>
+            <h3 className="form-section-title" onClick={() => toggleSection(5)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Globe size={18} style={{ color: 'var(--primary)' }} /> Services & Distribution Channels</span>
+              {collapsedSections[5] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
 
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
@@ -1291,7 +1251,7 @@ export default function BookingForm() {
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
                   {['Food', 'Fire camp', 'BBQ'].map(addon => (
                     <label key={addon} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-color)' }}>
-                      <input 
+                      <input disabled={!isEditing} 
                         type="checkbox" 
                         style={{ accentColor: 'var(--primary)' }}
                         checked={bookingForm.addon_selections?.includes(addon)} 
@@ -1306,7 +1266,7 @@ export default function BookingForm() {
                     </label>
                   ))}
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-color)' }}>
-                    <input 
+                    <input disabled={!isEditing} 
                       type="checkbox" 
                       style={{ accentColor: 'var(--primary)' }}
                       checked={bookingForm.addon_selections?.includes('Others')} 
@@ -1320,14 +1280,14 @@ export default function BookingForm() {
                     Others
                   </label>
                   {bookingForm.addon_selections?.includes('Others') && (
-                    <input type="text" className="premium-input" style={{ width: '100%', marginTop: '0.5rem' }} placeholder="Specify custom add-on..." value={bookingForm.addon_others || ''} onChange={e => setBookingForm({...bookingForm, addon_others: e.target.value})} />
+                    <input disabled={!isEditing} type="text" className="premium-input" style={{ width: '100%', marginTop: '0.5rem' }} placeholder="Specify custom add-on..." value={bookingForm.addon_others || ''} onChange={e => setBookingForm({...bookingForm, addon_others: e.target.value})} />
                   )}
                 </div>
               </div>
 
               <div className="form-group">
                 <label className="premium-label">Booking Source Channel</label>
-                <select className="premium-select" value={bookingForm.booking_source} onChange={e => {
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.booking_source} onChange={e => {
                   const src = e.target.value;
                   const defName = bookingForm.agent_name || agents[0] || '';
                   setBookingForm({
@@ -1346,7 +1306,7 @@ export default function BookingForm() {
                 
                 {bookingForm.booking_source === 'Agent' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <select 
+                    <select disabled={!isEditing} 
                       className="premium-select" 
                       value={agents.includes(bookingForm.agent_name) ? bookingForm.agent_name : (bookingForm.agent_name ? 'Other' : '')} 
                       onChange={e => {
@@ -1366,7 +1326,7 @@ export default function BookingForm() {
                     </select>
                     
                     {(bookingForm.is_custom_agent || (!agents.includes(bookingForm.agent_name) && bookingForm.agent_name)) && (
-                      <input 
+                      <input disabled={!isEditing} 
                         type="text" 
                         className="premium-input" 
                         placeholder="Enter new agent's name" 
@@ -1375,17 +1335,30 @@ export default function BookingForm() {
                         required 
                       />
                     )}
-                    <input 
-                      type="text" 
-                      className="premium-input" 
-                      placeholder="Agent's contact number" 
-                      value={bookingForm.agent_phone || ''} 
-                      onChange={e => setBookingForm({...bookingForm, agent_phone: e.target.value})} 
-                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input disabled={!isEditing} 
+                        type="text" 
+                        className="premium-input" 
+                        placeholder="Agent's contact number" 
+                        value={bookingForm.agent_phone || ''} 
+                        onChange={e => setBookingForm({...bookingForm, agent_phone: e.target.value})} 
+                        style={{ flex: 1 }}
+                      />
+                      {isEditing && (
+                        <>
+                          <button type="button" onClick={handleSaveAgent} title="Save Agent" className="btn" style={{ padding: '0.65rem', background: 'var(--bg-secondary)', color: 'var(--primary)', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+                            <Save size={18} />
+                          </button>
+                          <button type="button" onClick={handleDeleteAgent} title="Delete Agent" className="btn" style={{ padding: '0.65rem', background: 'var(--bg-secondary)', color: 'red', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+                            <Trash2 size={18} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
                 {bookingForm.booking_source === 'Other' && (
-                  <input 
+                  <input disabled={!isEditing} 
                     type="text" 
                     className="premium-input" 
                     style={{ marginTop: '0.5rem' }} 
@@ -1400,50 +1373,35 @@ export default function BookingForm() {
           </div>
 
           {/* SECTION 6: FINANCIAL ADJUSTMENTS */}
-          <div className="form-section-card">
-            <h3 className="form-section-title">
-              <Wallet size={18} style={{ color: 'var(--primary)' }} /> Financial Adjustments & Status
+          <div className={`form-section-card ${collapsedSections[6] ? 'collapsed' : ''}`}>
+            <h3 className="form-section-title" onClick={() => toggleSection(6)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Wallet size={18} style={{ color: 'var(--primary)' }} /> Financial Adjustments & Status</span>
+              {collapsedSections[6] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
             
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Base Accommodation Charge (₹)</label>
-                <input type="number" className="premium-input" value={bookingForm.base_amount} onChange={e => setBookingForm({...bookingForm, base_amount: e.target.value === '' ? '' : Number(e.target.value)})} />
+                <input disabled={!isEditing} type="number" className="premium-input" value={bookingForm.base_amount} onChange={e => setBookingForm({...bookingForm, base_amount: e.target.value === '' ? '' : Number(e.target.value)})} />
               </div>
               <div className="form-group">
                 <label className="premium-label">Advance Deposit Received (₹)</label>
-                <input type="number" className="premium-input" value={bookingForm.advance_paid} onChange={e => setBookingForm({...bookingForm, advance_paid: e.target.value === '' ? '' : Number(e.target.value)})} />
+                <input disabled={!isEditing} type="number" className="premium-input" value={bookingForm.advance_paid} onChange={e => setBookingForm({...bookingForm, advance_paid: e.target.value === '' ? '' : Number(e.target.value)})} />
               </div>
             </div>
 
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
                 <label className="premium-label">Total Add-on Services Cost (₹)</label>
-                <input type="number" className="premium-input" value={bookingForm.addons_cost} onChange={e => setBookingForm({...bookingForm, addons_cost: e.target.value === '' ? '' : Number(e.target.value)})} />
+                <input disabled={!isEditing} type="number" className="premium-input" value={bookingForm.addons_cost} onChange={e => setBookingForm({...bookingForm, addons_cost: e.target.value === '' ? '' : Number(e.target.value)})} />
               </div>
               <div className="form-group">
                 <label className="premium-label">Extra Guest / Occupancy Charges (₹)</label>
-                <input type="number" className="premium-input" value={bookingForm.extra_guest_charges} onChange={e => setBookingForm({...bookingForm, extra_guest_charges: e.target.value === '' ? '' : Number(e.target.value)})} />
+                <input disabled={!isEditing} type="number" className="premium-input" value={bookingForm.extra_guest_charges} onChange={e => setBookingForm({...bookingForm, extra_guest_charges: e.target.value === '' ? '' : Number(e.target.value)})} />
               </div>
             </div>
 
-            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-              <div className="form-group">
-                <label className="premium-label">Reservation Booking Status</label>
-                <select className="premium-select" value={bookingForm.status} onChange={e => setBookingForm({...bookingForm, status: e.target.value})}>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Pending">Pending</option>
-                  {id && originalStatus !== 'Pending' && (
-                    <>
-                      <option value="Checked-in">Checked-in</option>
-                      <option value="Checked-out">Checked-out</option>
-                      <option value="Completed">Completed</option>
-                    </>
-                  )}
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
-            </div>
+            
           </div>
           
         </div>
@@ -1547,6 +1505,7 @@ export default function BookingForm() {
               </div>
             </div>
 
+            {isEditing && (
             <button 
               type="submit" 
               className="btn btn-primary" 
@@ -1555,9 +1514,11 @@ export default function BookingForm() {
             >
               <CheckCircle2 size={20} /> {isSubmitting ? 'Processing...' : (id ? 'Save Reservation' : 'Confirm Booking')}
             </button>
+            )}
           </div>
         </div>
 
+        
       </form>
     </div>
   );

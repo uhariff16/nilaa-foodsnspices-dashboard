@@ -81,7 +81,7 @@ export default function Subscription() {
 
   const isOfferValid = (planConfig) => {
     if (!planConfig || !planConfig.offerActive) return false;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA');
     if (planConfig.offerStartDate && today < planConfig.offerStartDate) return false;
     if (planConfig.offerEndDate && today > planConfig.offerEndDate) return false;
     return true;
@@ -269,15 +269,11 @@ export default function Subscription() {
               <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '1rem', fontSize: '0.9rem' }}>
                 <div style={{ color: 'var(--text-muted)' }}>Status:</div>
                 <div style={{ fontWeight: 'bold', color: 'var(--success)' }}>{activeSubscription.status.toUpperCase()}</div>
-                <div style={{ color: 'var(--text-muted)' }}>Period Ends:</div>
-                <div style={{ fontWeight: 'bold' }}>{activeSubscription.current_period_end ? new Date(activeSubscription.current_period_end).toLocaleDateString() : 'Pending (Updates shortly)'}</div>
+                <div style={{ color: 'var(--text-muted)' }}>Next Billing Date:</div>
+                <div style={{ fontWeight: 'bold' }}>{activeSubscription.current_period_end ? new Date(activeSubscription.current_period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Processing (Awaiting Sync)'}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: '200px' }}>
-              <button className="btn btn-outline" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleCancelSubscription} disabled={loading === 'cancel'}>
-                {loading === 'cancel' ? 'Cancelling...' : 'Cancel Subscription'}
-              </button>
-            </div>
+            
           </div>
           {/* Payment History is moved out of this card */}
         </div>
@@ -463,6 +459,25 @@ export default function Subscription() {
           </div>
         ))}
       </div>
+
+      {activeSubscription && (
+        <div style={{ textAlign: 'center', marginTop: '3rem' }}>
+          <button 
+            onClick={handleCancelSubscription}
+            disabled={loading === 'cancel'}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            {loading === 'cancel' ? 'Cancelling subscription...' : 'Need to downgrade to the free plan? Click here to cancel your subscription.'}
+          </button>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: '4rem', padding: '2rem', display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'rgba(0,0,0,0.1)' }}>
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '50%', color: 'var(--primary)' }}>

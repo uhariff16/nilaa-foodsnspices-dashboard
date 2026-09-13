@@ -515,6 +515,20 @@ export default function Bookings() {
   const [activeTabs, setActiveTabs] = useState(['All']);
 
   const handleCheckIn = async (b) => {
+    // Only allow check-in on or after the check_in_date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Parse the check_in_date string (YYYY-MM-DD)
+    const [year, month, day] = b.check_in_date.split('-');
+    const checkInDate = new Date(year, month - 1, day);
+    checkInDate.setHours(0, 0, 0, 0);
+
+    if (today < checkInDate) {
+      alert(`Check-in is not allowed before the scheduled date (${b.check_in_date}).`);
+      return;
+    }
+
     try {
       const { error } = await supabase.from('bookings').update({ status: 'Checked-in' }).eq('id', b.id);
       if (error) throw error;
@@ -628,7 +642,7 @@ export default function Bookings() {
           amount: amtPaid,
           source: 'Room Rent',
           notes: `Settlement: ${settlingBooking.guest_name} (${settlingBooking.reference_number})${discount > 0 ? ` [Discount: ₹${discount}]` : ''}${settlementData.notes ? ` - ${settlementData.notes}` : ''}`,
-          date: new Date().toISOString().split('T')[0],
+          date: new Date().toLocaleDateString('en-CA'),
           payment_mode: settlementData.paymentMode || 'UPI'
         }]);
       }
@@ -1132,7 +1146,7 @@ export default function Bookings() {
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
+                      <button onClick={() => navigate(`/bookings/edit/${b.id}?edit=true`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
                       {b.status === 'Confirmed' && (
                         <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Check-in</button>
                       )}
@@ -1278,7 +1292,7 @@ export default function Bookings() {
                           {(b.status === 'Completed' || b.status === 'Checked-out') && (
                             <button onClick={() => handleRevertToCheckIn(b)} className="btn-icon" title="Revert to Check-in" style={{ color: '#6366f1' }}><RotateCcw size={16} /></button>
                           )}
-                          <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon"><Edit2 size={16} /></button>
+                          <button onClick={() => navigate(`/bookings/edit/${b.id}?edit=true`)} className="btn-icon"><Edit2 size={16} /></button>
                           {(b.status === 'Pending' || b.status === 'Confirmed') && (
                             <button onClick={() => deleteBooking(b.id)} className="btn-icon" style={{ color: 'var(--danger)' }}><Trash2 size={16} /></button>
                           )}
@@ -1376,6 +1390,16 @@ export default function Bookings() {
                 <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Booking Details</h2>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button 
+                  onClick={() => {
+                    setSelectedDetailedBooking(null);
+                    navigate(`/bookings/edit/${selectedDetailedBooking.id}?edit=true`);
+                  }} 
+                  className="btn-edit-toggle mode-edit" 
+                  style={{ height: '36px', padding: '0 1rem', fontSize: '0.85rem', borderRadius: '6px' }}
+                >
+                  <Edit2 size={16} /> Edit Booking
+                </button>
                 <button 
                   className="btn-icon" 
                   title="Share Invoice"
@@ -1560,10 +1584,19 @@ export default function Bookings() {
                   <span style={{ fontWeight: 600 }}>₹{(selectedDetailedBooking.extra_guest_charges || 0).toLocaleString()}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.75rem', borderTop: '1px dashed var(--border)', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <span style={{ fontWeight: 700 }}>Total Value: <span style={{ color: 'var(--text-main)', fontSize: '1.2rem' }}>₹{(selectedDetailedBooking.total_amount || 0).toLocaleString()}</span></span>
-                <span style={{ fontWeight: 700 }}>Paid: <span style={{ color: 'var(--success)', fontSize: '1.2rem' }}>₹{(selectedDetailedBooking.total_amount - selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span></span>
-                <span style={{ fontWeight: 700 }}>Balance: <span style={{ color: selectedDetailedBooking.balance_amount > 0 ? 'var(--warning)' : 'var(--success)', fontSize: '1.2rem' }}>₹{(selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span></span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center', paddingTop: '0.75rem', borderTop: '1px dashed var(--border)', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Total Value:</span>
+                  <span style={{ color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount || 0).toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Paid:</span>
+                  <span style={{ color: 'var(--success)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount - selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Balance:</span>
+                  <span style={{ color: selectedDetailedBooking.balance_amount > 0 ? 'var(--warning)' : 'var(--success)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
+                </div>
               </div>
             </div>
 
@@ -1657,17 +1690,8 @@ export default function Bookings() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button 
-                  onClick={() => {
-                    setSelectedDetailedBooking(null);
-                    navigate(`/bookings/edit/${selectedDetailedBooking.id}`);
-                  }} 
-                  className="btn btn-outline" 
-                  style={{ height: '40px', padding: '0 1rem', fontSize: '0.85rem' }}
-                >
-                  <Edit2 size={16} /> Edit Booking
-                </button>
+              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto', flex: 1, justifyContent: 'flex-end' }}>
+                
                 <button 
                   onClick={() => setSelectedDetailedBooking(null)} 
                   className="btn btn-primary" 

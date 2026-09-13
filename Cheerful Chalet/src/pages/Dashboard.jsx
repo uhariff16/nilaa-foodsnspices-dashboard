@@ -7,7 +7,11 @@ import { format, differenceInDays } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
 
 export default function Dashboard() {
-  const { activeResortId } = useSettingsStore();
+  const { activeResortId, profile, globalPlans } = useSettingsStore();
+  const userPlan = profile?.plan_type || 'free';
+  const planData = globalPlans?.[userPlan] || {};
+  const isSuper = profile?.role === 'super_admin';
+  const hasInvestmentAccess = planData.reports?.investment || profile?.feature_investment_enabled || isSuper;
   const [stats, setStats] = useState({ 
     monthlyCollections: 0, 
     monthlyExpenses: 0,
@@ -34,12 +38,13 @@ export default function Dashboard() {
     const fetchData = async () => {
       if (!isSupabaseConfigured() || !activeResortId) { setLoading(false); return; }
       try {
-        const [inc, exp, bks, cts, rms] = await Promise.all([
+        const [inc, exp, bks, cts, rms, inv] = await Promise.all([
           supabase.from('incomes').select('amount, date').eq('resort_id', activeResortId),
           supabase.from('expenses').select('amount, date').eq('resort_id', activeResortId),
           supabase.from('bookings').select('*').eq('resort_id', activeResortId).order('check_in_date', { ascending: true }),
           supabase.from('cottages').select('id').eq('resort_id', activeResortId),
-          supabase.from('rooms').select('id, cottage_id').eq('resort_id', activeResortId)
+          supabase.from('rooms').select('id, cottage_id').eq('resort_id', activeResortId),
+          supabase.from('investments').select('*').eq('resort_id', activeResortId).maybeSingle()
         ]);
         
         const rev = (inc.data || []).reduce((sum, item) => sum + Number(item.amount), 0);
@@ -47,10 +52,10 @@ export default function Dashboard() {
         
         // Yearly stats for KPIs
         const now = new Date();
-        const startOfYearStr = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
-        const endOfYearStr = new Date(now.getFullYear(), 11, 31).toISOString().split('T')[0];
-        const startOfMonthStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const endOfMonthStr = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        const startOfYearStr = format(new Date(now.getFullYear(), 0, 1), 'yyyy-MM-dd');
+        const endOfYearStr = format(new Date(now.getFullYear(), 11, 31), 'yyyy-MM-dd');
+        const startOfMonthStr = format(new Date(now.getFullYear(), now.getMonth(), 1), 'yyyy-MM-dd');
+        const endOfMonthStr = format(new Date(now.getFullYear(), now.getMonth() + 1, 0), 'yyyy-MM-dd');
         
         const yearlyCollections = (inc.data || []).filter(i => i.date >= startOfYearStr && i.date <= endOfYearStr).reduce((sum, item) => sum + Number(item.amount), 0);
         const monthlyCollections = (inc.data || []).filter(i => i.date >= startOfMonthStr && i.date <= endOfMonthStr).reduce((sum, item) => sum + Number(item.amount), 0);
@@ -58,15 +63,18 @@ export default function Dashboard() {
         const yearlyExpr = (exp.data || []).filter(e => e.date >= startOfYearStr && e.date <= endOfYearStr).reduce((sum, item) => sum + Number(item.amount), 0);
         const monthlyExpr = (exp.data || []).filter(e => e.date >= startOfMonthStr && e.date <= endOfMonthStr).reduce((sum, item) => sum + Number(item.amount), 0);
 
-        // Calculate Today's Occupancy % correctly
+        // Calculate Today's Occupancy % correctly dynamically based on live inventory
         const today = new Date();
         today.setHours(0,0,0,0);
         
-        const totalUnits = (cts.data?.length || 0) + (rms.data?.length || 0);
+        // True physical capacity: All rooms + any cottages that do NOT have child rooms
+        const roomsCount = rms.data?.length || 0;
+        const emptyCottages = (cts.data || []).filter(c => !(rms.data || []).some(r => r.cottage_id === c.id)).length;
+        const liveTotalUnits = Math.max(1, roomsCount + emptyCottages);
         
         // Filter bookings that span TODAY and are not cancelled
         const todayBookings = (bks.data || []).filter(b => {
-            if (b.status === 'Cancelled') return false;
+            if (b.status === 'cancelled' || b.status === 'Cancelled' || b.status === 'no_show') return false;
             const start = new Date(b.check_in_date);
             const end = new Date(b.check_out_date);
             start.setHours(0,0,0,0);
@@ -76,13 +84,40 @@ export default function Dashboard() {
 
         const occupiedUnits = todayBookings.reduce((acc, b) => {
             if (b.booking_type === 'Entire Property') {
+                // If it's a full property booking, it occupies the entire capacity
+                return acc + liveTotalUnits;
+            } else if (b.booking_type === 'Entire Cottage') {
+                // Booking a specific cottage
                 const cottageRooms = (rms.data || []).filter(r => r.cottage_id === b.cottage_id).length;
-                return acc + 1 + cottageRooms; 
+                return acc + Math.max(1, cottageRooms);
             } else {
+                // Booking specific rooms
                 return acc + (b.room_ids?.length || 1);
             }
         }, 0);
+        
+        const totalUnits = liveTotalUnits;
 
+        
+        // Calculate targets
+        const investmentData = inv?.data || {};
+        const annualOperatingExpense = Number(investmentData?.monthly_operating_expenses || 0) * 12;
+        const annualTotalFixed = Number(investmentData?.annual_fixed_expenses || 0);
+        const leaseInvestment = Number(investmentData?.total_investment || 0);
+        
+        let recoveryYears = Number(investmentData?.recovery_period_years) || 1;
+        if (investmentData?.property_ownership === 'leased' && investmentData?.lease_start_date && investmentData?.lease_end_date) {
+          const ls = new Date(investmentData.lease_start_date);
+          const le = new Date(investmentData.lease_end_date);
+          const diffYears = Math.abs(le - ls) / (1000 * 60 * 60 * 24 * 365.25);
+          recoveryYears = diffYears > 0 ? diffYears : 1;
+        }
+        
+        const annualCapitalCost = leaseInvestment / recoveryYears;
+        const totalAnnualCost = annualOperatingExpense + annualTotalFixed + annualCapitalCost;
+        const breakEvenMonthlyTarget = totalAnnualCost / 12;
+        const targetAnnualNetProfit = leaseInvestment * (Number(investmentData?.target_roi_percentage || 0) / 100);
+        const strategicMonthlyTarget = breakEvenMonthlyTarget + (targetAnnualNetProfit / 12);
         setStats({
           monthlyCollections,
           monthlyExpenses: monthlyExpr,
@@ -92,7 +127,9 @@ export default function Dashboard() {
           expenses: yearlyExpr,
           profit: yearlyCollections - yearlyExpr,
           totalBookings: (bks.data || []).filter(b => b.check_in_date >= startOfYearStr && b.check_in_date <= endOfYearStr).length,
-          occupancy: totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0
+          occupancy: totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0,
+          breakEvenMonthlyTarget,
+          strategicMonthlyTarget
         });
 
         // Chart Data (Group income & expenses by date)
@@ -116,7 +153,7 @@ export default function Dashboard() {
         })));
 
         // Active check-ins + Upcoming arrivals
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
         const active = (bks.data || []).filter(b => b.status === 'Checked-in');
         const upcoming = (bks.data || []).filter(b => b.status === 'Confirmed' && b.check_in_date >= todayStr);
         setRecentCheckins({ active, upcoming: upcoming.slice(0, 10) });
@@ -206,6 +243,90 @@ export default function Dashboard() {
             Monthly Performance
         </h2>
         {renderKpiGrid(monthlyKpis)}
+
+        {hasInvestmentAccess && stats.breakEvenMonthlyTarget !== undefined && (
+          <div className="card" style={{ marginTop: '1rem', padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem', marginTop: 0 }}>Monthly Target Progress</h3>
+            
+            <div style={{ position: 'relative', marginTop: '1.5rem' }}>
+              {/* Break-Even Label (Above the Bar) */}
+              {stats.strategicMonthlyTarget !== undefined && (
+                <div style={{
+                  position: 'absolute',
+                  left: `${Math.min(99, (stats.breakEvenMonthlyTarget / Math.max(1, stats.strategicMonthlyTarget)) * 100)}%`,
+                  bottom: '100%',
+                  marginBottom: '0.25rem',
+                  transform: 'translateX(-50%)',
+                  textAlign: 'center',
+                  fontSize: '0.7rem',
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <div style={{ fontWeight: 600, color: 'var(--warning)' }}>Break-Even</div>
+                  <div>₹{Math.ceil(stats.breakEvenMonthlyTarget).toLocaleString()}</div>
+                </div>
+              )}
+
+              {/* The Bar */}
+              <div style={{ 
+                width: '100%', 
+                height: '24px', 
+                background: '#f1f5f9', 
+                borderRadius: '12px', 
+                position: 'relative', 
+                overflow: 'hidden',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: `${Math.min(100, (stats.monthlyCollections / Math.max(1, stats.strategicMonthlyTarget)) * 100)}%`,
+                  background: stats.monthlyCollections < stats.breakEvenMonthlyTarget 
+                    ? 'linear-gradient(90deg, #ef4444 0%, #f97316 100%)' // Red -> Orange
+                    : 'linear-gradient(90deg, #f97316 0%, #84cc16 50%, #16a34a 100%)', // Orange -> Light Green -> Dark Green
+                  transition: 'width 1s ease-in-out',
+                  borderRadius: '12px'
+                }}></div>
+                
+                {/* Break-even Marker */}
+                {stats.strategicMonthlyTarget !== undefined && (
+                  <div style={{
+                    position: 'absolute',
+                    left: `${Math.min(99, (stats.breakEvenMonthlyTarget / Math.max(1, stats.strategicMonthlyTarget)) * 100)}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: '2px',
+                    background: '#000',
+                    zIndex: 2,
+                    transform: 'translateX(-50%)'
+                  }}></div>
+                )}
+              </div>
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              justifyContent: 'space-between', 
+              marginTop: '1rem', 
+              fontSize: '0.75rem', 
+              gap: '0.5rem' 
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', color: 'var(--text-main)' }}>
+                <span style={{ fontWeight: 600 }}>Current</span>
+                <span>₹{stats.monthlyCollections.toLocaleString()}</span>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', color: 'var(--text-muted)', textAlign: 'right' }}>
+                <span style={{ fontWeight: 600, color: 'var(--success)' }}>Strategic Target</span>
+                <span>₹{Math.ceil(stats.strategicMonthlyTarget).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
       </section>
 
       {/* Yearly Section */}

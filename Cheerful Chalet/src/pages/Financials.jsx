@@ -15,8 +15,8 @@ export default function Financials() {
   const [selectedCottageId, setSelectedCottageId] = useState('all');
   const [loading, setLoading] = useState(true);
 
-  const [newIncome, setNewIncome] = useState({ date: new Date().toISOString().split('T')[0], source: 'Room Rent', amount: 0, payment_mode: 'UPI', notes: '', reference_number: '', cottage_id: '' });
-  const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], category: 'Maintenance', amount: 0, vendor_name: '', payment_mode: 'Cash', notes: '', cottage_id: '' });
+  const [newIncome, setNewIncome] = useState({ date: format(new Date(), 'yyyy-MM-dd'), source: 'Room Rent', amount: 0, payment_mode: 'UPI', notes: '', reference_number: '', cottage_id: '' });
+  const [newExpense, setNewExpense] = useState({ date: format(new Date(), 'yyyy-MM-dd'), category: 'Maintenance', amount: 0, vendor_name: '', payment_mode: 'Cash', notes: '', cottage_id: '' });
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [editingIncomeId, setEditingIncomeId] = useState(null);
   
@@ -102,7 +102,7 @@ export default function Financials() {
     try {
       const payload = { ...newIncome, tenant_id: session.user.id, resort_id: activeResortId };
       if (payload.source === 'Other') payload.source = payload.custom_source || 'Other';
-      if (payload.cottage_id === '') payload.cottage_id = null;
+      if (payload.cottage_id === '' || payload.cottage_id === 'general') payload.cottage_id = null;
       
       let refNum = payload.reference_number?.trim();
       delete payload.custom_source;
@@ -144,7 +144,7 @@ export default function Financials() {
         }
       }
 
-      setNewIncome({ date: new Date().toISOString().split('T')[0], source: 'Room Rent', amount: 0, payment_mode: 'UPI', notes: '', reference_number: '', custom_source: '', cottage_id: '' });
+      setNewIncome({ date: format(new Date(), 'yyyy-MM-dd'), source: 'Room Rent', amount: 0, payment_mode: 'UPI', notes: '', reference_number: '', custom_source: '', cottage_id: '' });
       setShowIncomeForm(false);
     } catch(err) { alert(err.message); }
   };
@@ -176,7 +176,7 @@ export default function Financials() {
     try {
       const payload = { ...newExpense, tenant_id: session.user.id, resort_id: activeResortId };
       if (payload.category === 'Other') payload.category = payload.custom_category || 'Other';
-      if (payload.cottage_id === '') payload.cottage_id = null;
+      if (payload.cottage_id === '' || payload.cottage_id === 'general') payload.cottage_id = null;
       delete payload.custom_category;
       
       if (editingExpenseId) {
@@ -190,7 +190,7 @@ export default function Financials() {
         setExpenses([data[0], ...expenses]);
       }
       
-      setNewExpense({ date: new Date().toISOString().split('T')[0], category: 'Maintenance', amount: 0, vendor_name: '', payment_mode: 'Cash', notes: '', custom_category: '', cottage_id: '' });
+      setNewExpense({ date: format(new Date(), 'yyyy-MM-dd'), category: 'Maintenance', amount: 0, vendor_name: '', payment_mode: 'Cash', notes: '', custom_category: '', cottage_id: '' });
       setShowExpenseForm(false);
     } catch(err) { alert(err.message); }
   };
@@ -361,9 +361,10 @@ export default function Financials() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Property (Optional)</label>
-                    <select className="form-select" value={newIncome.cottage_id || ''} onChange={e => setNewIncome({...newIncome, cottage_id: e.target.value})}>
-                      <option value="">General / All Properties</option>
+                    <label className="form-label">Property</label>
+                    <select required className="form-select" value={newIncome.cottage_id || ''} onChange={e => setNewIncome({...newIncome, cottage_id: e.target.value})}>
+                      <option value="">-- Select Property --</option>
+                      <option value="general">General / Resort-wide</option>
                       {cottages.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
@@ -526,9 +527,10 @@ export default function Financials() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Property (Optional)</label>
-                    <select className="form-select" value={newExpense.cottage_id || ''} onChange={e => setNewExpense({...newExpense, cottage_id: e.target.value})}>
-                      <option value="">General / All Properties</option>
+                    <label className="form-label">Property</label>
+                    <select required className="form-select" value={newExpense.cottage_id || ''} onChange={e => setNewExpense({...newExpense, cottage_id: e.target.value})}>
+                      <option value="">-- Select Property --</option>
+                      <option value="general">General / Resort-wide</option>
                       {cottages.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}

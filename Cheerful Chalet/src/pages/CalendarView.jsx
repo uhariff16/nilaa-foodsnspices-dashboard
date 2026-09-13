@@ -81,6 +81,7 @@ export default function CalendarView() {
   const [isCopied, setIsCopied] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [dayBookingsList, setDayBookingsList] = useState(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -666,6 +667,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: isMobile ? '0.85rem' : '1rem' }}>Monitor and manage resort occupancy across all units</p>
           </div>
           
+          {!isMobile && (
           <div style={{ display: 'flex', gap: '1rem', padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem', background: 'var(--bg-secondary)', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', alignSelf: isMobile ? 'stretch' : 'auto', justifyContent: isMobile ? 'space-around' : 'flex-start' }}>
              <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Occupancy</div>
@@ -682,10 +684,12 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                 <div style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--warning)' }}>{occupancyStats.departures}</div>
              </div>
           </div>
+        )}
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
-           <div className="search-bar" style={{ position: 'relative', width: isMobile ? '100%' : '300px' }}>
+           {!isMobile && (
+           <div className="search-bar" style={{ position: 'relative', width: '300px' }}>
               <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
@@ -696,6 +700,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                 style={{ paddingLeft: '2.75rem', height: '44px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', width: '100%' }}
               />
            </div>
+           )}
            <button className="btn btn-primary" onClick={() => navigate('/bookings/new')} style={{ height: '44px', width: isMobile ? '100%' : 'auto', justifyContent: 'center' }}>
              <Calendar size={18} /> New Booking
            </button>
@@ -708,6 +713,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
         <div style={{ padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
 
+             {!isMobile && (
              <button 
                 className="btn btn-outline" 
                 onClick={() => setIsFullScreen(!isFullScreen)} 
@@ -715,12 +721,14 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                 title="Toggle Full Calendar Mode"
              >
                 {isFullScreen ? (
-                  <><Minimize2 size={16} color="var(--primary)" /> <span className={isMobile ? "desktop-only" : ""}>Collapse</span></>
+                  <><Minimize2 size={16} color="var(--primary)" /> <span>Collapse</span></>
                 ) : (
-                  <><Maximize2 size={16} /> <span className={isMobile ? "desktop-only" : ""}>Full View</span></>
+                  <><Maximize2 size={16} /> <span>Full View</span></>
                 )}
              </button>
+             )}
 
+             {!isMobile && (
              <button 
                 className="btn" 
                 onClick={handleShareScreenshot} 
@@ -737,15 +745,18 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                   flex: isMobile ? '1' : 'none'
                 }}
              >
-                <Copy size={16} /> <span className={isMobile ? "desktop-only" : ""}>Screenshot</span>
+                <Copy size={16} /> <span>Screenshot</span>
              </button>
+             )}
              <div className="view-switcher" style={{ display: 'flex', background: 'var(--bg-color)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-start' }}>
                 <button onClick={() => setViewType('monthly')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'monthly' ? 'var(--primary)' : 'transparent', color: viewType === 'monthly' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
                     <LayoutGrid size={14} /> Month
                 </button>
+                {!isMobile && (
                 <button onClick={() => setViewType('timeline')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'timeline' ? 'var(--primary)' : 'transparent', color: viewType === 'timeline' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
                     <Columns size={14} /> Timeline
                 </button>
+                )}
                 <button onClick={() => setViewType('agenda')} style={{ padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 1rem', flex: isMobile ? '1' : 'none', border: 'none', borderRadius: 'var(--radius-md)', background: viewType === 'agenda' ? 'var(--primary)' : 'transparent', color: viewType === 'agenda' ? 'white' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 700, fontSize: isMobile ? '0.75rem' : '0.85rem', transition: 'all 0.2s' }}>
                     <List size={14} /> Agenda
                 </button>
@@ -938,7 +949,13 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                           
                           return (
                             <div key={d.toString()} 
-                                 onClick={() => { if (!isPast) handleMonthCellClick(d, c.id) }}
+                                 onClick={() => { 
+                                   if (dayBookings.length > 0) {
+                                     setDayBookingsList({ date: d, bookings: dayBookings, propertyName: c.name, cottageId: c.id });
+                                   } else if (!isPast) {
+                                     handleMonthCellClick(d, c.id);
+                                   }
+                                 }}
                                  style={{ 
                                    minWidth: 0, 
                                    overflow: 'hidden', 
@@ -1044,7 +1061,8 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
 
         {/* DETAILS DRAWER / PANEL */}
         {selectedBooking && (
-          <div style={{ padding: '2rem', borderTop: '2px solid var(--border)', background: 'var(--bg-secondary)', position: 'relative', animation: 'slideUp 0.3s ease-out' }}>
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
+            <div className="card" style={{ width: '95%', maxWidth: '900px', padding: '2rem', position: 'relative', animation: 'fadeInUp 0.3s ease', maxHeight: '90vh', overflowY: 'auto', background: 'var(--bg-secondary)', borderRadius: '1rem', boxShadow: 'var(--shadow-lg)' }}>
             <button className="btn-icon" style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'var(--bg-color)' }} onClick={() => setSelectedBooking(null)}><X size={20}/></button>
             
             <div style={{ display: 'flex', gap: '2.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1129,6 +1147,7 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
                     </button>
                 </div>
             </div>
+          </div>
           </div>
         )}
       </div>
@@ -1494,7 +1513,62 @@ Let us know if you have any guests looking for a beautiful getaway! 😊`;
         />
       )}
 
-      <style>{`
+      
+      {dayBookingsList && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="card" style={{ width: '90%', maxWidth: '400px', padding: '1.5rem', position: 'relative', animation: 'fadeInUp 0.3s ease', maxHeight: '80vh', overflowY: 'auto' }}>
+            <button className="btn-icon" style={{ position: 'absolute', right: '1rem', top: '1rem', background: 'var(--bg-secondary)' }} onClick={() => setDayBookingsList(null)}>
+              <X size={20}/>
+            </button>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.25rem', paddingRight: '2rem' }}>
+              Bookings on {format(dayBookingsList.date, 'MMM d, yyyy')}
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Home size={14} /> {dayBookingsList.propertyName}
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {dayBookingsList.bookings.map(b => (
+                <div key={b.id} 
+                     onClick={() => {
+                        setDayBookingsList(null);
+                        navigate('/bookings/edit/' + b.id);
+                     }}
+                     style={{ padding: '1rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: `4px solid ${b.status === 'Pending' ? 'var(--warning)' : 'var(--primary)'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{b.guest_name}</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: b.status === 'Pending' ? 'rgba(245,158,11,0.1)' : 'rgba(5,150,105,0.1)', color: b.status === 'Pending' ? 'var(--warning)' : 'var(--available)' }}>
+                      {b.status}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {b.booking_type === 'Entire Property' ? 'Entire Property' : `Rooms: ${b.room_names || 'Standard'}`}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <MapPin size={12} /> Ref: {b.reference_number || 'N/A'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {startOfDay(dayBookingsList.date) >= startOfDay(new Date()) && (
+              <button className="btn btn-outline" 
+                      style={{ width: '100%', marginTop: '1.5rem', height: '42px', justifyContent: 'center' }} 
+                      onClick={() => {
+                         const date = dayBookingsList.date;
+                         const cottageId = dayBookingsList.cottageId;
+                         setDayBookingsList(null);
+                         handleMonthCellClick(date, cottageId);
+                      }}>
+                <Calendar size={16} style={{ marginRight: '0.5rem' }} /> Add New Booking
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style>{
+`
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }

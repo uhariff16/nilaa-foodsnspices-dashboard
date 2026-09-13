@@ -80,6 +80,8 @@ serve(async (req) => {
     // 5. Signature matches perfectly! Instantly update the database!
     await supabaseAdmin.from('saas_subscriptions').update({
       status: 'active',
+      current_period_start: new Date().toISOString(),
+      current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString()
     }).eq('razorpay_subscription_id', subscription_id)
 
     await supabaseAdmin.from('profiles').update({
@@ -94,7 +96,9 @@ serve(async (req) => {
           event_data: {
             tenant_email: user.email,
             plan_type: dbSub.staypilot_plan_type,
-            period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString()
+            period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+            next_payment_date: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+            subscription_end_date: new Date(Date.now() + 40*365.25*24*60*60*1000).toISOString()
           }
         }
       }).catch(err => console.error("Failed to send activation email", err));

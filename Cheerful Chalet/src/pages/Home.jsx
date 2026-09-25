@@ -52,13 +52,14 @@ export default function Home() {
     <div style={{ fontFamily: 'var(--font-sans, system-ui, sans-serif)', overflowX: 'hidden' }}>
       <style>{`
         .gradient-text {
-          background: linear-gradient(135deg, var(--primary) 0%, #0369a1 100%);
+          background: linear-gradient(135deg, #34d399 0%, #38bdf8 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
         .hero-bg {
-          background: radial-gradient(circle at top center, rgba(5, 150, 105, 0.05) 0%, rgba(3, 105, 161, 0.05) 100%);
+          background: radial-gradient(circle at top center, #064e3b 0%, #020617 100%);
+          color: white;
         }
         .glass-card {
           background: rgba(255, 255, 255, 0.7);
@@ -71,6 +72,40 @@ export default function Home() {
         .glass-card:hover {
           transform: translateY(-5px);
           box-shadow: 0 20px 40px -10px rgba(5, 150, 105, 0.1);
+        }
+        .bento-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          grid-auto-rows: 250px;
+          gap: 1.5rem;
+        }
+        .bento-item {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 24px;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          position: relative;
+          box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
+          transition: transform 0.3s ease;
+        }
+        .bento-item:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1);
+        }
+        .bento-item.large {
+          grid-column: span 2;
+        }
+        @media (max-width: 768px) {
+          .bento-grid {
+            grid-template-columns: 1fr;
+            grid-auto-rows: auto;
+          }
+          .bento-item.large {
+            grid-column: span 1;
+          }
         }
         .play-store-btn {
           display: flex;
@@ -105,18 +140,42 @@ export default function Home() {
           50% { transform: translateY(-20px); }
           100% { transform: translateY(0px); }
         }
+        .glass-badge {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          padding: 10px 20px;
+          border-radius: 30px;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+          font-weight: 700;
+          color: #f8fafc;
+          font-size: 0.95rem;
+          white-space: nowrap;
+        }
+        @media (max-width: 768px) {
+          .glass-badge {
+            transform: scale(0.75);
+            padding: 6px 12px;
+            font-size: 0.8rem;
+          }
+        }
         .mockup-container {
           position: relative;
           width: 100%;
           max-width: 1000px;
           margin: 0 auto;
-          margin-top: 4rem;
+          margin-top: 2rem;
+          z-index: 10;
         }
         .web-mockup {
           width: 100%;
           border-radius: 16px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0, 0, 0, 0.05);
+          border: 1px solid #cbd5e1;
           background: #f8fafc;
           aspect-ratio: 16/9;
           overflow: hidden;
@@ -179,6 +238,7 @@ export default function Home() {
 
       
       {/* Header */}
+      {/* Header */}
       <header style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -199,7 +259,7 @@ export default function Home() {
         {/* Desktop Navigation (Center) */}
         <nav className="desktop-nav" style={{ display: 'flex', gap: '2.5rem', alignItems: 'center', fontWeight: 600, color: '#334155', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           <Link to="/" style={{ color: '#059669', textDecoration: 'none' }}>Home</Link>
-          <a href="#features" onClick={(e) => { e.preventDefault(); const el = document.getElementById('features'); if(el) { const y = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({top: y, behavior: 'smooth'}); } }} style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Features</a>
+          <Link to="/features" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Features</Link>
           <Link to="/how-it-works" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>How It Works</Link>
           <Link to="/pricing" style={{ color: 'inherit', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => e.target.style.color = '#059669'} onMouseOut={e => e.target.style.color = 'inherit'}>Pricing</Link>
         </nav>
@@ -211,10 +271,9 @@ export default function Home() {
       </header>
 
       {/* HERO SECTION */}
-
-      <section className="hero-bg" style={{ padding: '6rem 1.5rem', textAlign: 'center', minHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <section className="hero-bg" style={{ position: 'relative', padding: '3rem 1.5rem 0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', zIndex: 2 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(5, 150, 105, 0.1)', color: 'var(--primary)', padding: '6px 16px', borderRadius: '30px', fontSize: '0.9rem', fontWeight: 600, marginBottom: '2rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(52, 211, 153, 0.2)', color: '#34d399', padding: '6px 16px', borderRadius: '30px', fontSize: '0.9rem', fontWeight: 600, marginBottom: '2rem' }}>
             <Sparkles size={16} /> New: StayPilot Android App is Live!
           </div>
           
@@ -222,12 +281,12 @@ export default function Home() {
             Know Your Bookings.<br/>Know Your Numbers.
           </h1>
           
-          <p style={{ fontSize: '1.25rem', color: '#475569', margin: '0 0 2.5rem 0', lineHeight: 1.6, maxWidth: '600px', marginInline: 'auto' }}>
+          <p style={{ fontSize: '1.25rem', color: '#94a3b8', margin: '0 0 2.5rem 0', lineHeight: 1.6, maxWidth: '600px', marginInline: 'auto' }}>
             The all-in-one platform built for independent properties. Manage reservations, track financials, and scale your business effortlessly from any device.
           </p>
 
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
-            <Link to="/auth" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '1.1rem', borderRadius: '8px', boxShadow: '0 10px 25px -5px rgba(5, 150, 105, 0.4)' }}>
+            <Link to="/auth?mode=signup" className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '1.1rem', borderRadius: '8px', boxShadow: '0 10px 25px -5px rgba(5, 150, 105, 0.4)' }}>
               Start for Free
             </Link>
             <a href={PLAY_STORE_LINK} target="_blank" rel="noopener noreferrer" className="play-store-btn">
@@ -238,6 +297,32 @@ export default function Home() {
 
         {/* MOCKUP SHOWCASE */}
         <div className="mockup-container float-anim">
+          {/* GLOW EFFECT */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '80%', height: '80%', background: 'radial-gradient(circle, rgba(52, 211, 153, 0.4) 0%, rgba(56, 189, 248, 0.1) 50%, transparent 70%)', filter: 'blur(60px)', zIndex: 0 }}></div>
+
+          {/* FLOATING BADGES */}
+          <div className="glass-badge float-anim-delayed" style={{ position: 'absolute', top: '15%', left: '-8%', zIndex: 20 }}>
+            📅 Visual Calendar
+          </div>
+          <div className="glass-badge float-anim" style={{ position: 'absolute', bottom: '25%', left: '-5%', zIndex: 20, animationDelay: '1.5s' }}>
+            💰 Auto Financials
+          </div>
+          <div className="glass-badge float-anim" style={{ position: 'absolute', top: '45%', right: '18%', zIndex: 20, animationDelay: '0.8s' }}>
+            ⚡ Instant Sync
+          </div>
+          <div className="glass-badge float-anim-delayed" style={{ position: 'absolute', top: '-5%', right: '8%', zIndex: 20, animationDelay: '2.5s' }}>
+            📝 Lead Management
+          </div>
+          <div className="glass-badge float-anim" style={{ position: 'absolute', bottom: '5%', right: '-12%', zIndex: 30, animationDelay: '1.2s' }}>
+            📲 Quick Enquiry
+          </div>
+          <div className="glass-badge float-anim-delayed" style={{ position: 'absolute', top: '-2%', left: '15%', zIndex: 20, animationDelay: '0.5s' }}>
+            🧾 Invoicing
+          </div>
+          <div className="glass-badge float-anim" style={{ position: 'absolute', bottom: '-2%', left: '25%', zIndex: 20, animationDelay: '2.0s' }}>
+            💬 WhatsApp Notifications
+          </div>
+
           <div className="web-mockup">
             <div style={{ background: '#e2e8f0', padding: '12px', display: 'flex', gap: '8px', borderBottom: '1px solid #cbd5e1' }}>
               <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }}></div>
@@ -269,6 +354,13 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Curved SVG Divider to blend into light section */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', overflow: 'hidden', lineHeight: 0, transform: 'translateY(1px)', zIndex: 0 }}>
+          <svg viewBox="0 0 1200 120" preserveAspectRatio="none" style={{ position: 'relative', display: 'block', width: 'calc(100% + 1.3px)', height: '80px' }}>
+            <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V0C52.42,28.17,133.72,67.6,214.34,71.2,251.69,72.84,288.08,62.6,321.39,56.44Z" fill="#ffffff"></path>
+          </svg>
+        </div>
       </section>
 
       {/* PARTNERS / TRUST SECTION */}
@@ -285,38 +377,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FEATURES GRID */}
-      <section id="features" style={{ padding: '6rem 1.5rem', background: '#f8fafc' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-            <h2 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>Everything you need to scale.</h2>
-            <p style={{ fontSize: '1.1rem', color: '#64748b', maxWidth: '600px', margin: '0 auto' }}>Stop managing your property in pieces. Bring your bookings, finances, and team into one powerful platform.</p>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
-            {[
-              { icon: <BookOpenCheck />, title: 'Smart Reservations', desc: 'Centralized booking management with live status tracking.', color: '#059669' },
-              { icon: <CalendarDays />, title: 'Visual Calendar', desc: 'Prevent double-bookings with our intuitive timeline view.', color: '#0369a1' },
-              { icon: <Wallet />, title: 'Financial Tracking', desc: 'Log expenses and track revenue automatically.', color: '#b45309' },
-              { icon: <TrendingUp />, title: 'ROI Analysis', desc: 'Deep insights into your property investment health.', color: '#6d28d9' },
-              { icon: <Users />, title: 'Staff Access', desc: 'Role-based access for your managers and receptionists.', color: '#be123c' },
-              { icon: <Zap />, title: 'Instant Sync', desc: 'Changes reflect instantly across web and mobile apps.', color: '#1d4ed8' },
-            ].map((feat, i) => (
-              <div key={i} className="glass-card" style={{ padding: '2rem', borderRadius: '16px' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '12px', background: feat.color + '15', color: feat.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                  {feat.icon}
-                </div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem', color: '#1e293b' }}>{feat.title}</h3>
-                <p style={{ color: '#64748b', lineHeight: 1.6, margin: 0 }}>{feat.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* DEDICATED MOBILE APP SECTION */}
-      <section className="app-section" style={{ padding: '6rem 1.5rem' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '4rem', flexWrap: 'wrap' }}>
+      <section className="app-section" style={{ padding: '8rem 1.5rem 6rem' }}>
+        {/* Curved SVG Divider from white section above */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', overflow: 'hidden', lineHeight: 0, transform: 'rotate(180deg) translateY(1px)', zIndex: 0 }}>
+          <svg viewBox="0 0 1200 120" preserveAspectRatio="none" style={{ position: 'relative', display: 'block', width: 'calc(100% + 1.3px)', height: '80px' }}>
+            <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V0C52.42,28.17,133.72,67.6,214.34,71.2,251.69,72.84,288.08,62.6,321.39,56.44Z" fill="#ffffff"></path>
+          </svg>
+        </div>
+
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '4rem', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
           <div style={{ flex: '1 1 400px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 16px', borderRadius: '30px', fontSize: '0.9rem', fontWeight: 600, marginBottom: '1.5rem', color: 'white' }}>
               <Smartphone size={16} /> Manage From Anywhere
@@ -366,7 +438,7 @@ export default function Home() {
             Join the smart properties using StayPilot to maximize revenue and minimize headaches.
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/auth" className="btn btn-primary" style={{ padding: '16px 40px', fontSize: '1.2rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Link to="/auth?mode=signup" className="btn btn-primary" style={{ padding: '16px 40px', fontSize: '1.2rem', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               Create Free Account <ArrowRight size={20} />
             </Link>
           </div>

@@ -28,6 +28,7 @@ const EnquiriesBoard = React.lazy(() => import('./pages/EnquiriesBoard'));
 const QuickEnquiryMobile = React.lazy(() => import('./pages/QuickEnquiryMobile'));
 const Home = React.lazy(() => import('./pages/Home'));
 const HowItWorks = React.lazy(() => import('./pages/HowItWorks'));
+const Features = React.lazy(() => import('./pages/Features'));
 const Pricing = React.lazy(() => import('./pages/Pricing'));
 const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
 const OnboardingWizard = React.lazy(() => import('./components/OnboardingWizard'));
@@ -54,7 +55,7 @@ function App() {
     }
   }, []);
 
-  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans, setLandingPageContent, setWebsitePricing, setOnboardingWizardEnabled, setIsDataLoaded } = useSettingsStore();
+  const { theme, session, profile, isRecovering, setSession, setProfile, setResorts, setActiveResortId, setIsRecovering, setGlobalPlans, setLandingPageContent, setWebsitePricing, setGlobalTaxSettings, setOnboardingWizardEnabled, setIsDataLoaded } = useSettingsStore();
   const [isNewlyVerified, setIsNewlyVerified] = React.useState(false);
 
   useEffect(() => {
@@ -141,6 +142,9 @@ function App() {
         }
         if (settings.website_pricing) {
           setWebsitePricing(settings.website_pricing);
+        }
+        if (settings.tax_settings) {
+          setGlobalTaxSettings(settings.tax_settings);
         }
         if (settings.onboarding_wizard_enabled !== undefined) {
           setOnboardingWizardEnabled(settings.onboarding_wizard_enabled !== false);
@@ -282,6 +286,7 @@ function App() {
           
           <Route path="/" element={!session ? (window.Capacitor?.isNativePlatform() ? <Navigate to="/auth" replace /> : <Home />) : (profile?.role === 'staff' ? <Navigate to="/bookings" replace /> : <Navigate to="/dashboard" replace />)} />
           <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/features" element={<Features />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           

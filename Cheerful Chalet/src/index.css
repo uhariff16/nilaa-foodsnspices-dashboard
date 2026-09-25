@@ -2,6 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&display=swap');
 
 :root {
+  color-scheme: light;
   /* Green + White (Eco Resort) - Default */
   --bg-color: #f8fafc;
   --bg-secondary: #ffffff;
@@ -858,23 +859,32 @@ input:checked + .slider:before {
   .desktop-btn { display: none !important; }
 }
 
-@media print {
-  body * {
-    visibility: hidden;
+  @media print {
+    #root {
+      display: none !important;
+    }
+    @page {
+      margin: 0.5cm;
+    }
+    body {
+      background: white;
+    }
+    body * {
+      visibility: hidden;
+    }
+    .print-receipt-container, .print-receipt-container * {
+      visibility: visible;
+    }
+    .print-receipt-container {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      background: white !important;
+      color: black !important;
+      padding: 0 !important;
+    }
   }
-  .print-receipt-container, .print-receipt-container * {
-    visibility: visible;
-  }
-  .print-receipt-container {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    background: white !important;
-    color: black !important;
-    padding: 0 !important;
-  }
-}
 
 @media print {
   .a5-format {
@@ -1142,3 +1152,12 @@ input:checked + .slider:before {
         }
 
       
+
+input[type="date"], input[type="time"] {
+  color-scheme: inherit;
+}
+
+
+[data-theme="dark"] ::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(200%);
+}

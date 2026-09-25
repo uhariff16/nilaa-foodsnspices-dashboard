@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Plus, Trash2, CheckCircle2, AlertTriangle, X, Search, Filter, Phone, Calendar, Home, CreditCard, Edit2, MoreVertical, Send, RotateCcw, Copy, Check, MessageSquare, MessageCircle, Mail, CheckSquare, Square, Printer, Share2 } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, AlertTriangle, X, Search, Filter, Phone, Calendar, Home, CreditCard, Edit2, MoreVertical, Send, RotateCcw, Copy, Check, MessageSquare, MessageCircle, Mail, CheckSquare, Square, Printer, Share2, CalendarCheck } from 'lucide-react';
 import { startOfMonth, format } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
 import BookingReceipt from '../components/BookingReceipt';
+import { WhatsAppErrorBoundary } from '../components/WhatsAppErrorBoundary';
 import html2canvas from 'html2canvas';
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
@@ -50,21 +51,36 @@ const parseAgentSource = (sourceStr) => {
   return { isAgent: true, name: cleaned, phone: '' };
 };
 
-const DEFAULT_CONFIRM_TEMPLATE = `Dear {guest_name},
+const DEFAULT_CONFIRM_TEMPLATE = `🏡 Booking Confirmed – {resort_name}
 
-Thank you for choosing Cheerful Chalet! Your booking is confirmed.
-Reference: {reference_number}
-Dates: {check_in_date} to {check_out_date} ({night_count} nights)
-Accommodation: {room_name}
-Total Amount: ₹{total_amount}
-Advance Paid: ₹{advance_paid}
-Balance: ₹{balance_amount}
+Dear {guest_name},
 
-We look forward to welcoming you!`;
+Thank you for choosing {resort_name}.
+
+We are pleased to confirm your reservation:
+
+🔖 Booking ID: {booking_id}
+📅 Check-in Date & Time : {check_in_date} & {check_in_time}
+📅 Check-out Date & Time: {check_out_date} & {check_out_time}
+🌙 Duration of Stay: {duration_of_stay}
+🛏 Room Type: {room_type}
+🏠 Number of Rooms: {num_rooms}
+👥 Number of Guests: {num_guests}
+👨 Adults: {adults_count}
+👧 Kids: {kids_count}
+🍳 Breakfast: {breakfast}
+
+💰 Total Amount: ₹{total_amount}
+✅ Advance Paid: ₹{advance_paid}
+💳 Balance Amount: ₹{balance_amount} (Payable at Check-in)
+
+Your reservation has been successfully confirmed. We look forward to welcoming you and ensuring a pleasant stay.
+
+📞 For any queries or assistance, please contact: {resort_phone}`;
 
 const DEFAULT_RECEIPT_TEMPLATE = `Dear {guest_name},
 
-We have received your payment for booking {reference_number}.
+We have received your payment for booking {booking_id}.
 Amount Paid: ₹{payment_amount}
 Balance Amount: ₹{balance_amount}
 
@@ -72,11 +88,10 @@ Thank you!`;
 
 const DEFAULT_REMINDER_TEMPLATE = `Dear {guest_name},
 
-This is a friendly reminder for your upcoming stay at Cheerful Chalet.
-Reference: {reference_number}
-Check-in Date: {check_in_date}
-Check-in Time: 1:00 PM
-Accommodation: {room_name}
+This is a friendly reminder for your upcoming stay at {resort_name}.
+Booking ID: {booking_id}
+Check-in Date & Time: {check_in_date} & {check_in_time}
+Accommodation: {room_type}
 Vehicle: {vehicle_number}
 
 We look forward to hosting you!`;
@@ -95,18 +110,18 @@ Thank you again, and we look forward to welcoming you back soon!
 
 const DEFAULT_PAYMENT_REMINDER_TEMPLATE = `Dear {guest_name},
 
-This is a gentle reminder regarding the pending balance for your booking {reference_number} at {resort_name}.
-Total Amount: ₹{total_amount}
-Advance Paid: ₹{advance_paid}
-Balance Due: ₹{balance_amount}
+This is a gentle reminder that there is a pending balance of ₹{balance_amount} for your upcoming stay at {resort_name}.
+Booking ID: {booking_id}
 
-Please let us know if you need any assistance with the payment.
-Thank you!`;
+Please clear the dues at your earliest convenience to ensure a smooth check-in.
+
+📞 Contact: {resort_phone}`;
 
 export default function Bookings() {
   const navigate = useNavigate();
   const { activeResortId, profile } = useSettingsStore();
   const [bookings, setBookings] = useState([]);
+  const clickTimeoutRef = React.useRef(null);
   const [cottages, setCottages] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [activeResort, setActiveResort] = useState(null);
@@ -165,22 +180,29 @@ export default function Bookings() {
         return;
       }
       
-      const oldDisplay = receiptEl.style.display;
-      const oldPosition = receiptEl.style.position;
-      const oldLeft = receiptEl.style.left;
-      const oldTop = receiptEl.style.top;
-      
-      receiptEl.style.display = 'block';
-      receiptEl.style.position = 'absolute';
-      receiptEl.style.left = '-9999px';
-      receiptEl.style.top = '-9999px';
-
-      const canvas = await html2canvas(receiptEl, { scale: 2, useCORS: true });
-      
-      receiptEl.style.display = oldDisplay;
-      receiptEl.style.position = oldPosition;
-      receiptEl.style.left = oldLeft;
-      receiptEl.style.top = oldTop;
+        const oldDisplay = receiptEl.style.display;
+        const oldPosition = receiptEl.style.position;
+        const oldLeft = receiptEl.style.left;
+        const oldTop = receiptEl.style.top;
+        const oldWidth = receiptEl.style.width;
+        const oldMinHeight = receiptEl.style.minHeight;
+        
+        receiptEl.style.display = 'block';
+        receiptEl.style.position = 'absolute';
+        receiptEl.style.left = '-9999px';
+        receiptEl.style.top = '-9999px';
+        const isA5 = receiptEl.classList.contains('a5-format');
+        receiptEl.style.width = isA5 ? '559px' : '794px';
+        receiptEl.style.minHeight = isA5 ? '794px' : '1123px';
+  
+        const canvas = await html2canvas(receiptEl, { scale: 2, useCORS: true });
+        
+        receiptEl.style.display = oldDisplay;
+        receiptEl.style.position = oldPosition;
+        receiptEl.style.left = oldLeft;
+        receiptEl.style.top = oldTop;
+        receiptEl.style.width = oldWidth;
+        receiptEl.style.minHeight = oldMinHeight;
       
       canvas.toBlob(async (blob) => {
         if (!blob) {
@@ -286,7 +308,7 @@ export default function Bookings() {
         bookingsQuery.order('created_at', { ascending: false }),
         cottagesQuery,
         roomsQuery,
-        supabase.from('tenant_integrations').select('whatsapp_confirm_msg_template, whatsapp_receipt_msg_template, whatsapp_reminder_msg_template, whatsapp_review_msg_template, whatsapp_custom_tags').eq('resort_id', activeResortId).maybeSingle(),
+        supabase.from('tenant_integrations').select('*').eq('resort_id', activeResortId).maybeSingle(),
         supabase.from('resorts').select('*').eq('id', activeResortId).maybeSingle()
       ]);
       setBookings(bks.data || []);
@@ -294,18 +316,20 @@ export default function Bookings() {
       setRooms(rms.data || []);
       setActiveResort(resortRes?.data || null);
 
-      const dbConfirm = integrationsRes?.data?.whatsapp_confirm_msg_template;
-      const dbReceipt = integrationsRes?.data?.whatsapp_receipt_msg_template;
-      const dbReminder = integrationsRes?.data?.whatsapp_reminder_msg_template;
-      const dbReview = integrationsRes?.data?.whatsapp_review_msg_template;
-      
       const customTagsRaw = integrationsRes?.data?.whatsapp_custom_tags;
       const parsedTags = customTagsRaw ? (typeof customTagsRaw === 'string' ? JSON.parse(customTagsRaw) : customTagsRaw) : [];
-      const storedPaymentReminderTag = parsedTags.find(t => t.key === '__template_payment_reminder');
-      let dbPaymentReminder = storedPaymentReminderTag ? storedPaymentReminderTag.value : null;
-      if (!dbPaymentReminder && integrationsRes?.data?.whatsapp_payment_reminder_msg_template) {
-         dbPaymentReminder = integrationsRes?.data?.whatsapp_payment_reminder_msg_template;
-      }
+      
+      const getTemplateVal = (key, dbVal) => {
+        if (dbVal) return dbVal;
+        const tag = parsedTags.find(t => t.key === key);
+        return tag ? tag.value : null;
+      };
+
+      const dbConfirm = getTemplateVal('__template_confirm', integrationsRes?.data?.whatsapp_confirm_msg_template);
+      const dbReceipt = getTemplateVal('__template_receipt', integrationsRes?.data?.whatsapp_receipt_msg_template);
+      const dbReminder = getTemplateVal('__template_reminder', integrationsRes?.data?.whatsapp_reminder_msg_template);
+      const dbReview = getTemplateVal('__template_review', integrationsRes?.data?.whatsapp_review_msg_template);
+      const dbPaymentReminder = getTemplateVal('__template_payment_reminder', integrationsRes?.data?.whatsapp_payment_reminder_msg_template);
       
       setWhatsappTemplates({
         confirm: dbConfirm || DEFAULT_CONFIRM_TEMPLATE,
@@ -317,7 +341,7 @@ export default function Bookings() {
 
       if (customTagsRaw) {
         try {
-          setCustomTags(parsedTags.filter(t => t.key !== '__template_payment_reminder'));
+          setCustomTags(parsedTags.filter(t => t.key !== 'wifi_password' && !t.key.startsWith('__template_')));
         } catch (e) {
           console.error("Failed to parse custom tags:", e);
         }
@@ -371,8 +395,12 @@ export default function Bookings() {
     const rname = booking.booking_type === 'Entire Property' ? rooms.filter(r => r.cottage_id === booking.cottage_id).map(r => r.name).filter(Boolean).join(', ') : (booking.room_ids || []).map(id => rooms.find(r => r.id === id)?.name).filter(Boolean).join(', ');
     
     // Custom logic for extra tags
-    const checkInDateFormatted = new Date(booking.check_in_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    const checkOutDateFormatted = new Date(booking.check_out_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const checkInDateFormatted = booking.check_in_date && !isNaN(new Date(booking.check_in_date).getTime()) 
+      ? new Date(booking.check_in_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'N/A';
+    const checkOutDateFormatted = booking.check_out_date && !isNaN(new Date(booking.check_out_date).getTime()) 
+      ? new Date(booking.check_out_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'N/A';
     
     const duration = booking.night_count === 1 ? '1 Night' : `${booking.night_count || 0} Nights`;
     const numRoomsVal = booking.booking_type === 'Entire Property' ? 'Entire Property' : (booking.room_ids?.length || 1);
@@ -406,7 +434,14 @@ export default function Bookings() {
       .replace(/{kids_count}/g, (booking.kids_count || 0).toString())
       .replace(/{breakfast}/g, breakfastVal)
       .replace(/{night_count}/g, (booking.night_count || '0').toString())
-      .replace(/{total_amount}/g, (booking.total_amount || 0).toLocaleString())
+      .replace(/{total_amount}/g, (() => {
+        if (booking.payment_method === 'OTA' || booking.ota_payment_status === 'Pending OTA Settlement' || booking.ota_payment_status === 'Settled') {
+          const guestLiabilityRaw = Number(booking.addons_cost || 0) + Number(booking.extra_guest_charges || 0);
+          const guestGst = booking.gst_rate > 0 ? Math.round(guestLiabilityRaw * (booking.gst_rate / 100)) : 0;
+          return (guestLiabilityRaw + guestGst).toLocaleString();
+        }
+        return (booking.total_amount || 0).toLocaleString();
+      })())
       .replace(/{advance_paid}/g, (booking.advance_paid || 0).toLocaleString())
       .replace(/{balance_amount}/g, (booking.balance_amount || 0).toLocaleString())
       .replace(/{vehicle_number}/g, booking.vehicle_number || 'N/A')
@@ -428,7 +463,13 @@ export default function Bookings() {
         }
         return booking.booking_source || 'Direct';
       })())
-      .replace(/{payment_amount}/g, customPaymentAmount || (booking.total_amount - booking.balance_amount || 0).toLocaleString());
+      .replace(/{payment_amount}/g, (() => {
+        if (customPaymentAmount) return customPaymentAmount;
+        if (booking.payment_method === 'OTA' || booking.ota_payment_status === 'Pending OTA Settlement' || booking.ota_payment_status === 'Settled') {
+          return (booking.advance_paid || 0).toLocaleString();
+        }
+        return (booking.total_amount - booking.balance_amount || 0).toLocaleString();
+      })());
 
     // Substitute custom tags dynamically
     try {
@@ -499,6 +540,48 @@ export default function Bookings() {
       const displayStatus = (b.status === 'Completed' && b.balance_amount > 0) ? 'Pending Payment' : b.status;
       return displayStatus === status;
     }).length;
+  };
+
+  const handleMarkOTASettled = async (b) => {
+    if (!window.confirm(`Mark OTA payment as settled for ${b.reference_number}?`)) return;
+    
+    const otaLiabilityRaw = Number(b.base_amount || 0);
+    const guestLiabilityRaw = Number(b.addons_cost || 0) + Number(b.extra_guest_charges || 0);
+    const rawTotal = otaLiabilityRaw + guestLiabilityRaw;
+    
+    const computedGstAmount = Number(b.gst_amount || 0);
+    const ratio = (computedGstAmount > 0 && rawTotal > 0) ? (computedGstAmount / rawTotal) : 0;
+    const otaGst = Math.round(otaLiabilityRaw * ratio);
+    
+    // OTA portion is strictly the base accommodation + their portion of GST
+    const amtSettled = Math.max(0, otaLiabilityRaw + otaGst);
+
+    try {
+      const { error } = await supabase.from('bookings').update({ ota_payment_status: 'Settled' }).eq('id', b.id);
+      if (error) throw error;
+
+      if (amtSettled > 0) {
+        const { error: incomeErr } = await supabase.from('incomes').insert([{
+          resort_id: activeResortId,
+          tenant_id: profile?.tenant_id,
+          booking_id: b.id,
+          amount: amtSettled,
+          source: 'Room Rent',
+          notes: `OTA Settlement: ${b.guest_name} (${b.reference_number}) - via OTA`,
+          date: new Date().toLocaleDateString('en-CA'),
+          payment_mode: 'Bank Transfer'
+        }]);
+        if (incomeErr) console.error("Error inserting OTA income", incomeErr);
+      }
+
+      setBookings(prev => prev.map(x => x.id === b.id ? { ...x, ota_payment_status: 'Settled' } : x));
+      if (selectedDetailedBooking?.id === b.id) {
+        setSelectedDetailedBooking(prev => ({...prev, ota_payment_status: 'Settled'}));
+      }
+      alert("OTA payment marked as settled and income recorded.");
+    } catch(err) {
+      alert("Failed to mark OTA as settled: " + err.message);
+    }
   };
 
   const statusOptions = [
@@ -616,6 +699,7 @@ export default function Bookings() {
       const newTotal = Math.max(0, Number(settlingBooking.total_amount || 0) - discount);
       const newBalance = Math.max(0, Number(settlingBooking.balance_amount || 0) - amtPaid - discount);
       const newAdvancePaid = Number(settlingBooking.advance_paid || 0) + amtPaid;
+      const newDiscountAmount = Number(settlingBooking.discount_amount || 0) + discount;
       
       let targetStatus = settlingBooking.status;
       if (newBalance === 0 && (settlingBooking.status === 'Checked-out' || settlingBooking.status === 'Completed')) {
@@ -628,7 +712,8 @@ export default function Bookings() {
           status: targetStatus,
           total_amount: newTotal,
           balance_amount: newBalance,
-          advance_paid: newAdvancePaid
+          advance_paid: newAdvancePaid,
+          discount_amount: newDiscountAmount
         })
         .eq('id', settlingBooking.id);
         
@@ -652,7 +737,8 @@ export default function Bookings() {
         status: targetStatus,
         total_amount: newTotal,
         balance_amount: newBalance,
-        advance_paid: newAdvancePaid
+        advance_paid: newAdvancePaid,
+        discount_amount: newDiscountAmount
       } : x));
       const bookingId = settlingBooking.id;
       setSettlingBooking(null);
@@ -1067,7 +1153,12 @@ export default function Bookings() {
                 <div style={{ padding: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', gap: '0.5rem' }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <small style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.75rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.reference_number}</small>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <small style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.75rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.reference_number}</small>
+                        {b.ota_payment_status === 'Pending OTA Settlement' && (
+                          <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', background: '#f59e0b', color: '#fff', borderRadius: '4px', fontWeight: 'bold' }}>OTA Pending</span>
+                        )}
+                      </div>
                       <h3 style={{ margin: '0.1rem 0 0.25rem 0', fontSize: '1.1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.guest_name}</h3>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -1146,7 +1237,7 @@ export default function Bookings() {
                     </div>
                     
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => navigate(`/bookings/edit/${b.id}?edit=true`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
+                      <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
                       {b.status === 'Confirmed' && (
                         <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Check-in</button>
                       )}
@@ -1200,12 +1291,30 @@ export default function Bookings() {
                   const opt = statusOptions.find(o => o.label === displayStatus) || statusOptions[1];
 
                   return (
-                    <tr key={b.id} className="table-row-hover" onClick={(e) => { if (e.target.tagName !== 'INPUT' && !e.target.closest('button') && !e.target.closest('.btn-icon') && !e.target.closest('a')) setSelectedDetailedBooking(b); }} style={{ opacity: b.status === 'Cancelled' ? 0.6 : 1, cursor: 'pointer' }}>
+                    <tr key={b.id} className="table-row-hover" onClick={(e) => { 
+                      if (e.target.tagName === 'INPUT' || e.target.closest('button') || e.target.closest('.btn-icon') || e.target.closest('a')) return;
+                      
+                      if (clickTimeoutRef.current) {
+                        clearTimeout(clickTimeoutRef.current);
+                        clickTimeoutRef.current = null;
+                        navigate(`/bookings/edit/${b.id}`);
+                      } else {
+                        clickTimeoutRef.current = setTimeout(() => {
+                          setSelectedDetailedBooking(b);
+                          clickTimeoutRef.current = null;
+                        }, 200);
+                      }
+                    }} style={{ opacity: b.status === 'Cancelled' ? 0.6 : 1, cursor: 'pointer' }}>
                       <td>
                         <input type="checkbox" checked={selectedBookings.includes(b.id)} onChange={() => toggleSelectBooking(b.id)} />
                       </td>
                       <td>
-                        <small style={{ color: 'var(--primary)', fontWeight: 800 }}>{b.reference_number}</small>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <small style={{ color: 'var(--primary)', fontWeight: 800 }}>{b.reference_number}</small>
+                          {b.ota_payment_status === 'Pending OTA Settlement' && (
+                            <span style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', background: '#f59e0b', color: '#fff', borderRadius: '4px', fontWeight: 'bold' }}>OTA Pending</span>
+                          )}
+                        </div>
                         <div style={{ fontWeight: 700, fontSize: '1rem' }}>{b.guest_name}</div>
                         <small style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Phone size={12} /> {b.phone_number}
@@ -1232,9 +1341,9 @@ export default function Bookings() {
                       <td>
                         <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
                            <Calendar size={14} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
-                           {new Date(b.check_in_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
+                           {formatDateShort(b.check_in_date)} 
                            <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>→</span> 
-                           {new Date(b.check_out_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                           {formatDateShort(b.check_out_date)}
                         </div>
                         <small style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{b.night_count} nights stay</small>
                       </td>
@@ -1292,7 +1401,7 @@ export default function Bookings() {
                           {(b.status === 'Completed' || b.status === 'Checked-out') && (
                             <button onClick={() => handleRevertToCheckIn(b)} className="btn-icon" title="Revert to Check-in" style={{ color: '#6366f1' }}><RotateCcw size={16} /></button>
                           )}
-                          <button onClick={() => navigate(`/bookings/edit/${b.id}?edit=true`)} className="btn-icon"><Edit2 size={16} /></button>
+                          <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon"><Edit2 size={16} /></button>
                           {(b.status === 'Pending' || b.status === 'Confirmed') && (
                             <button onClick={() => deleteBooking(b.id)} className="btn-icon" style={{ color: 'var(--danger)' }}><Trash2 size={16} /></button>
                           )}
@@ -1339,7 +1448,15 @@ export default function Bookings() {
                 type="number" 
                 className="form-input" 
                 value={settlementData.discount} 
-                onChange={e => setSettlementData({ ...settlementData, discount: e.target.value === '' ? '' : Number(e.target.value) })} 
+                onChange={e => {
+                  const newDiscount = e.target.value === '' ? '' : Number(e.target.value);
+                  const currentBalance = settlingBooking.balance_amount || 0;
+                  setSettlementData({ 
+                    ...settlementData, 
+                    discount: newDiscount,
+                    amountPaid: Math.max(0, currentBalance - (newDiscount || 0))
+                  });
+                }} 
               />
             </div>
 
@@ -1383,60 +1500,96 @@ export default function Bookings() {
       {/* Booking Details Modal */}
       {selectedDetailedBooking && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedDetailedBooking(null)}>
-          <div className="modal-content" style={{ maxWidth: '650px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
-              <div>
-                <small style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.8rem' }}>{selectedDetailedBooking.reference_number}</small>
-                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Booking Details</h2>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button 
-                  onClick={() => {
-                    setSelectedDetailedBooking(null);
-                    navigate(`/bookings/edit/${selectedDetailedBooking.id}?edit=true`);
-                  }} 
-                  className="btn-edit-toggle mode-edit" 
-                  style={{ height: '36px', padding: '0 1rem', fontSize: '0.85rem', borderRadius: '6px' }}
-                >
-                  <Edit2 size={16} /> Edit Booking
-                </button>
-                <button 
-                  className="btn-icon" 
-                  title="Share Invoice"
-                  onClick={handleShareInvoice}
-                  disabled={isSharingInvoice}
-                  style={{ background: '#3b82f6', color: 'white', padding: '0.4rem', borderRadius: '4px', opacity: isSharingInvoice ? 0.7 : 1 }}
-                >
-                  <Share2 size={20} />
-                </button>
-                {!Capacitor.isNativePlatform() && (
-                  <button 
-                    className="btn-icon" 
-                    title="Print Receipt"
-                    onClick={() => setTimeout(() => window.print(), 100)}
-                    style={{ background: 'var(--primary)', color: 'white', padding: '0.4rem', borderRadius: '4px' }}
-                  >
-                    <Printer size={20} />
-                  </button>
-                )}
-                <button className="btn-icon" onClick={() => setSelectedDetailedBooking(null)}><X size={20} /></button>
-              </div>
-            </div>
+          <div className="modal-content" style={{ position: 'relative', maxWidth: '650px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+              <button 
+                className="btn-icon" 
+                onClick={() => setSelectedDetailedBooking(null)}
+                style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: 'var(--text-muted)' }}
+              >
+                <X size={24} />
+              </button>
+                          <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem', paddingRight: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '8px' }}>
+                  <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, lineHeight: 1.2 }}>Booking Details</h2>
+                  
+                  {/* Action Bar */}
+                  <div style={{ 
+                    display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap',
+                    background: 'var(--bg-color)', padding: '0.4rem', borderRadius: '8px', border: '1px solid var(--border)' 
+                  }}>
+                    {selectedDetailedBooking.ota_payment_status === 'Pending OTA Settlement' && (
+                      <button 
+                        onClick={() => handleMarkOTASettled(selectedDetailedBooking)} 
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '30px', padding: '0 0.5rem', fontSize: '0.75rem', borderRadius: '4px', background: '#fff', color: '#d97706', border: '1px solid #f59e0b', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        <CheckCircle2 size={12} /> Settle OTA
+                      </button>
+                    )}
+                    {selectedDetailedBooking.status !== 'Completed' && selectedDetailedBooking.status !== 'Checked-out' && selectedDetailedBooking.status !== 'Cancelled' && (
+                      <button 
+                        onClick={() => {
+                          setSelectedDetailedBooking(null);
+                          navigate(`/bookings/edit/${selectedDetailedBooking.id}?focus=checkout`);
+                        }} 
+                        style={{ height: '30px', padding: '0 0.6rem', fontSize: '0.75rem', borderRadius: '4px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                      >
+                        <CalendarCheck size={12} /> Extend
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => {
+                        setSelectedDetailedBooking(null);
+                        navigate(`/bookings/edit/${selectedDetailedBooking.id}`);
+                      }} 
+                      style={{ height: '30px', padding: '0 0.6rem', fontSize: '0.75rem', borderRadius: '4px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}
+                    >
+                      <Edit2 size={12} /> Edit Booking
+                    </button>
+                    <button 
+                      title="Share Invoice"
+                      onClick={handleShareInvoice}
+                      disabled={isSharingInvoice}
+                      style={{ background: '#3b82f6', color: 'white', padding: '0 0.6rem', height: '30px', borderRadius: '4px', border: 'none', opacity: isSharingInvoice ? 0.7 : 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Share2 size={14} />
+                    </button>
+                    {!Capacitor.isNativePlatform() && (
+                      <button 
+                        title="Print Receipt"
+                        onClick={() => setTimeout(() => window.print(), 100)}
+                        style={{ background: 'var(--primary)', color: 'white', padding: '0 0.6rem', height: '30px', borderRadius: '4px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Printer size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <small style={{ color: 'var(--primary)', fontWeight: 800, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{selectedDetailedBooking.reference_number}</small>
+                  {selectedDetailedBooking.ota_payment_status === 'Pending OTA Settlement' && (
+                    <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', borderRadius: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>OTA Pending</span>
+                  )}
+                  {selectedDetailedBooking.ota_payment_status === 'Settled' && (
+                    <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', background: '#d1fae5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>OTA Settled</span>
+                  )}
+                </div>
+              </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               {/* Guest Details */}
               <div>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.25rem', color: 'var(--primary)' }}>Guest Information</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.25rem', color: 'var(--primary)' }}>Guest Information</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Guest Name</small>
-                    <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{selectedDetailedBooking.guest_name}</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{selectedDetailedBooking.guest_name}</span>
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Mobile Number</small>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.1rem' }}>
                       <Phone size={14} style={{ color: 'var(--text-muted)' }} />
-                      <span style={{ fontWeight: 600 }}>{selectedDetailedBooking.phone_number}</span>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedDetailedBooking.phone_number}</span>
                       <button 
                         onClick={() => handleCopyToClipboard(selectedDetailedBooking.phone_number, 'phone')} 
                         className="btn-icon" 
@@ -1452,7 +1605,7 @@ export default function Bookings() {
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Email ID</small>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.1rem' }}>
                       <Mail size={14} style={{ color: 'var(--text-muted)' }} />
-                      <span style={{ fontWeight: 600 }}>{selectedDetailedBooking.guest_email || 'No email provided'}</span>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedDetailedBooking.guest_email || 'No email provided'}</span>
                       {selectedDetailedBooking.guest_email && (
                         <>
                           <button 
@@ -1470,17 +1623,17 @@ export default function Bookings() {
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>ID Proof</small>
-                    <span style={{ fontWeight: 600 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
                       {selectedDetailedBooking.id_proof_type || 'Aadhar'}: {selectedDetailedBooking.id_proof_number || 'Not provided'}
                     </span>
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Vehicle Number</small>
-                    <span style={{ fontWeight: 600 }}>{selectedDetailedBooking.vehicle_number || 'None'}</span>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedDetailedBooking.vehicle_number || 'None'}</span>
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Booking Source</small>
-                    <span style={{ fontWeight: 600 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
                       {(() => {
                         const { isAgent, name, phone } = parseAgentSource(selectedDetailedBooking.booking_source);
                         if (isAgent) {
@@ -1531,11 +1684,11 @@ export default function Bookings() {
 
               {/* Stay Details */}
               <div>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.25rem', color: 'var(--primary)' }}>Stay Information</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.25rem', color: 'var(--primary)' }}>Stay Information</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Cottage / Property</small>
-                    <span style={{ fontWeight: 600 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
                       {cottages.find(x => x.id === selectedDetailedBooking.cottage_id)?.name || 'Unknown'}
                     </span>
                   </div>
@@ -1547,21 +1700,21 @@ export default function Bookings() {
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Stay Dates</small>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.95rem' }}>
-                      <Calendar size={14} style={{ color: 'var(--primary)' }} />
-                      {new Date(selectedDetailedBooking.check_in_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      <span style={{ color: 'var(--text-muted)' }}>→</span>
-                      {new Date(selectedDetailedBooking.check_out_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>({selectedDetailedBooking.night_count} nights)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                        <Calendar size={12} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                        <span>{selectedDetailedBooking.check_in_date ? new Date(selectedDetailedBooking.check_in_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : 'N/A'}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>→</span>
+                        <span>{selectedDetailedBooking.check_out_date ? new Date(selectedDetailedBooking.check_out_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : 'N/A'}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({selectedDetailedBooking.night_count}N)</span>
+                      </div>
                     </div>
-                  </div>
-                  <div>
+                    <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Occupants</small>
-                    <span style={{ fontWeight: 600 }}>{selectedDetailedBooking.adults_count || 1} Adults, {selectedDetailedBooking.kids_count || 0} Kids</span>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedDetailedBooking.adults_count || 1} Adults, {selectedDetailedBooking.kids_count || 0} Kids</span>
                   </div>
                   <div>
                     <small style={{ color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 700 }}>Add-ons Details</small>
-                    <span style={{ fontWeight: 600 }}>{selectedDetailedBooking.addon_details || 'None selected'}</span>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedDetailedBooking.addon_details || 'None selected'}</span>
                   </div>
                 </div>
               </div>
@@ -1570,38 +1723,50 @@ export default function Bookings() {
             {/* Financial Summary */}
             <div style={{ background: 'var(--bg-color)', padding: '1.25rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', fontWeight: 700 }}>Financial Summary</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))', gap: '0.5rem', textAlign: 'center', marginBottom: '0.4rem' }}>
                 <div>
                   <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}>Base Cost</small>
-                  <span style={{ fontWeight: 600 }}>₹{(selectedDetailedBooking.base_amount || 0).toLocaleString()}</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{(selectedDetailedBooking.base_amount || 0).toLocaleString()}</span>
                 </div>
                 <div>
                   <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}>Add-ons Cost</small>
-                  <span style={{ fontWeight: 600 }}>₹{(selectedDetailedBooking.addons_cost || 0).toLocaleString()}</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{(selectedDetailedBooking.addons_cost || 0).toLocaleString()}</span>
                 </div>
                 <div>
                   <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}>Extra Guest</small>
-                  <span style={{ fontWeight: 600 }}>₹{(selectedDetailedBooking.extra_guest_charges || 0).toLocaleString()}</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{(selectedDetailedBooking.extra_guest_charges || 0).toLocaleString()}</span>
                 </div>
+                {Number(selectedDetailedBooking.discount_amount) > 0 && (
+                  <div>
+                    <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}>Discount</small>
+                    <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem' }}>-₹{Number(selectedDetailedBooking.discount_amount).toLocaleString()}</span>
+                  </div>
+                )}
+                {Number(selectedDetailedBooking.gst_amount) > 0 && (
+                  <div>
+                    <small style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.65rem', textTransform: 'uppercase' }}>GST ({selectedDetailedBooking.gst_rate}%)</small>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{Number(selectedDetailedBooking.gst_amount).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center', paddingTop: '0.75rem', borderTop: '1px dashed var(--border)', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Total Value:</span>
-                  <span style={{ color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount || 0).toLocaleString()}</span>
+                  <span style={{ color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount || 0).toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Paid:</span>
-                  <span style={{ color: 'var(--success)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount - selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
+                  <span style={{ color: 'var(--success)', fontSize: '1.1rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.total_amount - selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Balance:</span>
-                  <span style={{ color: selectedDetailedBooking.balance_amount > 0 ? 'var(--warning)' : 'var(--success)', fontSize: '1.25rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
+                  <span style={{ color: selectedDetailedBooking.balance_amount > 0 ? 'var(--warning)' : 'var(--success)', fontSize: '1.1rem', fontWeight: 900 }}>₹{(selectedDetailedBooking.balance_amount || 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.4rem', flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
               {!Capacitor.isNativePlatform() && (
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button 
@@ -1618,7 +1783,7 @@ export default function Bookings() {
                       });
                     }} 
                     className="btn btn-outline" 
-                    style={{ borderColor: '#22c55e', color: '#15803d', display: 'flex', alignItems: 'center', gap: '0.4rem', height: '40px', padding: '0 0.8rem', fontSize: '0.85rem' }}
+                    style={{ borderColor: '#22c55e', color: '#15803d', display: 'flex', alignItems: 'center', gap: '0.2rem', height: '32px', padding: '0 0.5rem', fontSize: '0.75rem' }}
                   >
                     <MessageSquare size={16} /> WhatsApp Confirm
                   </button>
@@ -1635,7 +1800,7 @@ export default function Bookings() {
                       });
                     }} 
                     className="btn btn-outline" 
-                    style={{ borderColor: '#3b82f6', color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '0.4rem', height: '40px', padding: '0 0.8rem', fontSize: '0.85rem' }}
+                    style={{ borderColor: '#3b82f6', color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '0.2rem', height: '32px', padding: '0 0.5rem', fontSize: '0.75rem' }}
                   >
                     <MessageSquare size={16} /> WhatsApp Receipt
                   </button>
@@ -1651,7 +1816,7 @@ export default function Bookings() {
                       });
                     }} 
                     className="btn btn-outline" 
-                    style={{ borderColor: '#f59e0b', color: '#b45309', display: 'flex', alignItems: 'center', gap: '0.4rem', height: '40px', padding: '0 0.8rem', fontSize: '0.85rem' }}
+                    style={{ borderColor: '#f59e0b', color: '#b45309', display: 'flex', alignItems: 'center', gap: '0.2rem', height: '32px', padding: '0 0.5rem', fontSize: '0.75rem' }}
                   >
                     <MessageSquare size={16} /> WhatsApp Reminder
                   </button>
@@ -1667,7 +1832,7 @@ export default function Bookings() {
                       });
                     }} 
                     className="btn btn-outline" 
-                    style={{ borderColor: '#8b5cf6', color: '#6d28d9', display: 'flex', alignItems: 'center', gap: '0.4rem', height: '40px', padding: '0 0.8rem', fontSize: '0.85rem' }}
+                    style={{ borderColor: '#8b5cf6', color: '#6d28d9', display: 'flex', alignItems: 'center', gap: '0.2rem', height: '32px', padding: '0 0.5rem', fontSize: '0.75rem' }}
                   >
                     <MessageSquare size={16} /> WhatsApp Review
                   </button>
@@ -1683,7 +1848,7 @@ export default function Bookings() {
                       });
                     }} 
                     className="btn btn-outline" 
-                    style={{ borderColor: '#ef4444', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '0.4rem', height: '40px', padding: '0 0.8rem', fontSize: '0.85rem' }}
+                    style={{ borderColor: '#ef4444', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '0.2rem', height: '32px', padding: '0 0.5rem', fontSize: '0.75rem' }}
                   >
                     <MessageSquare size={16} /> WhatsApp Payment Reminder
                   </button>
@@ -1708,207 +1873,219 @@ export default function Bookings() {
 
       {/* WhatsApp Modal */}
       {whatsappGenerator.open && selectedDetailedBooking && createPortal(
-        <div className="modal-overlay" style={{ zIndex: 2600 }} onClick={() => setWhatsappGenerator({ ...whatsappGenerator, open: false })}>
-          <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <MessageSquare color="#22c55e" size={20} /> WhatsApp Generator
-              </h2>
-              <button className="btn-icon" onClick={() => setWhatsappGenerator({ ...whatsappGenerator, open: false })}><X size={20} /></button>
-            </div>
-
-            {whatsappGenerator.templateType === 'receipt' && (
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontWeight: 600 }}>Payment Amount Received (₹)</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  style={{ height: '40px' }}
-                  value={whatsappGenerator.paymentAmount} 
-                  onChange={(e) => {
-                    const amt = e.target.value;
-                    const text = compileWhatsAppTemplate(whatsappTemplates.receipt, selectedDetailedBooking, amt);
-                    setWhatsappGenerator({
-                      ...whatsappGenerator,
-                      paymentAmount: amt,
-                      messageText: text
-                    });
-                  }} 
-                />
+        <WhatsAppErrorBoundary>
+          <div className="modal-overlay" style={{ zIndex: 2600 }} onClick={() => setWhatsappGenerator({ ...whatsappGenerator, open: false })}>
+            <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <MessageSquare color="#22c55e" size={20} /> WhatsApp Generator
+                </h2>
+                <button className="btn-icon" onClick={() => setWhatsappGenerator({ ...whatsappGenerator, open: false })}><X size={20} /></button>
               </div>
-            )}
 
-            {whatsappGenerator.templateType === 'confirm' && (
-              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-                <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Payment Option</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                  {[
-                    { id: 'online', label: 'Online Payment' },
-                    { id: 'agent', label: 'Payable to Agent' },
-                    { id: 'property', label: 'Pay at Property' }
-                  ].map(opt => {
-                    const isSelected = whatsappGenerator.paymentOption === opt.id;
-                    return (
-                      <button
-                        type="button"
-                        key={opt.id}
-                        onClick={() => {
-                          const text = compileWhatsAppTemplate(whatsappTemplates.confirm, selectedDetailedBooking, '', opt.id);
-                          setWhatsappGenerator({
-                            ...whatsappGenerator,
-                            paymentOption: opt.id,
-                            messageText: text
-                          });
-                        }}
-                        style={{
-                          padding: '0.5rem',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          borderRadius: '8px',
-                          border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
-                          background: isSelected ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-secondary)',
-                          color: isSelected ? 'var(--primary)' : 'var(--text-muted)',
-                          cursor: 'pointer',
-                          textAlign: 'center',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label" style={{ fontWeight: 600 }}>Message Text Preview</label>
-              <textarea 
-                className="form-input" 
-                rows={9} 
-                style={{ fontFamily: 'inherit', resize: 'vertical', height: 'auto', padding: '0.75rem', fontSize: '0.9rem', marginBottom: '1rem' }}
-                value={whatsappGenerator.messageText} 
-                onChange={(e) => setWhatsappGenerator({ ...whatsappGenerator, messageText: e.target.value })}
-              />
-            </div>
-
-            {/* Contact Selector if additional guests exist */}
-            {(() => {
-              let guests = [];
-              try {
-                guests = typeof selectedDetailedBooking.additional_guests === 'string' 
-                  ? JSON.parse(selectedDetailedBooking.additional_guests) 
-                  : selectedDetailedBooking.additional_guests;
-              } catch (e) {
-                console.error(e);
-              }
-              
-              const contacts = [
-                { name: `${selectedDetailedBooking.guest_name} (Primary)`, phone: selectedDetailedBooking.phone_number, guestNameOnly: selectedDetailedBooking.guest_name },
-                ...(Array.isArray(guests) ? guests : []).map(g => ({ name: g.name, phone: g.phone || g.phone_number, guestNameOnly: g.name })).filter(c => c.phone)
-              ];
-
-              if (contacts.length <= 1) return null;
-
-              return (
+              {whatsappGenerator.templateType === 'receipt' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label" style={{ fontWeight: 600, color: 'var(--primary)' }}>Send to Contact</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {contacts.map((contact, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          let rawPhone = contact.phone || '';
-                          let cleanedPhone = rawPhone.replace(/\D/g, '');
-                          if (!rawPhone.trim().startsWith('+') && cleanedPhone.length === 10) {
-                            cleanedPhone = '91' + cleanedPhone;
-                          }
-                          
-                          let textToSend = whatsappGenerator.messageText;
-                          if (contact.guestNameOnly && contact.guestNameOnly !== selectedDetailedBooking.guest_name) {
-                            textToSend = textToSend.split(selectedDetailedBooking.guest_name).join(contact.guestNameOnly);
-                          }
-                          
-                          const encodedText = encodeURIComponent(textToSend);
-                          const waUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedText}`;
-                          window.open(waUrl, '_blank');
-                        }}
-                        className="btn btn-outline"
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.85rem', height: 'auto', textAlign: 'left', borderColor: '#22c55e', background: 'rgba(34, 197, 94, 0.03)' }}
-                      >
-                        <div>
-                          <strong style={{ color: 'var(--text-main)' }}>{contact.name}</strong>
-                          <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>({contact.phone})</span>
-                        </div>
-                        <span style={{ color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          Send <Send size={12} />
-                        </span>
-                      </button>
-                    ))}
+                  <label className="form-label" style={{ fontWeight: 600 }}>Payment Amount Received (₹)</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ height: '40px' }}
+                    value={whatsappGenerator.paymentAmount} 
+                    onChange={(e) => {
+                      const amt = e.target.value;
+                      const text = compileWhatsAppTemplate(whatsappTemplates.receipt, selectedDetailedBooking, amt);
+                      setWhatsappGenerator({
+                        ...whatsappGenerator,
+                        paymentAmount: amt,
+                        messageText: text
+                      });
+                    }} 
+                  />
+                </div>
+              )}
+
+              {whatsappGenerator.templateType === 'confirm' && (
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Payment Option</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    {[
+                      { id: 'online', label: 'Online Payment' },
+                      { id: 'agent', label: 'Payable to Agent' },
+                      { id: 'property', label: 'Pay at Property' }
+                    ].map(opt => {
+                      const isSelected = whatsappGenerator.paymentOption === opt.id;
+                      return (
+                        <button
+                          type="button"
+                          key={opt.id}
+                          onClick={() => {
+                            const text = compileWhatsAppTemplate(whatsappTemplates.confirm, selectedDetailedBooking, '', opt.id);
+                            setWhatsappGenerator({
+                              ...whatsappGenerator,
+                              paymentOption: opt.id,
+                              messageText: text
+                            });
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            borderRadius: '8px',
+                            border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
+                            background: isSelected ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-secondary)',
+                            color: isSelected ? 'var(--primary)' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })()}
+              )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(whatsappGenerator.messageText);
-                  alert("Message copied to clipboard!");
-                }} 
-                className="btn btn-outline"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', height: '40px' }}
-              >
-                <Copy size={16} /> Copy Message
-              </button>
-              
+              <div className="form-group">
+                <label className="form-label" style={{ fontWeight: 600 }}>Message Text Preview</label>
+                <textarea 
+                  className="form-input" 
+                  rows={9} 
+                  style={{ fontFamily: 'inherit', resize: 'vertical', height: 'auto', padding: '0.75rem', fontSize: '0.9rem', marginBottom: '1rem' }}
+                  value={whatsappGenerator.messageText} 
+                  onChange={(e) => setWhatsappGenerator({ ...whatsappGenerator, messageText: e.target.value })}
+                />
+              </div>
+
+              {/* Contact Selector if additional guests exist */}
               {(() => {
                 let guests = [];
                 try {
                   guests = typeof selectedDetailedBooking.additional_guests === 'string' 
                     ? JSON.parse(selectedDetailedBooking.additional_guests) 
                     : selectedDetailedBooking.additional_guests;
-                } catch (e) {}
-                const hasAdditional = Array.isArray(guests) && guests.some(g => g.phone || g.phone_number);
-                if (hasAdditional) return null; // Recipients are selected individually above
+                } catch (e) {
+                  console.error(e);
+                }
+                
+                const contacts = [
+                  { name: `${selectedDetailedBooking.guest_name} (Primary)`, phone: selectedDetailedBooking.phone_number, guestNameOnly: selectedDetailedBooking.guest_name },
+                  ...(Array.isArray(guests) ? guests : []).map(g => ({ name: g.name, phone: g.phone || g.phone_number, guestNameOnly: g.name })).filter(c => c.phone)
+                ];
+
+                if (contacts.length <= 1) return null;
 
                 return (
-                  <button 
-                    onClick={() => {
-                      const rawPhone = selectedDetailedBooking.phone_number || '';
-                      let cleanedPhone = rawPhone.replace(/\D/g, '');
-                      if (!rawPhone.trim().startsWith('+') && cleanedPhone.length === 10) {
-                        cleanedPhone = '91' + cleanedPhone;
-                      }
-                      const encodedText = encodeURIComponent(whatsappGenerator.messageText);
-                      const waUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedText}`;
-                      window.open(waUrl, '_blank');
-                    }} 
-                    className="btn btn-primary"
-                    style={{ background: '#22c55e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', height: '40px' }}
-                  >
-                    <Send size={16} /> Send via WhatsApp
-                  </button>
+                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="form-label" style={{ fontWeight: 600, color: 'var(--primary)' }}>Send to Contact</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {contacts.map((contact, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            let rawPhone = contact.phone || '';
+                            let cleanedPhone = rawPhone.replace(/\D/g, '');
+                            if (!rawPhone.trim().startsWith('+') && cleanedPhone.length === 10) {
+                              cleanedPhone = '91' + cleanedPhone;
+                            }
+                            
+                            let textToSend = whatsappGenerator.messageText;
+                            if (contact.guestNameOnly && contact.guestNameOnly !== selectedDetailedBooking.guest_name) {
+                              textToSend = textToSend.split(selectedDetailedBooking.guest_name).join(contact.guestNameOnly);
+                            }
+                            
+                            const encodedText = encodeURIComponent(textToSend);
+                            const waUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedText}`;
+                            window.open(waUrl, '_blank');
+                          }}
+                          className="btn btn-outline"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.85rem', height: 'auto', textAlign: 'left', borderColor: '#22c55e', background: 'rgba(34, 197, 94, 0.03)' }}
+                        >
+                          <div>
+                            <strong style={{ color: 'var(--text-main)' }}>{contact.name}</strong>
+                            <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>({contact.phone})</span>
+                          </div>
+                          <span style={{ color: '#22c55e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            Send <Send size={12} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 );
               })()}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(whatsappGenerator.messageText);
+                    alert("Message copied to clipboard!");
+                  }} 
+                  className="btn btn-outline"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', height: '40px' }}
+                >
+                  <Copy size={16} /> Copy Message
+                </button>
+                
+                {(() => {
+                  let guests = [];
+                  try {
+                    guests = typeof selectedDetailedBooking.additional_guests === 'string' 
+                      ? JSON.parse(selectedDetailedBooking.additional_guests) 
+                      : selectedDetailedBooking.additional_guests;
+                  } catch (e) {}
+                  
+                  const contacts = [
+                    { name: `${selectedDetailedBooking.guest_name} (Primary)`, phone: selectedDetailedBooking.phone_number },
+                    ...(Array.isArray(guests) ? guests : []).map(g => ({ name: g.name, phone: g.phone || g.phone_number })).filter(c => c.phone)
+                  ];
+                  
+                  if (contacts.length > 1) return null; // Let the selector above handle it
+                  
+                  return (
+                    <button 
+                      onClick={() => {
+                        let rawPhone = selectedDetailedBooking.phone_number || '';
+                        let cleanedPhone = rawPhone.replace(/\D/g, '');
+                        if (!rawPhone.trim().startsWith('+') && cleanedPhone.length === 10) {
+                          cleanedPhone = '91' + cleanedPhone;
+                        }
+                        
+                        const encodedText = encodeURIComponent(whatsappGenerator.messageText);
+                        const waUrl = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedText}`;
+                        window.open(waUrl, '_blank');
+                      }} 
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', height: '40px', background: '#22c55e', borderColor: '#22c55e' }}
+                    >
+                      <Send size={16} /> Send WhatsApp
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
           </div>
-        </div>
+        </WhatsAppErrorBoundary>,
+        document.body
       )}
 
       {/* Hidden print receipt rendered when a booking is selected */}
-      {selectedDetailedBooking && (
+      {selectedDetailedBooking && createPortal(
         <BookingReceipt 
           booking={selectedDetailedBooking} 
           resort={activeResort} 
           cottage={cottages.find(c => c.id === selectedDetailedBooking.cottage_id)}
-        />
+        />,
+        document.body
       )}
     </div>
   );
 }
 function formatDateShort(dateStr) {
+  if (!dateStr) return 'N/A';
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'Invalid Date';
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
  

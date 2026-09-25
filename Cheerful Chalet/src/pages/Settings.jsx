@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../lib/store';
 import { supabase } from '../lib/supabase';
-import { AlertTriangle, User, Palette, ShieldAlert, Mail, MessageCircle, Settings as SettingsIcon, Save, CheckCircle2, XCircle, Loader2, Database, Trash2, FileText, Fingerprint, Sun, Moon, Monitor, X } from 'lucide-react';
+import { AlertTriangle, User, Palette, ShieldAlert, Mail, MessageCircle, Settings as SettingsIcon, Save, CheckCircle2, XCircle, Loader2, Database, Trash2, FileText, Fingerprint, Sun, Moon, Monitor, X, Tag } from 'lucide-react';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';
@@ -72,9 +72,133 @@ Please clear the dues at your earliest convenience to ensure a smooth check-in.
 
 📞 Contact: {resort_phone}`;
 
+// Add-on & Pricing Settings Component
+const PricingSettings = ({ activeResortId, resorts }) => {
+  const [globalPricing, setGlobalPricing] = useState({ breakfast: '', 'Fire camp': '', 'BBQ': '', 'Food': '' });
+  const [cottages, setCottages] = useState([]);
+  const [selectedCottage, setSelectedCottage] = useState('global');
+  const [propertyPricing, setPropertyPricing] = useState({ breakfast: '', 'Fire camp': '', 'BBQ': '', 'Food': '' });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ text: '', type: '' });
+
+  useEffect(() => {
+    fetchPricing();
+  }, [activeResortId, selectedCottage]);
+
+  const fetchPricing = async () => {
+    if (!activeResortId) return;
+    
+    // Fetch global pricing
+    if (selectedCottage === 'global') {
+      const { data, error } = await supabase.from('resorts').select('addon_pricing').eq('id', activeResortId).single();
+      if (!error && data) {
+        setGlobalPricing(data.addon_pricing || { breakfast: '', 'Fire camp': '', 'BBQ': '', 'Food': '' });
+      }
+    } else {
+      // Fetch property pricing
+      const { data, error } = await supabase.from('cottages').select('addon_pricing').eq('id', selectedCottage).single();
+      if (!error && data) {
+        setPropertyPricing(data.addon_pricing || { breakfast: '', 'Fire camp': '', 'BBQ': '', 'Food': '' });
+      }
+    }
+
+    // Load cottages list once
+    if (cottages.length === 0) {
+      const { data } = await supabase.from('cottages').select('id, name').eq('resort_id', activeResortId);
+      if (data) setCottages(data);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg({ text: '', type: '' });
+    
+    try {
+      if (selectedCottage === 'global') {
+        const { error } = await supabase.from('resorts').update({ addon_pricing: globalPricing }).eq('id', activeResortId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('cottages').update({ addon_pricing: propertyPricing }).eq('id', selectedCottage);
+        if (error) throw error;
+      }
+      setMsg({ text: 'Pricing saved successfully!', type: 'success' });
+      setTimeout(() => setMsg({ text: '', type: '' }), 3000);
+    } catch (e) {
+      setMsg({ text: e.message, type: 'error' });
+    }
+    
+    setSaving(false);
+  };
+
+  const currentPricing = selectedCottage === 'global' ? globalPricing : propertyPricing;
+  const setPricing = selectedCottage === 'global' ? setGlobalPricing : setPropertyPricing;
+
+  const handlePriceChange = (key, val) => {
+    setPricing({ ...currentPricing, [key]: val === '' ? '' : Number(val) });
+  };
+
+  return (
+    <div className="settings-card">
+      <div className="card-header">
+        <h3 className="card-title"><Tag size={20} /> Add-ons & Pricing Configuration</h3>
+        <p className="card-description">Set global default prices for add-ons, or override them for specific properties.</p>
+      </div>
+      <div className="card-body">
+        
+        <div className="form-group" style={{ marginBottom: '2rem' }}>
+          <label className="premium-label">Configuration Level</label>
+          <select className="premium-select" value={selectedCottage} onChange={(e) => setSelectedCottage(e.target.value)}>
+            <option value="global">🌍 Global Default (All Properties)</option>
+            {cottages.map(c => (
+              <option key={c.id} value={c.id}>🏠 Property: {c.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          {['breakfast', 'Fire camp', 'BBQ', 'Food'].map(addon => (
+            <div key={addon} className="form-group">
+              <label className="premium-label" style={{ textTransform: 'capitalize' }}>{addon} Price (₹)</label>
+              <input 
+                type="number" 
+                className="premium-input" 
+                placeholder="0" 
+                value={currentPricing[addon] ?? ''} 
+                onChange={(e) => handlePriceChange(addon, e.target.value)} 
+              />
+            </div>
+          ))}
+        </div>
+
+        {msg.text && (
+          <div style={{ padding: '0.75rem', marginBottom: '1.5rem', borderRadius: '8px', background: msg.type === 'success' ? '#d1fae5' : '#fee2e2', color: msg.type === 'success' ? '#065f46' : '#991b1b', fontSize: '0.9rem' }}>
+            {msg.text}
+          </div>
+        )}
+
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {saving ? <Loader2 size={16} className="spin" /> : <Save size={16} />} 
+          Save {selectedCottage === 'global' ? 'Global' : 'Property'} Pricing
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function Settings() {
   const { profile, setProfile, theme, updateSettings, session, activeResortId, resorts } = useSettingsStore();
   const [userName, setUserName] = useState(profile?.full_name || '');
+  const [billingDetails, setBillingDetails] = useState({
+    companyName: profile?.global_settings?.tenant_billing?.companyName || '',
+    gstin: profile?.global_settings?.tenant_billing?.gstin || '',
+    address: profile?.global_settings?.tenant_billing?.address || ''
+  });
+  const [tenantGst, setTenantGst] = useState({
+    enabled: profile?.global_settings?.tenant_gst?.enabled || false,
+    slabThreshold: profile?.global_settings?.tenant_gst?.slabThreshold ?? 7500,
+    lowerRate: profile?.global_settings?.tenant_gst?.lowerRate ?? 5,
+    higherRate: profile?.global_settings?.tenant_gst?.higherRate ?? 18
+  });
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
@@ -362,11 +486,27 @@ export default function Settings() {
         if (data.whatsapp_custom_tags) {
           try {
             const tags = typeof data.whatsapp_custom_tags === 'string' ? JSON.parse(data.whatsapp_custom_tags) : data.whatsapp_custom_tags;
-            setCustomTags(tags.filter(t => t.key !== '__template_payment_reminder'));
+            setCustomTags(tags.filter(t => t.key !== 'wifi_password' && !t.key.startsWith('__template_')));
             
             const wifiTag = tags.find(t => t.key === 'wifi_password');
             if (wifiTag) setWifiPassword(wifiTag.value);
 
+            const storedConfirm = tags.find(t => t.key === '__template_confirm');
+            if (storedConfirm && !data.whatsapp_confirm_msg_template) {
+               setCommSettings(prev => ({ ...prev, whatsapp_confirm_msg_template: storedConfirm.value }));
+            }
+            const storedReceipt = tags.find(t => t.key === '__template_receipt');
+            if (storedReceipt && !data.whatsapp_receipt_msg_template) {
+               setCommSettings(prev => ({ ...prev, whatsapp_receipt_msg_template: storedReceipt.value }));
+            }
+            const storedReminder = tags.find(t => t.key === '__template_reminder');
+            if (storedReminder && !data.whatsapp_reminder_msg_template) {
+               setCommSettings(prev => ({ ...prev, whatsapp_reminder_msg_template: storedReminder.value }));
+            }
+            const storedReview = tags.find(t => t.key === '__template_review');
+            if (storedReview && !data.whatsapp_review_msg_template) {
+               setCommSettings(prev => ({ ...prev, whatsapp_review_msg_template: storedReview.value }));
+            }
             const storedPaymentReminder = tags.find(t => t.key === '__template_payment_reminder');
             if (storedPaymentReminder && !data.whatsapp_payment_reminder_msg_template) {
                setCommSettings(prev => ({ ...prev, whatsapp_payment_reminder_msg_template: storedPaymentReminder.value }));
@@ -487,17 +627,27 @@ export default function Settings() {
     e.preventDefault();
     setSavingGeneral(true);
     try {
-      // Update Profile (User Name)
+      // Update Profile (User Name and Billing Details)
+      const currentGlobalSettings = profile?.global_settings || {};
+      const newGlobalSettings = {
+        ...currentGlobalSettings,
+        tenant_billing: billingDetails,
+        tenant_gst: tenantGst
+      };
+
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .update({ full_name: userName })
+        .update({ 
+          full_name: userName,
+          global_settings: newGlobalSettings
+        })
         .eq('id', profile.id)
         .select();
       if (profileError) throw profileError;
       if (profileData && profileData.length > 0) {
         setProfile(profileData[0]);
       }
-      alert("Profile updated successfully!");
+      alert("Profile and Billing Details updated successfully!");
     } catch (err) {
       alert("Error updating profile: " + err.message);
     } finally {
@@ -616,6 +766,29 @@ export default function Settings() {
             <SettingsIcon size={18} /> General Settings
           </button>
 
+          <button 
+            type="button"
+            onClick={() => setActiveTab('pricing')}
+            style={{ 
+              padding: '0.75rem 1rem', 
+              background: activeTab === 'pricing' ? 'var(--primary)' : 'transparent', 
+              color: activeTab === 'pricing' ? 'white' : 'var(--text-muted)', 
+              borderRadius: '8px', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.75rem',
+              border: 'none',
+              textAlign: 'left',
+              width: '100%',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              transition: 'all 0.2s'
+            }}
+          >
+            <Tag size={18} /> Add-ons & Pricing
+          </button>
+
           {(profile?.role === 'super_admin' || (profile?.role === 'tenant_admin' && globalTemplatesEnabled && profile?.feature_comm_enabled !== false)) && (
             <button 
               type="button"
@@ -728,6 +901,101 @@ export default function Settings() {
                       style={{ opacity: 0.6, cursor: 'not-allowed' }} 
                     />
                   </div>
+
+                  <hr style={{ margin: '2rem 0', borderColor: 'var(--border)', borderStyle: 'solid', borderWidth: '1px 0 0 0' }} />
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Guest Billing & Taxation (GST India)</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Enable and configure GST settings for generating tax-compliant invoices for your guests.</p>
+                  
+                  <div className="form-group" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label" style={{ marginBottom: '0.25rem' }}>Enable GST Billing</label>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Automatically apply GST to bookings based on the room tariff slab.</p>
+                    </div>
+                    <label className="switch">
+                      <input 
+                        type="checkbox" 
+                        checked={tenantGst.enabled}
+                        onChange={e => setTenantGst({...tenantGst, enabled: e.target.checked})}
+                      />
+                      <span className="slider round"></span>
+                    </label>
+                  </div>
+
+                  {tenantGst.enabled && (
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1.25rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: 'var(--text-main)' }}>GST Slab Configuration</h4>
+                      
+                      <div className="form-group">
+                        <label className="form-label">Tariff Slab Threshold (₹)</label>
+                        <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>What is the maximum Per-Room-Per-Night price before the higher tax bracket applies?</p>
+                        <input 
+                          type="number" 
+                          className="form-input" 
+                          value={tenantGst.slabThreshold} 
+                          onChange={e => setTenantGst({...tenantGst, slabThreshold: e.target.value})}
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label className="form-label">Lower GST Rate (%)</label>
+                          <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>For rooms priced <strong>at or below</strong> ₹{tenantGst.slabThreshold || 0}</p>
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            value={tenantGst.lowerRate} 
+                            onChange={e => setTenantGst({...tenantGst, lowerRate: e.target.value})}
+                          />
+                        </div>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label className="form-label">Higher GST Rate (%)</label>
+                          <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>For rooms priced <strong>above</strong> ₹{tenantGst.slabThreshold || 0}</p>
+                          <input 
+                            type="number" 
+                            className="form-input" 
+                            value={tenantGst.higherRate} 
+                            onChange={e => setTenantGst({...tenantGst, higherRate: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <hr style={{ margin: '2rem 0', borderColor: 'var(--border)', borderStyle: 'solid', borderWidth: '1px 0 0 0' }} />
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--text-main)' }}>B2B Billing Details (Optional)</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Fill these out if you require GST invoices for your StayPilot software subscription.</p>
+                  
+                  <div className="form-group">
+                    <label className="form-label">Company/Legal Name</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={billingDetails.companyName} 
+                      onChange={e => setBillingDetails({...billingDetails, companyName: e.target.value})} 
+                      placeholder="e.g. Grand Resort Pvt Ltd" 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">GSTIN</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={billingDetails.gstin} 
+                      onChange={e => setBillingDetails({...billingDetails, gstin: e.target.value})} 
+                      placeholder="e.g. 29GGGGG1314R9Z6" 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Billing Address</label>
+                    <textarea 
+                      className="form-input" 
+                      value={billingDetails.address} 
+                      onChange={e => setBillingDetails({...billingDetails, address: e.target.value})} 
+                      placeholder="Registered business address"
+                      rows={3}
+                    />
+                  </div>
+
                   <button type="submit" className="btn btn-primary" disabled={savingGeneral}>
                     {savingGeneral ? 'Saving...' : 'Update Profile'}
                   </button>
@@ -977,6 +1245,10 @@ export default function Settings() {
           )}
 
           {/* TEMPLATES MANAGEMENT TAB */}
+          {activeTab === 'pricing' && (
+            <PricingSettings activeResortId={activeResortId} resorts={resorts} />
+          )}
+
           {activeTab === 'templates' && (profile?.role === 'tenant_admin' || profile?.role === 'super_admin') && (
             <div className="card">
               <h2 style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

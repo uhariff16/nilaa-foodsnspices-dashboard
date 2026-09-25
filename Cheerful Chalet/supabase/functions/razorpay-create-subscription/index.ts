@@ -70,17 +70,26 @@ serve(async (req) => {
     const today = new Date()
     const isPromoActive = planData.offerActive && planData.offerStartDate && planData.offerEndDate && 
                           new Date(planData.offerStartDate) <= today && new Date(planData.offerEndDate) >= today
-    const effectivePrice = isPromoActive ? planData.offerPrice : planData.price
+    let effectivePrice = isPromoActive ? planData.offerPrice : planData.price
+    
+    // Apply GST if enabled
+    const taxSettings = settings.tax_settings || {}
+    if (taxSettings.enabled && taxSettings.rate > 0) {
+      const gstAmount = effectivePrice * (taxSettings.rate / 100)
+      effectivePrice = effectivePrice + gstAmount
+    }
+    
     const priceInPaise = Math.round(effectivePrice * 100)
 
     // 4. Determine Razorpay Plan ID
     let rzpPlanId = isLive ? planData.razorpay_live_plan_id : planData.razorpay_test_plan_id
+    const cachedPrice = isLive ? planData.razorpay_live_price : planData.razorpay_test_price
     let needToSaveConfig = false
 
     const rzpAuthHeader = `Basic ${btoa(`${keyId}:${keySecret}`)}`
 
-    // If no plan ID exists, create one
-    if (!rzpPlanId) {
+    // If no plan ID exists or the price changed, create a new one
+    if (!rzpPlanId || cachedPrice !== priceInPaise) {
       // Create Razorpay Plan
       const planRes = await fetch('https://api.razorpay.com/v1/plans', {
         method: 'POST',
@@ -95,8 +104,9 @@ serve(async (req) => {
             name: `Stay Pilot ${planData.name || plan_type} (${isPromoActive ? 'Promo' : 'Base'})`,
             amount: priceInPaise,
             currency: 'INR',
-            description: `SaaS Subscription for ${plan_type}`
-          }
+            description: 'Monthly SaaS Subscription'
+          },
+          notes: { plan_type }
         })
       })
 
@@ -111,8 +121,10 @@ serve(async (req) => {
       // Update global settings
       if (isLive) {
         planData.razorpay_live_plan_id = rzpPlanId
+        planData.razorpay_live_price = priceInPaise
       } else {
         planData.razorpay_test_plan_id = rzpPlanId
+        planData.razorpay_test_price = priceInPaise
       }
       needToSaveConfig = true
     }
@@ -123,18 +135,26 @@ serve(async (req) => {
     }
 
     // 5. Create Razorpay Customer
-    const { data: profile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', user.id).single()
+    const { data: profile } = await supabaseAdmin.from('profiles').select('full_name, global_settings').eq('id', user.id).single()
+    const tenantBilling = profile?.global_settings?.tenant_billing || {}
+    
+    const customerPayload = {
+      name: tenantBilling.companyName || profile?.full_name || 'Stay Pilot Tenant',
+      email: user.email,
+      notes: { tenant_id: user.id }
+    }
+    
+    if (tenantBilling.gstin) {
+      customerPayload.gstin = tenantBilling.gstin
+    }
+
     const customerRes = await fetch('https://api.razorpay.com/v1/customers', {
       method: 'POST',
       headers: {
         'Authorization': rzpAuthHeader,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        name: profile?.full_name || 'Stay Pilot Tenant',
-        email: user.email,
-        notes: { tenant_id: user.id }
-      })
+      body: JSON.stringify(customerPayload)
     })
     
     let rzpCustomerId = null
@@ -153,7 +173,7 @@ serve(async (req) => {
       body: JSON.stringify({
         plan_id: rzpPlanId,
         customer_id: rzpCustomerId,
-        total_count: 480, // 40 years max allowed by Razorpay
+        total_count: 240, // 20 years max allowed to support UPI Autopay correctly
         customer_notify: 0,
         notes: {
           tenant_id: user.id,
@@ -168,6 +188,13 @@ serve(async (req) => {
     }
 
     const subData = await subRes.json()
+
+    // 6.5. Detach old payments to prevent foreign key violations on upsert
+    // Since we are replacing the subscription ID, we must sever the FK constraint on existing payments
+    await supabaseAdmin
+      .from('saas_payments')
+      .update({ razorpay_subscription_id: null })
+      .eq('tenant_id', user.id)
 
     // 7. Store in saas_subscriptions
     // Upsert to handle retries cleanly

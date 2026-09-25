@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { useSettingsStore } from '../lib/store';
-import { Users, Hotel, TrendingUp, DollarSign, Search, ShieldAlert, CheckCircle, XCircle, UserPlus, Trash2, Mail, Lock, Shield, MessageCircle, MessageSquare, Plus, ArrowUp, ArrowDown, LayoutDashboard, Save, Eye, RefreshCw, Settings, MoreHorizontal, Calendar, Briefcase, Phone, Download, Upload } from 'lucide-react';
+import { Users, Hotel, TrendingUp, DollarSign, Search, ShieldAlert, CheckCircle, XCircle, UserPlus, Trash2, Mail, Lock, Shield, MessageCircle, MessageSquare, Plus, ArrowUp, ArrowDown, LayoutDashboard, Save, Eye, RefreshCw, Settings, MoreHorizontal, Calendar, Briefcase, Phone, Download, Upload, AlertCircle, Send } from 'lucide-react';
+import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import WebsitePricingTab from '../components/WebsitePricingTab';
 import WebsiteManagerTab from '../components/WebsiteManagerTab';
@@ -89,6 +90,13 @@ export default function SuperAdmin() {
 
   const [pricingConfig, setPricingConfig] = useState(DEFAULT_PLANS);
   const [pricingTab, setPricingTab] = useState('plans'); // 'plans', 'website', 'razorpay', 'history'
+  const [taxSettings, setTaxSettings] = useState({
+    enabled: false,
+    rate: 18,
+    gstin: '',
+    companyName: '',
+    address: ''
+  });
   const [razorpayConfig, setRazorpayConfig] = useState({
     mode: 'test',
     testKeyId: '',
@@ -268,6 +276,9 @@ export default function SuperAdmin() {
   // Management modal states
   const [editingUser, setEditingUser] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [adminActiveTab, setAdminActiveTab] = useState(
     profile?.role === 'support_admin' ? 'support' : 
     profile?.role === 'billing_admin' ? 'overview' : 'overview'
@@ -372,6 +383,10 @@ export default function SuperAdmin() {
         setGlobalTemplatesEnabled(superAdminProfile.global_settings.templates_enabled !== false);
         setGlobalOnboardingWizardEnabled(superAdminProfile.global_settings.onboarding_wizard_enabled !== false);
         
+        if (superAdminProfile.global_settings.tax_settings) {
+          setTaxSettings(superAdminProfile.global_settings.tax_settings);
+        }
+        
         if (superAdminProfile.global_settings.razorpay_settings) {
           setRazorpayConfig(superAdminProfile.global_settings.razorpay_settings);
         }
@@ -403,6 +418,41 @@ export default function SuperAdmin() {
       console.error("SuperAdmin Fetch Error:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdminResetPassword = async () => {
+    if (!newAdminPassword || newAdminPassword.length < 6) return alert("Password must be at least 6 characters.");
+    setIsResettingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+        body: { targetUserId: editingUser.id, action: 'reset_password', payload: { newPassword: newAdminPassword } }
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error || 'Unknown error');
+      alert("Password reset successfully.");
+      setNewAdminPassword('');
+    } catch (err) {
+      alert("Failed to reset password: " + err.message);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleAdminToggleStatus = async () => {
+    setIsTogglingStatus(true);
+    const currentlyDisabled = editingUser.global_settings?.is_disabled === true;
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-user', {
+        body: { targetUserId: editingUser.id, action: 'toggle_status', payload: { isDisabled: !currentlyDisabled } }
+      });
+      if (error || data?.error) throw new Error(error?.message || data?.error || 'Unknown error');
+      alert(data.message || "Account status updated.");
+      setEditingUser({...editingUser, global_settings: { ...(editingUser.global_settings || {}), is_disabled: !currentlyDisabled } });
+      setTenants(tenants.map(t => t.id === editingUser.id ? {...t, global_settings: { ...(t.global_settings || {}), is_disabled: !currentlyDisabled } } : t));
+    } catch (err) {
+      alert("Failed to update status: " + err.message);
+    } finally {
+      setIsTogglingStatus(false);
     }
   };
 
@@ -626,6 +676,24 @@ export default function SuperAdmin() {
     }
   };
 
+  const handleSaveTaxSettings = async () => {
+    try {
+      setIsUpdating(true);
+      const masterAdmin = getMasterSuperAdmin();
+      const settings = masterAdmin.global_settings || {};
+      settings.tax_settings = taxSettings;
+      
+      const { error } = await supabase.from('profiles').update({ global_settings: settings }).eq('id', masterAdmin.id);
+      if (error) throw error;
+      
+      alert("Tax Settings Saved Successfully!");
+    } catch (err) {
+      alert("Failed to save Tax settings: " + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleSaveRazorpaySettings = async () => {
     try {
       setIsUpdating(true);
@@ -756,6 +824,7 @@ export default function SuperAdmin() {
         flexWrap: 'nowrap'
       }}>
         {[
+          { id: 'broadcast', label: 'Broadcast Alerts', icon: <AlertCircle size={16} />, roles: ['super_admin'] },
           { id: 'overview', label: 'Dashboard Overview', icon: <TrendingUp size={16} />, roles: ['super_admin', 'billing_admin'] },
           { id: 'accounts', label: `Tenants & Staff (${tenants.filter(t => ['tenant_admin', 'staff'].includes(t.role)).length})`, icon: <Users size={16} />, roles: ['super_admin'] },
           { id: 'platform_staff', label: `Platform Staff (${tenants.filter(t => ['super_admin', 'support_admin', 'billing_admin'].includes(t.role)).length})`, icon: <ShieldAlert size={16} />, roles: ['super_admin'] },
@@ -1605,6 +1674,69 @@ export default function SuperAdmin() {
       )}
 
       {/* TAB 4: PLATFORM CONFIGURATION */}
+      {adminActiveTab === 'broadcast' && (
+        <div style={{ animation: 'fadeIn 0.2s ease-out' }}>
+          <div style={{ background: '#fff', padding: '2rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F2C59', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Send size={24} color="var(--primary)" />
+              Send Push Notification Broadcast
+            </h3>
+            <p style={{ color: '#64748b', marginBottom: '2rem', lineHeight: 1.5 }}>
+              Use this tool to instantly send a native Push Notification to all users' mobile devices, or specifically target one Tenant Admin.
+            </p>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.target);
+              const title = fd.get('title');
+              const body = fd.get('body');
+              const target = fd.get('target');
+
+              const payload = {
+                title,
+                body,
+                created_by: profile.id,
+                ...(target !== 'all' ? { target_user_id: target } : {})
+              };
+
+              const promise = supabase.from('broadcast_messages').insert(payload);
+              toast.promise(promise, {
+                loading: 'Sending broadcast...',
+                success: 'Broadcast notification sent successfully!',
+                error: 'Failed to send broadcast.'
+              });
+              e.target.reset();
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '600px' }}>
+              
+              <div className="form-group">
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#334155' }}>Target Audience</label>
+                <select name="target" className="form-control" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                  <option value="all">All Users (Global Blast)</option>
+                  {tenants.filter(t => t.role === 'tenant_admin').map(t => (
+                    <option key={t.id} value={t.id}>Target Tenant: {t.resort_name || t.full_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#334155' }}>Notification Title</label>
+                <input required name="title" type="text" placeholder="e.g. Version 2.0 is Live!" className="form-control" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#334155' }}>Notification Message</label>
+                <textarea required name="body" rows="3" placeholder="Enter the message body..." className="form-control" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'vertical' }}></textarea>
+              </div>
+
+              <button type="submit" style={{ background: 'var(--primary)', color: 'white', padding: '1rem', borderRadius: '8px', fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
+                <Send size={20} />
+                Send Notification Now
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {adminActiveTab === 'settings' && (
         <div style={{ animation: 'fadeIn 0.2s ease-out' }}>
           {/* Global Feature Controls */}
@@ -1661,6 +1793,58 @@ export default function SuperAdmin() {
               </button>
             </div>
           </div>
+
+          {/* Tax Settings Controls */}
+          <div className="card" style={{ marginBottom: '2.5rem', background: 'white', border: '1px solid rgba(15, 44, 89, 0.08)', borderRadius: '16px', boxShadow: '0 10px 30px rgba(15, 44, 89, 0.02)', textAlign: 'left' }}>
+            <h3 style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0F2C59', fontWeight: 800, fontFamily: "'Outfit', sans-serif" }}>
+              <DollarSign size={20} /> Billing & Taxation (GST)
+            </h3>
+            <p style={{ color: '#64748B', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              Configure platform-wide GST settings for B2B invoicing on subscriptions.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', background: '#f8fafc', padding: '1rem 1.5rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <input 
+                  type="checkbox" 
+                  id="global_tax_enabled"
+                  checked={taxSettings.enabled}
+                  onChange={(e) => setTaxSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                />
+                <label htmlFor="global_tax_enabled" style={{ fontWeight: 'bold', color: '#1e293b', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  Enable GST on Subscriptions
+                </label>
+              </div>
+
+              {taxSettings.enabled && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">GST Rate (%)</label>
+                    <input type="number" className="form-input" value={taxSettings.rate} onChange={e => setTaxSettings({...taxSettings, rate: parseFloat(e.target.value) || 0})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Platform GSTIN</label>
+                    <input type="text" className="form-input" value={taxSettings.gstin} onChange={e => setTaxSettings({...taxSettings, gstin: e.target.value})} placeholder="e.g. 29GGGGG1314R9Z6" />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label className="form-label">Billing Company Name</label>
+                    <input type="text" className="form-input" value={taxSettings.companyName} onChange={e => setTaxSettings({...taxSettings, companyName: e.target.value})} placeholder="Your SaaS Company Name" />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label className="form-label">Billing Address</label>
+                    <textarea className="form-input" value={taxSettings.address} onChange={e => setTaxSettings({...taxSettings, address: e.target.value})} placeholder="Registered Address" rows={3}></textarea>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+              <button className="btn btn-primary" onClick={handleSaveTaxSettings} disabled={isUpdating} style={{ padding: '0.75rem 2rem', fontWeight: 700 }}>
+                {isUpdating ? 'Saving...' : 'Save Tax Settings'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1698,6 +1882,50 @@ export default function SuperAdmin() {
                   onChange={e => setEditingUser({...editingUser, email: e.target.value})}
                   placeholder="e.g. email@example.com"
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)' }}>
+                    <Lock size={16} /> Reset Password
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input 
+                      type="password" 
+                      className="form-input" 
+                      value={newAdminPassword} 
+                      onChange={e => setNewAdminPassword(e.target.value)}
+                      placeholder="Enter new password (min 6 chars)"
+                    />
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      onClick={handleAdminResetPassword} 
+                      disabled={isResettingPassword || newAdminPassword.length < 6}
+                    >
+                      {isResettingPassword ? 'Resetting...' : 'Reset'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldAlert size={16} /> Login Access
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '0.9rem', color: editingUser.global_settings?.is_disabled ? 'var(--danger)' : '#10b981', fontWeight: 600 }}>
+                      {editingUser.global_settings?.is_disabled ? 'Account is Disabled' : 'Account is Enabled'}
+                    </span>
+                    <button 
+                      type="button" 
+                      className="btn btn-outline" 
+                      onClick={handleAdminToggleStatus} 
+                      disabled={isTogglingStatus}
+                    >
+                      {isTogglingStatus ? 'Updating...' : (editingUser.global_settings?.is_disabled ? 'Enable Account' : 'Disable Account')}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>

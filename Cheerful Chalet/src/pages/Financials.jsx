@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Trash2, ArrowUpRight, ArrowDownRight, Edit2, Filter, CalendarCheck, Plus, X } from 'lucide-react';
+import { Trash2, ArrowUpRight, ArrowDownRight, Edit2, Filter, CalendarCheck, Plus, X, Search } from 'lucide-react';
 import { useSettingsStore } from '../lib/store';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ export default function Financials() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
+  const [searchQuery, setSearchQuery] = useState('');
   const [periodType, setPeriodType] = useState('full_year');
   const [range, setRange] = useState({
     start: `${new Date().getFullYear()}-01-01`,
@@ -32,17 +33,42 @@ export default function Financials() {
   });
 
   const filteredIncomes = React.useMemo(() => {
-    if (selectedCottageId === 'all') return incomes;
-    return incomes.filter(i => {
-      const cId = i.cottage_id || i.bookings?.cottage_id;
-      return cId === selectedCottageId;
-    });
-  }, [incomes, selectedCottageId]);
+    let result = incomes;
+    if (selectedCottageId !== 'all') {
+      result = result.filter(i => {
+        const cId = i.cottage_id || i.bookings?.cottage_id;
+        return cId === selectedCottageId;
+      });
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(i => 
+        i.source?.toLowerCase().includes(q) || 
+        i.notes?.toLowerCase().includes(q) || 
+        i.amount?.toString().includes(q) ||
+        i.bookings?.guest_name?.toLowerCase().includes(q) ||
+        i.bookings?.reference_number?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [incomes, selectedCottageId, searchQuery]);
 
   const filteredExpenses = React.useMemo(() => {
-    if (selectedCottageId === 'all') return expenses;
-    return expenses.filter(e => e.cottage_id === selectedCottageId);
-  }, [expenses, selectedCottageId]);
+    let result = expenses;
+    if (selectedCottageId !== 'all') {
+      result = result.filter(e => e.cottage_id === selectedCottageId);
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(e => 
+        e.category?.toLowerCase().includes(q) || 
+        e.custom_category?.toLowerCase().includes(q) || 
+        e.description?.toLowerCase().includes(q) || 
+        e.amount?.toString().includes(q)
+      );
+    }
+    return result;
+  }, [expenses, selectedCottageId, searchQuery]);
 
   const stats = React.useMemo(() => {
     const totalInc = filteredIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
@@ -265,7 +291,7 @@ export default function Financials() {
       {/* FILTER SECTION */}
       <div className="card" style={{ padding: '1rem 1.5rem', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: '250px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: '250px', flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}>
               <Filter size={18} color="var(--primary)"/> Period:
             </h3>
@@ -275,6 +301,17 @@ export default function Financials() {
               <option value="last_month">Last Month</option>
               <option value="custom">Custom Range</option>
             </select>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '220px' }}>
+              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px' }} />
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Search records..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ height: '36px', paddingLeft: '32px', fontSize: '0.85rem', width: '100%' }}
+              />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -402,7 +439,11 @@ export default function Financials() {
                              {(i.notes?.toLowerCase().includes('advance') || i.notes?.toLowerCase().includes('settlement') || i.notes?.toLowerCase().includes('adjustment')) && (
                                 <div style={{ marginTop: '0.4rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                                   {i.notes?.toLowerCase().includes('advance') && <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 700 }}>Advance</span>}
-                                  {i.notes?.toLowerCase().includes('settlement') && <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 700 }}>Settlement</span>}
+                                  {i.notes?.toLowerCase().includes('ota settlement') ? (
+                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 700 }}>OTA Settlement</span>
+                                  ) : i.notes?.toLowerCase().includes('settlement') ? (
+                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 700 }}>Settlement</span>
+                                  ) : null}
                                   {i.notes?.toLowerCase().includes('adjustment') && <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', fontWeight: 700 }}>Adjustment</span>}
                                 </div>
                              )}
@@ -464,11 +505,15 @@ export default function Financials() {
                                   Advance
                                 </span>
                               )}
-                              {i.notes?.toLowerCase().includes('settlement') && (
+                              {i.notes?.toLowerCase().includes('ota settlement') ? (
+                                <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', fontWeight: 700 }}>
+                                  OTA Settlement
+                                </span>
+                              ) : i.notes?.toLowerCase().includes('settlement') ? (
                                 <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', fontWeight: 700 }}>
                                   Settlement
                                 </span>
-                              )}
+                              ) : null}
                               {i.notes?.toLowerCase().includes('adjustment') && (
                                 <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', fontWeight: 700 }}>
                                   Adjustment

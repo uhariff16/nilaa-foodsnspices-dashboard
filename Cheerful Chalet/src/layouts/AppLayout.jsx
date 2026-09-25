@@ -6,12 +6,18 @@ import { Capacitor } from '@capacitor/core';
 
 import { supabase } from '../lib/supabase';
 import OnboardingWizard from '../components/OnboardingWizard';
+import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useRealtimeWebNotifications } from '../hooks/useRealtimeWebNotifications';
 
 export default function AppLayout() {
   const { resortName, logoUrl, profile, resorts, activeResortId, setActiveResortId, logout, onboardingWizardEnabled, isDataLoaded, globalPlans } = useSettingsStore();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Initialize notifications
+  usePushNotifications(navigate);
+  useRealtimeWebNotifications();
 
   const isManagementActive = ['/resorts', '/setup', '/staff'].includes(location.pathname);
   const [isManagementOpen, setIsManagementOpen] = React.useState(isManagementActive);
@@ -153,23 +159,24 @@ export default function AppLayout() {
 
   if (isStaff) {
     // Staff only see Bookings, Calendar, and Settings
-    if (hasFeature('booking')) navLinks.push({ to: '/bookings', label: 'Bookings', icon: <BookOpenCheck size={20} /> });
+    if (hasFeature('booking')) navLinks.push({ to: '/bookings', label: 'Bookings', icon: <BookOpenCheck size={20} />, tourClass: 'tour-bookings' });
     navLinks.push({ to: '/enquiries', label: 'Enquiries', icon: <ClipboardList size={20} /> });
-    if (hasFeature('booking') || hasFeature('calendar')) navLinks.push({ to: '/calendar', label: 'Calendar', icon: <CalendarDays size={20} /> });
+    if (hasFeature('booking') || hasFeature('calendar')) navLinks.push({ to: '/calendar', label: 'Calendar', icon: <CalendarDays size={20} />, tourClass: 'tour-calendar' });
   } else {
     // Tenants and Super Admins
-    if (hasFeature('dashboard') || isSuper) navLinks.push({ to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> });
-    if (hasFeature('booking') || isSuper) {
-      navLinks.push({ to: '/bookings', label: 'Bookings', icon: <BookOpenCheck size={20} /> });
-    navLinks.push({ to: '/enquiries', label: 'Enquiries', icon: <ClipboardList size={20} /> });
-      navLinks.push({ to: '/calendar', label: 'Calendar', icon: <CalendarDays size={20} /> });
-    }
-    if (hasFeature('financial') || isSuper) navLinks.push({ to: '/financials', label: 'Financials', icon: <Wallet size={20} /> });
+    if (hasFeature('dashboard') || isSuper) navLinks.push({ to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, tourClass: 'tour-dashboard' });
+      if (hasFeature('booking') || isSuper) {
+        navLinks.push({ to: '/bookings', label: 'Bookings', icon: <BookOpenCheck size={20} />, tourClass: 'tour-bookings' });
+      navLinks.push({ to: '/enquiries', label: 'Enquiries', icon: <ClipboardList size={20} /> });
+        navLinks.push({ to: '/calendar', label: 'Calendar', icon: <CalendarDays size={20} />, tourClass: 'tour-calendar' });
+      }
+    if (hasFeature('financial') || isSuper) navLinks.push({ to: '/financials', label: 'Financials', icon: <Wallet size={20} />, tourClass: 'tour-financials' });
     if (hasFeature('report') || isSuper) navLinks.push({ to: '/reports', label: 'Reports', icon: <FileText size={20} /> });
     const managementMenu = { 
       label: 'Management', 
       icon: <Activity size={20} />, 
       isSubmenu: true,
+      tourClass: 'tour-management',
       children: [
         { to: '/resorts', label: 'Tenant Management', icon: <Hotel size={16} /> },
         { to: '/setup', label: 'Property Management', icon: <Home size={16} /> },
@@ -188,7 +195,7 @@ export default function AppLayout() {
   }
 
   // Settings is shared but will be simplified in its own page logic
-  navLinks.push({ to: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> });
+  navLinks.push({ to: '/settings', label: 'Settings', icon: <SettingsIcon size={20} />, tourClass: 'tour-settings' });
 
   if (hasInvestmentAccess || isSuper) {
     navLinks.push({ to: '/investment-analysis', label: 'Investment Analysis', icon: <TrendingUp size={20} /> });
@@ -245,7 +252,7 @@ export default function AppLayout() {
                 <div key={link.label} style={{ display: 'flex', flexDirection: 'column' }}>
                   <button
                     onClick={() => setIsManagementOpen(!isManagementOpen)}
-                    className="nav-item"
+                    className={`nav-item ${link.tourClass || ''}`}
                     style={{
                       width: '100%',
                       background: 'none',
@@ -307,7 +314,7 @@ export default function AppLayout() {
               <NavLink
                 key={link.to}
                 to={link.to}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${link.tourClass || ''}`}
               >
                 {link.icon}
                 {link.label}

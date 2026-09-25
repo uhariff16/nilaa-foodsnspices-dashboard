@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../lib/store';
 import { Check, Zap, Crown, CreditCard, Shield, X, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { createPortal } from 'react-dom';
 
 // Dynamic plans are now loaded from the global state
 
@@ -24,7 +25,7 @@ const formatOfferDate = (dateString) => {
 };
 
 export default function Subscription() {
-  const { profile, setProfile, globalPlans, websitePricing } = useSettingsStore();
+  const { profile, setProfile, globalPlans, websitePricing, globalTaxSettings } = useSettingsStore();
   const [loading, setLoading] = useState(null);
   
   const [checkoutModal, setCheckoutModal] = useState({ isOpen: false, planId: null });
@@ -32,6 +33,7 @@ export default function Subscription() {
   
   const [activeSubscription, setActiveSubscription] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [detailsTab, setDetailsTab] = useState('subscription');
 
   useEffect(() => {
     if (profile?.id) {
@@ -103,6 +105,7 @@ export default function Subscription() {
           name: config.name || id.toUpperCase(),
           description: config.description || '',
           price: rawActive === 0 ? '₹0' : `₹${rawActive}`,
+          rawPrice: rawActive,
           basePrice: rawBase ? `₹${rawBase}` : null,
           discountPercent,
           offerEndDate: offerActive && config.offerEndDate ? config.offerEndDate : null,
@@ -138,11 +141,6 @@ export default function Subscription() {
   const handleSubscribe = async (planId) => {
     if (planId === profile?.plan_type) return;
 
-    if (window.location.protocol === 'capacitor:') {
-       setCheckoutModal({ isOpen: true, planId });
-       return;
-    }
-
     if (planId === 'free') {
        if (window.confirm("Are you sure you want to downgrade to Free Starter? This will remove access to paid features.")) {
           setLoading(planId);
@@ -160,6 +158,11 @@ export default function Subscription() {
        return;
     }
 
+    // Always open checkout modal for paid plans to show breakdown
+    setCheckoutModal({ isOpen: true, planId });
+  };
+
+  const processPayment = async (planId) => {
     setLoading(planId);
     try {
       const res = await loadRazorpayScript();
@@ -178,11 +181,9 @@ export default function Subscription() {
         description: `Subscription for ${planId}`,
         handler: async function (response) {
           try {
-            // Instant Verify using direct fetch to capture 400 errors
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token || '';
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://lubkdxhqnnghnjhrebat.supabase.co';
-            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
             const res = await fetch(`${supabaseUrl}/functions/v1/razorpay-verify`, {
               method: 'POST',
@@ -204,10 +205,7 @@ export default function Subscription() {
             }
 
             alert("Payment successful! Your plan has been upgraded.");
-            // Optimistic update
             setProfile({...profile, plan_type: planId});
-            
-            // Reload page to ensure all components pick up the new plan
             window.location.reload();
           } catch (err) {
             console.error(err);
@@ -256,57 +254,81 @@ export default function Subscription() {
         </div>
       </div>
 
-      {activeSubscription && (
-        <div className="card" style={{ marginBottom: '3rem', padding: '2rem', border: '1px solid rgba(59, 130, 246, 0.3)', background: 'rgba(59, 130, 246, 0.03)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h2 style={{ fontSize: '1.5rem', margin: '0 0 0.5rem 0', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Check size={24} /> Active Subscription
-              </h2>
-              <p style={{ margin: '0 0 1rem 0', color: 'var(--text-muted)' }}>
-                You are currently subscribed to the <strong>{plansList.find(p => p.id === activeSubscription.staypilot_plan_type)?.name || activeSubscription.staypilot_plan_type.toUpperCase()}</strong> plan.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '1rem', fontSize: '0.9rem' }}>
-                <div style={{ color: 'var(--text-muted)' }}>Status:</div>
-                <div style={{ fontWeight: 'bold', color: 'var(--success)' }}>{activeSubscription.status.toUpperCase()}</div>
-                <div style={{ color: 'var(--text-muted)' }}>Next Billing Date:</div>
-                <div style={{ fontWeight: 'bold' }}>{activeSubscription.current_period_end ? new Date(activeSubscription.current_period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Processing (Awaiting Sync)'}</div>
-              </div>
-            </div>
-            
+      {(activeSubscription || paymentHistory.length > 0) && (
+        <div className="card" style={{ marginBottom: '3rem', padding: '0', overflow: 'hidden', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'rgba(15, 44, 89, 0.02)' }}>
+            <button 
+              onClick={() => setDetailsTab('subscription')}
+              style={{ flex: 1, padding: '1rem', background: detailsTab === 'subscription' ? 'white' : 'transparent', border: 'none', borderBottom: detailsTab === 'subscription' ? '2px solid var(--primary)' : '2px solid transparent', color: detailsTab === 'subscription' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s' }}
+            >
+              <Check size={18} /> Active Subscription
+            </button>
+            <button 
+              onClick={() => setDetailsTab('history')}
+              style={{ flex: 1, padding: '1rem', background: detailsTab === 'history' ? 'white' : 'transparent', border: 'none', borderBottom: detailsTab === 'history' ? '2px solid var(--primary)' : '2px solid transparent', color: detailsTab === 'history' ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s' }}
+            >
+              <CreditCard size={18} /> Payment History
+            </button>
           </div>
-          {/* Payment History is moved out of this card */}
-        </div>
-      )}
 
-      {paymentHistory.length > 0 && (
-        <div className="card" style={{ marginBottom: '3rem', padding: '2rem', border: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <CreditCard size={20} /> Payment History
-          </h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Date</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Amount</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Transaction ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.slice(0, 10).map(payment => (
-                  <tr key={payment.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '1rem 0.5rem' }}>{new Date(payment.created_at).toLocaleDateString()}</td>
-                    <td style={{ padding: '1rem 0.5rem', fontWeight: 600 }}>₹{payment.amount / 100}</td>
-                    <td style={{ padding: '1rem 0.5rem' }}>
-                      <span className={`badge ${payment.status === 'captured' ? 'badge-success' : 'badge-danger'}`}>{payment.status.toUpperCase()}</span>
-                    </td>
-                    <td style={{ padding: '1rem 0.5rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{payment.razorpay_payment_id || payment.id.split('-')[0]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ padding: '2rem' }}>
+            {detailsTab === 'subscription' && (
+              activeSubscription ? (
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>
+                    Subscription Details
+                  </h2>
+                  <p style={{ margin: '0 0 1.5rem 0', color: 'var(--text-muted)' }}>
+                    You are currently subscribed to the <strong>{plansList.find(p => p.id === activeSubscription.staypilot_plan_type)?.name || activeSubscription.staypilot_plan_type.toUpperCase()}</strong> plan.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '1rem', fontSize: '0.95rem', maxWidth: '400px' }}>
+                    <div style={{ color: 'var(--text-muted)' }}>Status:</div>
+                    <div style={{ fontWeight: 'bold', color: 'var(--success)' }}>{activeSubscription.status.toUpperCase()}</div>
+                    <div style={{ color: 'var(--text-muted)' }}>Next Billing Date:</div>
+                    <div style={{ fontWeight: 'bold' }}>{activeSubscription.current_period_end ? new Date(activeSubscription.current_period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Processing (Awaiting Sync)'}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>
+                  No active subscription found.
+                </div>
+              )
+            )}
+
+            {detailsTab === 'history' && (
+              paymentHistory.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Date</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Amount</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Transaction ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentHistory.slice(0, 10).map(payment => (
+                        <tr key={payment.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '1rem 0.5rem' }}>{new Date(payment.created_at).toLocaleDateString()}</td>
+                          <td style={{ padding: '1rem 0.5rem', fontWeight: 600 }}>₹{payment.amount / 100}</td>
+                          <td style={{ padding: '1rem 0.5rem' }}>
+                            <span className={`badge ${payment.status === 'captured' ? 'badge-success' : 'badge-danger'}`}>
+                              {payment.status === 'captured' ? 'SUCCESSFUL' : payment.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ padding: '1rem 0.5rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{payment.razorpay_payment_id || payment.id.split('-')[0]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>
+                  No payment history available.
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
@@ -396,6 +418,12 @@ export default function Subscription() {
                 <span style={{ fontSize: '3rem', fontWeight: '800', color: 'var(--text)', letterSpacing: '-0.05em' }}>{plan.price}</span>
                 {plan.period && <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: '500' }}>{plan.period}</span>}
               </div>
+              
+              {globalTaxSettings?.enabled && plan.id !== 'free' && (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '600', marginTop: '0.25rem' }}>
+                  + {globalTaxSettings.rate}% GST
+                </div>
+              )}
               
               {plan.basePrice && (
                 <div style={{ marginTop: '0.75rem' }}>
@@ -493,8 +521,8 @@ export default function Subscription() {
       </div>
 
       {/* Checkout Modal */}
-      {checkoutModal.isOpen && (
-        <div className="modal-overlay">
+      {checkoutModal.isOpen && createPortal(
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="modal-content" style={{ maxWidth: '500px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -514,6 +542,11 @@ export default function Subscription() {
                 {plansList.find(p => p.id === checkoutModal.planId)?.price} 
                 <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>{plansList.find(p => p.id === checkoutModal.planId)?.period || ''}</span>
               </div>
+              {globalTaxSettings?.enabled && (
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  + {globalTaxSettings.rate}% GST will be added during checkout.
+                </div>
+              )}
             </div>
 
             {window.location.protocol === 'capacitor:' && (
@@ -530,7 +563,7 @@ export default function Subscription() {
                   </ol>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
-                  ℹ️ Once your payment is complete on the web, this mobile app will immediately unlock all your premium features.
+                  💡 Once your payment is complete on the web, this mobile app will immediately unlock all your premium features.
                 </p>
                 <button 
                   type="button" 
@@ -542,9 +575,54 @@ export default function Subscription() {
                 </button>
               </div>
             )}
+
+            {window.location.protocol !== 'capacitor:' && (() => {
+              const selectedPlan = plansList.find(p => p.id === checkoutModal.planId);
+              if (!selectedPlan) return null;
+              
+              const rawPrice = selectedPlan.rawPrice || 0;
+              const gstAmount = globalTaxSettings?.enabled ? Math.round(rawPrice * (globalTaxSettings.rate / 100)) : 0;
+              const totalAmount = rawPrice + gstAmount;
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.25rem' }}>
+                    <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>Payment Breakdown</h4>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>
+                      <span>Base Plan Price</span>
+                      <span>{'₹' + rawPrice}</span>
+                    </div>
+                    
+                    {globalTaxSettings?.enabled && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>
+                        <span>GST ({globalTaxSettings.rate}%)</span>
+                        <span>{'₹' + gstAmount}</span>
+                      </div>
+                    )}
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border)', fontWeight: 'bold', color: 'var(--text-main)', fontSize: '1.1rem' }}>
+                      <span>Total Amount</span>
+                      <span>{'₹' + totalAmount}</span>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    style={{ width: '100%', height: '50px', fontSize: '1.1rem', marginTop: '1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                    onClick={() => processPayment(checkoutModal.planId)}
+                    disabled={loading === checkoutModal.planId}
+                  >
+                    {loading === checkoutModal.planId ? 'Connecting to Razorpay...' : 'Proceed to Payment (₹' + totalAmount + ')'}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
+

@@ -567,14 +567,14 @@ export default function BookingForm() {
 
     if (bookingForm.is_loading_edit) { setBookingForm(prev => ({ ...prev, night_count: nightCount, is_loading_edit: false })); return; }
 
-    if (!cottage_id) { setBookingForm(prev => ({ ...prev, night_count: nightCount })); return; }
+    if (!cottage_id) { setBookingForm(prev => ({ ...prev, night_count: nightCount, base_amount: 0 })); return; }
 
     let itemPricingArray = [];
     if (booking_type === 'Entire Property') {
       const c = cottages.find(c => String(c.id) === String(cottage_id));
       if (c) itemPricingArray.push(c);
     } else {
-      if (!room_ids || room_ids.length === 0) { setBookingForm(prev => ({ ...prev, night_count: nightCount })); return; }
+      if (!room_ids || room_ids.length === 0) { setBookingForm(prev => ({ ...prev, night_count: nightCount, base_amount: 0 })); return; }
       itemPricingArray = room_ids.map(id => rooms.find(r => String(r.id) === String(id))).filter(Boolean);
     }
 
@@ -1378,7 +1378,7 @@ export default function BookingForm() {
               </div>
               <div className="form-group">
                 <label className="premium-label">Select Property / Cottage</label>
-                <select disabled={!isEditing} className="premium-select" value={bookingForm.cottage_id} onChange={e => setBookingForm({...bookingForm, cottage_id: e.target.value})}>
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.cottage_id} onChange={e => setBookingForm({...bookingForm, cottage_id: e.target.value, room_ids: [], room_types_map: {}, room_type: 'Deluxe' })}>
                   <option value="">Choose property...</option>
                   {cottages.filter(c => c.status === 'Available' || c.status === 'Active' || c.id === bookingForm.cottage_id).map(c => <option key={c.id} value={c.id} disabled={c.isPlanLocked}>{c.name} {c.isPlanLocked ? '(Locked by Plan)' : ''}</option>)}
                 </select>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { useSettingsStore } from '../lib/store';
+import PlanComparison from '../components/PlanComparison';
 
 export default function Pricing() {
   const { websitePricing, profile, globalPlans, globalTaxSettings } = useSettingsStore();
@@ -16,7 +17,7 @@ export default function Pricing() {
   const handlePlanClick = (plan) => {
     setProcessingPlanId(plan.id);
     setTimeout(() => {
-      navigate(plan.highlightPlan ? "/auth?mode=signup" : "/auth");
+      navigate(`/auth?mode=signup&plan=${plan.id}`);
     }, 1200);
   };
 
@@ -24,19 +25,16 @@ export default function Pricing() {
     window.scrollTo(0, 0);
   }, []);
 
-  const getPlansToDisplay = () => {
-    if (!websitePricing) return [];
-    
-    // Choose source data based on preview state
-    const sourceData = isPreview ? (websitePricing.draft || {}) : (websitePricing.published || {});
-    
-    // Filter and sort plans
-    const activePlans = Object.entries(sourceData)
-      .map(([key, plan]) => {
-        if (isPreview && globalPlans) {
-          const internal = globalPlans[key] || {};
+      const getPlansToDisplay = () => {
+      if (!websitePricing) return [];
+      
+      const sourceData = isPreview ? (websitePricing.draft || {}) : (websitePricing.published || {});
+      
+      const activePlans = Object.entries(sourceData).filter(([k]) => k !== 'enterpriseSection').map(([key, plan]) => {
+          const internal = globalPlans?.[key] || {};
           return {
             key,
+            id: plan.id || internal.id || key,
             ...plan,
             monthlyPrice: internal.price || 0,
             originalPrice: internal.offerPrice ? internal.price : '',
@@ -45,18 +43,23 @@ export default function Pricing() {
             offerStartDate: internal.offerStartDate || '',
             offerEndDate: internal.offerEndDate || '',
             offerActive: internal.offerActive || false,
+            trialEnabled: internal.trialEnabled || false,
+            trialDurationDays: internal.trialDurationDays || 30,
+            maxResorts: internal.maxResorts,
+            maxRooms: internal.maxRooms,
+            maxStaff: internal.maxStaff,
+            features: internal.features || [],
+            reports: normalizePlanReports(key, internal),
             publicFeatures: internal.features 
               ? internal.features.filter(f => f.enabled !== false).map(f => f.name)
-              : plan.publicFeatures,
+              : plan.publicFeatures || []
           };
-        }
-        return { key, ...plan };
-      })
-      .filter(plan => plan.showOnWebsite !== false)
-      .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99));
-
-    return activePlans;
-  };
+        })
+        .filter(plan => plan.showOnWebsite !== false && globalPlans?.[plan.key]?.enabled !== false && plan.key !== 'free')
+        .sort((a, b) => (a.displayOrder || 99) - (b.displayOrder || 99));
+  
+      return activePlans;
+    };
 
   const isPromoActive = (plan) => {
     console.log("Checking promo for", plan.key, plan);
@@ -89,6 +92,112 @@ export default function Pricing() {
     
     console.log("Success: Promo is active!");
     return true;
+  };
+
+  const normalizePlanReports = (planKey, planObj) => {
+    const existingReports = planObj?.reports || (typeof planObj === 'object' && !planObj.reports ? planObj : {});
+    const name = (planObj?.name || planKey || '').toLowerCase();
+
+    const isSolo = planKey === 'custom_1786983013013' || planKey === 'solo' || name.includes('solo') || planKey === 'free';
+    const isGrowth = planKey === 'pro' || planKey === 'growth' || name.includes('growth');
+    const isStayMaster = planKey === 'premium' || planKey === 'staymaster' || name.includes('master') || name.includes('luxury');
+
+    if (isSolo) {
+      return {
+        summary: false,
+        bookings: true,
+        guests: false,
+        finance: false,
+        investment: false,
+        exportExcel: false,
+        exportPdf: true,
+        ...existingReports,
+        finance: false
+      };
+    }
+
+    if (isGrowth || isStayMaster) {
+      return {
+        summary: true,
+        bookings: true,
+        guests: true,
+        finance: true,
+        investment: true,
+        exportExcel: true,
+        exportPdf: true,
+        ...existingReports
+      };
+    }
+
+    return existingReports;
+  };
+
+  const normalizeFeatureName = (str) => {
+    let s = (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (s.includes('bookingmanagement') || s.includes('aipoweredbookingmanagement')) {
+      return 'bookingmanagement';
+    }
+    if (s.includes('staffaccess') || s.includes('tenantadmincontrol')) {
+      return 'staffaccess';
+    }
+    return s;
+  };
+
+  const getSanitizedFeatures = (plan) => {
+    let rawList = [];
+    if (plan.features && Array.isArray(plan.features)) {
+      rawList = plan.features.filter(f => f.enabled !== false).map(f => f.name);
+    } else if (plan.publicFeatures && Array.isArray(plan.publicFeatures)) {
+      rawList = plan.publicFeatures;
+    }
+
+    const reports = plan.reports || {};
+
+    return rawList.filter(featureName => {
+      const norm = normalizeFeatureName(featureName);
+
+      if (norm.includes('advancereports') || norm.includes('advancedreports')) return false;
+      if (norm.includes('resortlimit') || norm.includes('roomlimit')) return false;
+      if (norm.match(/upto\d+property/) || norm.match(/upto\d+resort/) || norm.match(/upto\d+room/)) return false;
+
+      if (norm.includes('investmentanalysis') && reports.investment !== true) return false;
+      if (norm.includes('excelexport') && reports.exportExcel !== true) return false;
+      if (norm.includes('pdfexport') && reports.exportPdf !== true) return false;
+
+      return true;
+    });
+  };
+
+  const hasCoreFeature = (plan, targetName) => {
+    const normTarget = normalizeFeatureName(targetName);
+    if (plan.features && Array.isArray(plan.features)) {
+      const found = plan.features.find(f => normalizeFeatureName(f.name) === normTarget);
+      if (found) {
+        return found.enabled === true;
+      }
+    }
+    if (plan.publicFeatures && Array.isArray(plan.publicFeatures)) {
+      const found = plan.publicFeatures.find(name => normalizeFeatureName(name) === normTarget);
+      if (found) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const getSupportLevel = (plan) => {
+    if (plan.features && Array.isArray(plan.features)) {
+      const priority = plan.features.find(f => normalizeFeatureName(f.name) === normalizeFeatureName('Priority Support'));
+      if (priority && priority.enabled === true) return 'Priority Support';
+
+      const basic = plan.features.find(f => normalizeFeatureName(f.name) === normalizeFeatureName('Basic Support'));
+      if (basic && basic.enabled === true) return 'Basic Support';
+    }
+    if (plan.publicFeatures && Array.isArray(plan.publicFeatures)) {
+      if (plan.publicFeatures.some(name => normalizeFeatureName(name) === normalizeFeatureName('Priority Support'))) return 'Priority Support';
+      if (plan.publicFeatures.some(name => normalizeFeatureName(name) === normalizeFeatureName('Basic Support'))) return 'Basic Support';
+    }
+    return '—';
   };
 
   const plans = getPlansToDisplay();
@@ -376,7 +485,7 @@ export default function Pricing() {
 
                   <div style={{ flex: 1, marginBottom: '2.5rem' }}>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
-                      {plan.publicFeatures?.map((feat, idx) => (
+                      {getSanitizedFeatures(plan).map((feat, idx) => (
                         <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', color: plan.highlightPlan ? '#f1f5f9' : '#334155', fontSize: '0.95rem', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500 }}>
                           <Check size={18} color={plan.highlightPlan ? '#10b981' : '#059669'} style={{ flexShrink: 0, marginTop: '2px' }} />
                           <span>{feat}</span>
@@ -396,7 +505,7 @@ export default function Pricing() {
                           Processing...
                         </>
                       ) : (
-                        plan.ctaButtonText || 'Choose Plan'
+                        plan.trialEnabled ? `Start ${plan.trialDurationDays}-Day Free Trial` : (plan.ctaButtonText || 'Choose Plan')
                       )}
                     </button>
                   </div>
@@ -405,6 +514,28 @@ export default function Pricing() {
             })}
           </div>
         )}
+      
+        {/* Shared Plan Comparison Component */}
+        <PlanComparison 
+          title="Compare Plans" 
+          subtitle="Find the perfect setup for your property portfolio." 
+          containerStyle={{ background: 'white', borderTop: '1px solid rgba(0,0,0,0.05)', borderRadius: '24px', padding: '5rem 2rem' }}
+        />
+
+        
+        {websitePricing?.published?.enterpriseSection?.enabled && (
+          <section style={{ padding: '6rem 2rem', background: 'linear-gradient(135deg, #0F2C59 0%, #173b75 100%)', color: 'white', textAlign: 'center' }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+              <h2 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '1.5rem', fontFamily: "'Outfit', sans-serif" }}>{websitePricing.published.enterpriseSection.heading || 'Managing more properties or rooms?'}</h2>
+              <p style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.8)', marginBottom: '3rem', lineHeight: 1.6 }}>{websitePricing.published.enterpriseSection.description || "Need Stay Pilot for a larger portfolio? Let's find the right setup for your business."}</p>
+              {websitePricing.published.enterpriseSection.contactDestination && (
+                <a href={`mailto:${websitePricing.published.enterpriseSection.contactDestination}`} className="btn btn-primary" style={{ background: 'white', color: '#0F2C59', padding: '1.25rem 3rem', fontSize: '1.2rem', textDecoration: 'none', borderRadius: '8px', fontWeight: 800 }}>{websitePricing.published.enterpriseSection.ctaText || 'Contact Sales'}</a>
+              )}
+            </div>
+          </section>
+        )}
+
+
       </main>
 
       {/* FOOTER */}

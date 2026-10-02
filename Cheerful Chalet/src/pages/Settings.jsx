@@ -193,7 +193,8 @@ export default function Settings() {
     gstin: profile?.global_settings?.tenant_billing?.gstin || '',
     address: profile?.global_settings?.tenant_billing?.address || ''
   });
-  const [tenantGst, setTenantGst] = useState({
+  const [idRetentionDays, setIdRetentionDays] = useState(profile?.global_settings?.id_retention_days || 30);
+    const [tenantGst, setTenantGst] = useState({
     enabled: profile?.global_settings?.tenant_gst?.enabled || false,
     slabThreshold: profile?.global_settings?.tenant_gst?.slabThreshold ?? 7500,
     lowerRate: profile?.global_settings?.tenant_gst?.lowerRate ?? 5,
@@ -675,19 +676,44 @@ export default function Settings() {
     }
   };
 
-  const wipeData = async () => {
-    const pw = window.prompt("WARNING: This will permanently delete ALL Bookings, Incomes, and Expenses.\n\nEnter master password to confirm:");
+  const saveRetentionPolicy = async () => {
+    try {
+      const currentGlobalSettings = profile?.global_settings || {};
+      const updatedGlobal = {
+        ...currentGlobalSettings,
+        id_retention_days: idRetentionDays
+      };
+      const { error } = await supabase.from('profiles').update({ global_settings: updatedGlobal }).eq('id', profile.id);
+      if (error) throw error;
+      alert('Retention policy saved successfully!');
+    } catch (err) {
+      alert('Failed to save policy: ' + err.message);
+    }
+  };
+
+    const wipeData = async () => {
+    const pw = window.prompt("WARNING: This will permanently delete ALL Bookings, Incomes, Expenses, AND guest ID images.\n\nEnter master password to confirm:");
     if (pw !== "admin123") {
       if (pw !== null) alert("Incorrect password.");
       return;
     }
     
     try {
+      // 1. Delete textual data
       await supabase.from('incomes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
-      alert("All transactional data has been completely wiped!");
+      // 2. Delete all ID images for this tenant
+      if (profile?.tenant_id) {
+        const { data: files } = await supabase.storage.from('guest_ids').list(profile.tenant_id, { limit: 1000 });
+        if (files && files.length > 0) {
+          const filePaths = files.map(f => `${profile.tenant_id}/${f.name}`);
+          await supabase.storage.from('guest_ids').remove(filePaths);
+        }
+      }
+
+      alert("All transactional data and ID images have been completely wiped!");
       window.location.reload();
     } catch(err) {
       alert("Error wiping data: " + err.message);
@@ -1492,8 +1518,28 @@ export default function Settings() {
                     <ShieldAlert size={24} /> Data Manager (Cleanup)
                   </h2>
                   <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                    Select a year to analyze old operational data (bookings, incomes, expenses). You can permanently clean up this data to declutter your system and improve performance.
-                  </p>
+                      Select a year to analyze old operational data (bookings, incomes, expenses). You can permanently clean up this data to declutter your system and improve performance.
+                    </p>
+                    
+                    <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                      <h3 style={{ fontSize: '1rem', margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>Guest ID Retention Policy</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 1rem 0' }}>
+                        To minimize PII liability, uploaded guest ID images will be automatically purged from the cloud storage after this many days.
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <input 
+                          type="range" 
+                          min="30" 
+                          max="90" 
+                          step="1"
+                          value={idRetentionDays}
+                          onChange={(e) => setIdRetentionDays(Number(e.target.value))}
+                          style={{ flex: 1 }}
+                        />
+                        <span style={{ fontWeight: 'bold', minWidth: '60px' }}>{idRetentionDays} days</span>
+                        <button className="btn-primary" onClick={saveRetentionPolicy} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>Save Policy</button>
+                      </div>
+                    </div>
                   
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1.5rem' }}>
                     <div style={{ flex: 1 }}>

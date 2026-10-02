@@ -33,57 +33,80 @@ export default function SuperAdmin() {
       maxRooms: 4,
       maxStaff: 1,
       color: '#a0aec0',
-      reports: { summary: false, bookings: true, guests: false, finance: true, exportExcel: false, exportPdf: false },
+      reports: { summary: false, bookings: true, guests: false, finance: false, investment: false, exportExcel: false, exportPdf: false },
       features: [
-        { name: '1 Resort Limit', enabled: true },
-        { name: 'Up to 5 Rooms', enabled: true },
-        { name: 'Basic Reports', enabled: true },
-        { name: 'Community Support', enabled: true }
+        { name: 'Dashboard', enabled: true },
+        { name: 'Booking Management', enabled: true },
+        { name: 'Financial Management', enabled: true },
+        { name: 'WhatsApp Notifications', enabled: true },
+        { name: 'Staff Access', enabled: true },
+        { name: 'Basic Support', enabled: true }
+      ]
+    },
+    custom_1786983013013: {
+      name: 'Solo',
+      description: 'Run one property',
+      enabled: true,
+      price: 999,
+      maxResorts: 1,
+      maxRooms: 10,
+      maxStaff: 1,
+      color: 'var(--primary)',
+      reports: { summary: false, bookings: true, guests: false, finance: false, investment: false, exportExcel: false, exportPdf: true },
+      features: [
+        { name: 'Dashboard', enabled: true },
+        { name: 'Booking Management', enabled: true },
+        { name: 'Financial Management', enabled: true },
+        { name: 'WhatsApp Notifications', enabled: true },
+        { name: 'Staff Access', enabled: true },
+        { name: 'Basic Support', enabled: true }
       ]
     },
     pro: {
-      name: 'Pro Manager',
-      description: 'For growing businesses',
+      name: 'Growth',
+      description: 'Run and understand a growing hospitality business',
       enabled: true,
       price: 1999,
       offerPrice: 1499,
       offerActive: false,
       offerStartDate: '',
       offerEndDate: '',
-      maxResorts: 5,
-      maxRooms: 999999,
-      maxStaff: 5,
+      maxResorts: 3,
+      maxRooms: 30,
+      maxStaff: 3,
       color: 'var(--primary)',
       popular: true,
-      reports: { summary: true, bookings: true, guests: true, finance: false, exportExcel: true, exportPdf: true },
+      reports: { summary: true, bookings: true, guests: true, finance: true, investment: true, exportExcel: true, exportPdf: true },
       features: [
-        { name: 'Up to 5 Resorts', enabled: true },
-        { name: 'Unlimited Rooms', enabled: true },
-        { name: 'Advanced Analytics', enabled: true },
-        { name: 'Email Automation', enabled: true },
+        { name: 'Dashboard', enabled: true },
+        { name: 'Booking Management', enabled: true },
+        { name: 'Financial Management', enabled: true },
+        { name: 'WhatsApp Notifications', enabled: true },
+        { name: 'Staff Access', enabled: true },
         { name: 'Priority Support', enabled: true }
       ]
     },
     premium: {
-      name: 'Luxury Premium',
-      description: 'Total control for hotel chains',
+      name: 'Stay Master',
+      description: 'Manage multiple properties at scale',
       enabled: true,
       price: 5999,
       offerPrice: 4999,
       offerActive: false,
       offerStartDate: '',
       offerEndDate: '',
-      maxResorts: 999999,
-      maxRooms: 999999,
-      maxStaff: 999999,
+      maxResorts: 7,
+      maxRooms: 70,
+      maxStaff: 7,
       color: '#d4af37',
-      reports: { summary: true, bookings: true, guests: true, finance: true, exportExcel: true, exportPdf: true },
+      reports: { summary: true, bookings: true, guests: true, finance: true, investment: true, exportExcel: true, exportPdf: true },
       features: [
-        { name: 'Unlimited Resorts', enabled: true },
-        { name: 'Custom Branding', enabled: true },
-        { name: 'Super Admin Panel', enabled: true },
+        { name: 'Dashboard', enabled: true },
+        { name: 'Booking Management', enabled: true },
+        { name: 'Financial Management', enabled: true },
         { name: 'WhatsApp Notifications', enabled: true },
-        { name: '24/7 Dedicated Support', enabled: true }
+        { name: 'Staff Access', enabled: true },
+        { name: 'Priority Support', enabled: true }
       ]
     }
   };
@@ -318,7 +341,51 @@ export default function SuperAdmin() {
     setSupportUnreadCount(count || 0);
   };
 
-  const fetchGlobalData = async () => {
+    const normalizePlanFeatures = (planKey, existingFeatures) => {
+    if (!existingFeatures || !Array.isArray(existingFeatures)) return existingFeatures;
+
+    const isStandardKey = ['free', 'custom_1786983013013', 'pro', 'premium'].includes(planKey);
+
+    if (isStandardKey) {
+      let cleaned = existingFeatures.filter(f => {
+        const norm = (f.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (norm.includes('advancereports') || norm.includes('advancedreports')) return false;
+        if (norm.includes('tenantadmincontrol')) return false;
+        if (norm.includes('investmentanalysis')) return false;
+        if (norm.includes('resortlimit') || norm.includes('roomlimit')) return false;
+        if (norm.match(/upto\d+property/) || norm.match(/upto\d+resort/) || norm.match(/upto\d+room/)) return false;
+        return true;
+      }).map(f => {
+        if ((f.name || '').toLowerCase().includes('ai powered booking management')) {
+          return { ...f, name: 'Booking Management' };
+        }
+        return f;
+      });
+
+      if (planKey === 'custom_1786983013013' || planKey === 'free') {
+        cleaned = cleaned.filter(f => (f.name || '').toLowerCase() !== 'priority support');
+        if (!cleaned.some(f => (f.name || '').toLowerCase() === 'basic support')) {
+          cleaned.push({ name: 'Basic Support', enabled: true });
+        }
+      } else if (planKey === 'pro' || planKey === 'premium') {
+        cleaned = cleaned.filter(f => (f.name || '').toLowerCase() !== 'basic support');
+        if (!cleaned.some(f => (f.name || '').toLowerCase() === 'priority support')) {
+          cleaned.push({ name: 'Priority Support', enabled: true });
+        }
+      }
+
+      return cleaned;
+    }
+
+    return existingFeatures.map(f => {
+      if ((f.name || '').toLowerCase().includes('ai powered booking management')) {
+        return { ...f, name: 'Booking Management' };
+      }
+      return f;
+    });
+  };
+
+const fetchGlobalData = async () => {
     setLoading(true);
     try {
       const [{ data: u }, { data: r }, { data: b }, { data: inc }] = await Promise.all([
@@ -359,8 +426,8 @@ export default function SuperAdmin() {
            mergedPricing[key] = {
              ...(DEFAULT_PLANS[key] || {}),
              ...plan,
-             features: plan.features || (DEFAULT_PLANS[key]?.features || []),
-             reports: plan.reports || (DEFAULT_PLANS[key]?.reports || { summary: true, bookings: true, guests: true, finance: true, exportExcel: true, exportPdf: true })
+             features: normalizePlanFeatures(key, plan),
+             reports: normalizePlanReports(key, plan)
            };
         }
         
@@ -609,6 +676,7 @@ export default function SuperAdmin() {
         draft: newDraftData
       };
       settings.website_pricing = updatedWebsitePricing;
+      settings.pricing = pricingConfig;
       
       const { error } = await supabase.from('profiles').update({ global_settings: settings }).eq('id', masterAdmin.id);
       if (error) throw error;
@@ -629,7 +697,7 @@ export default function SuperAdmin() {
       const newVersionNum = (websitePricingConfig.currentVersion || 0) + 1;
       
       const mergedDraft = {};
-      Object.keys(websitePricingConfig.draft || {}).forEach(key => {
+      Object.keys(websitePricingConfig.draft || {}).forEach(key => { if (key === 'enterpriseSection') { mergedDraft[key] = websitePricingConfig.draft[key]; return; }
         const internal = pricingConfig[key] || {};
         mergedDraft[key] = {
           ...websitePricingConfig.draft[key],
@@ -661,6 +729,7 @@ export default function SuperAdmin() {
       };
       
       settings.website_pricing = updatedWebsitePricing;
+      settings.pricing = pricingConfig;
       
       const { error } = await supabase.from('profiles').update({ global_settings: settings }).eq('id', masterAdmin.id);
       if (error) throw error;
@@ -1298,7 +1367,9 @@ export default function SuperAdmin() {
                       maxResorts: 1,
                       maxRooms: 10,
                       color: 'var(--primary)',
-                      features: [{ name: 'New Feature', enabled: true }]
+                      features: [{ name: 'New Feature', enabled: true }],
+                      trialEnabled: true,
+                      trialDurationDays: 30
                     }
                   });
                 }}>
@@ -1329,6 +1400,47 @@ export default function SuperAdmin() {
                           />
                           <label htmlFor={`enable-${planKey}`} style={{ fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>Enabled</label>
                         </div>
+
+                        {/* ── Free Trial Settings ── */}
+                        <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(15,44,89,0.04)', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <h6 style={{ margin: '0 0 0.75rem 0', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', color: '#0F2C59', letterSpacing: '0.05em' }}>Free Trial Settings</h6>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                            <input
+                              type="checkbox"
+                              id={`trial-enabled-${planKey}`}
+                              checked={plan.trialEnabled === true}
+                              onChange={e => setPricingConfig({...pricingConfig, [planKey]: {...plan, trialEnabled: e.target.checked}})}
+                              disabled={!plan.enabled}
+                              style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                            />
+                            <label htmlFor={`trial-enabled-${planKey}`} style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', color: plan.enabled ? 'inherit' : '#94a3b8' }}>
+                              Enable free trial for new signups
+                            </label>
+                          </div>
+                          {plan.trialEnabled === true && (
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label className="form-label" style={{ fontSize: '0.8rem' }}>Trial Duration (days)</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                min={1}
+                                max={365}
+                                value={plan.trialDurationDays || ''}
+                                onChange={e => {
+                                  const val = parseInt(e.target.value);
+                                  setPricingConfig({...pricingConfig, [planKey]: {...plan, trialDurationDays: isNaN(val) ? '' : Math.max(1, val)}});
+                                }}
+                                disabled={!plan.enabled}
+                                placeholder="e.g. 30"
+                                style={{ maxWidth: '160px' }}
+                              />
+                              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.35rem', marginBottom: 0 }}>
+                                Applied to new signups only. Existing active trials are unaffected.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
                         {!['free', 'pro', 'luxury'].includes(planKey) && (
                           <button 
                             type="button"
@@ -1398,8 +1510,7 @@ export default function SuperAdmin() {
                           { id: 'summary', label: 'Performance Summary' },
                           { id: 'bookings', label: 'Booking Details' },
                           { id: 'guests', label: 'Guest Contacts' },
-                          { id: 'finance', label: 'Income & Expenses' },
-                          { id: 'investment', label: 'Investment Analysis' }
+                          { id: 'finance', label: 'Income & Expenses' }
                         ].map(report => (
                           <div key={report.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <input 
@@ -1415,6 +1526,25 @@ export default function SuperAdmin() {
                             <label htmlFor={`report-${planKey}-${report.id}`} style={{ fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, color: '#475569' }}>{report.label}</label>
                           </div>
                         ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #cbd5e1' }}>
+                      <h5 style={{ marginBottom: '1rem', color: '#0F2C59', fontSize: '0.85rem', textTransform: 'uppercase', fontWeight: 800 }}>Business Tools</h5>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <input 
+                            type="checkbox" 
+                            id={`report-${planKey}-investment`}
+                            checked={plan.reports?.investment ?? false}
+                            onChange={(e) => {
+                              const newReports = { ...(plan.reports || {}), investment: e.target.checked };
+                              setPricingConfig({...pricingConfig, [planKey]: {...plan, reports: newReports}});
+                            }}
+                            disabled={!plan.enabled}
+                          />
+                          <label htmlFor={`report-${planKey}-investment`} style={{ fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, color: '#475569' }}>Investment Analysis</label>
+                        </div>
                       </div>
                     </div>
 

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpenCheck, CalendarDays, Wallet, TrendingUp, Users, Zap } from 'lucide-react';
+import { BookOpenCheck, CalendarDays, Wallet, TrendingUp, Users, Zap, Shield } from 'lucide-react';
 
 export default function Features() {
   useEffect(() => {
@@ -13,7 +13,7 @@ export default function Features() {
         .bento-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          grid-auto-rows: 250px;
+          grid-auto-rows: 280px;
           gap: 1.5rem;
         }
         .bento-item {
@@ -117,7 +117,7 @@ export default function Features() {
               { 
                 icon: <BookOpenCheck size={28} strokeWidth={2} />, 
                 title: 'Smart Reservations', 
-                desc: 'Centralized booking management with live status tracking.', 
+                desc: 'Centralized booking management with live status tracking. Seamlessly handle check-ins, check-outs, and guest modifications in one unified dashboard.', 
                 color: '#10b981', 
                 large: true,
                 symbolicArt: (
@@ -134,7 +134,7 @@ export default function Features() {
               { 
                 icon: <CalendarDays size={28} strokeWidth={2} />, 
                 title: 'Visual Calendar', 
-                desc: 'Prevent double-bookings with our intuitive timeline view.', 
+                desc: 'Instantly check room availability and track live daily rate plans at a glance.', 
                 color: '#0ea5e9',
                 symbolicArt: (
                   <svg width="150" height="150" viewBox="0 0 150 150" style={{ position: 'absolute', right: '-5%', bottom: '-5%', opacity: 0.8 }}>
@@ -150,9 +150,26 @@ export default function Features() {
                 )
               },
               { 
+                icon: <Zap size={28} strokeWidth={2} />, 
+                title: 'AI ID Scanning', 
+                desc: 'Take a photo of any guest ID using our Android app. Our AI instantly extracts the details, compresses the image under 200KB to save space, and auto-fills the entire form.', 
+                color: '#8b5cf6',
+                large: true,
+                symbolicArt: (
+                  <svg width="200" height="150" viewBox="0 0 200 150" style={{ position: 'absolute', right: '-5%', bottom: '-5%', opacity: 0.8 }}>
+                    <rect x="40" y="40" width="120" height="70" rx="6" fill="rgba(139, 92, 246, 0.05)" stroke="rgba(139, 92, 246, 0.2)" strokeWidth="2" />
+                    <rect x="50" y="50" width="35" height="45" rx="4" fill="rgba(139, 92, 246, 0.1)" />
+                    <rect x="95" y="55" width="55" height="6" fill="rgba(139, 92, 246, 0.15)" />
+                    <rect x="95" y="68" width="40" height="6" fill="rgba(139, 92, 246, 0.15)" />
+                    <rect x="95" y="81" width="30" height="6" fill="rgba(139, 92, 246, 0.15)" />
+                    <path d="M30 30 L50 30 M30 30 L30 50 M170 30 L150 30 M170 30 L170 50 M30 120 L50 120 M30 120 L30 100 M170 120 L150 120 M170 120 L170 100" fill="none" stroke="rgba(139, 92, 246, 0.4)" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                )
+              },
+              { 
                 icon: <Wallet size={28} strokeWidth={2} />, 
                 title: 'Financial Tracking', 
-                desc: 'Log expenses and track revenue automatically.', 
+                desc: 'Automatically update booking revenue and manually log other income and expenses.', 
                 color: '#f59e0b',
                 symbolicArt: (
                   <svg width="160" height="120" viewBox="0 0 160 120" style={{ position: 'absolute', right: '0', bottom: '0', opacity: 0.8 }}>
@@ -165,21 +182,20 @@ export default function Features() {
               { 
                 icon: <TrendingUp size={28} strokeWidth={2} />, 
                 title: 'ROI Analysis', 
-                desc: 'Deep insights into your property investment health.', 
-                color: '#8b5cf6', 
-                large: true,
+                desc: "Gain deep insights into your property's investment health.",
+                color: '#3b82f6', 
                 symbolicArt: (
-                  <svg width="300" height="150" viewBox="0 0 300 150" style={{ position: 'absolute', right: '0', bottom: '0', opacity: 0.8 }}>
-                    <path d="M-20 120 C 40 120, 80 80, 140 90 C 200 100, 240 40, 320 20 L 320 160 L -20 160 Z" fill="rgba(139, 92, 246, 0.08)" />
-                    <path d="M-20 120 C 40 120, 80 80, 140 90 C 200 100, 240 40, 320 20" fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
-                    <circle cx="240" cy="40" r="6" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
+                  <svg width="150" height="150" viewBox="0 0 150 150" style={{ position: 'absolute', right: '0', bottom: '0', opacity: 0.8 }}>
+                    <path d="M0 120 C 40 120, 60 80, 100 90 C 130 100, 140 40, 160 20 L 160 160 L 0 160 Z" fill="rgba(59, 130, 246, 0.08)" />
+                    <path d="M0 120 C 40 120, 60 80, 100 90 C 130 100, 140 40, 160 20" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+                    <circle cx="115" cy="65" r="5" fill="#ffffff" stroke="#3b82f6" strokeWidth="2" />
                   </svg>
                 )
               },
               { 
                 icon: <Users size={28} strokeWidth={2} />, 
                 title: 'Staff Access', 
-                desc: 'Role-based access for your managers and receptionists.', 
+                desc: 'Assign role-based access limits for your managers and receptionists.', 
                 color: '#f43f5e',
                 symbolicArt: (
                   <svg width="150" height="120" viewBox="0 0 150 120" style={{ position: 'absolute', right: '-10%', bottom: '5%', opacity: 0.8 }}>
@@ -190,19 +206,17 @@ export default function Features() {
                 )
               },
               { 
-                icon: <Zap size={28} strokeWidth={2} />, 
-                title: 'Instant Sync', 
-                desc: 'Changes reflect instantly across web and mobile apps.', 
-                color: '#3b82f6',
+                icon: <Shield size={28} strokeWidth={2} />, 
+                title: 'Secure Data Management', 
+                desc: 'Securely store documents and instantly wipe guest records and images with a single click.', 
+                color: '#ec4899',
                 symbolicArt: (
                   <svg width="140" height="140" viewBox="0 0 140 140" style={{ position: 'absolute', right: '-5%', bottom: '-5%', opacity: 0.8 }}>
-                    <path d="M30 70 A40 40 0 1 1 110 70" fill="none" stroke="rgba(59, 130, 246, 0.2)" strokeWidth="4" strokeLinecap="round" strokeDasharray="10 15" />
-                    <path d="M110 70 A40 40 0 1 1 30 70" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="4" strokeLinecap="round" strokeDasharray="10 15" />
-                    <path d="M100 60 L110 70 L120 60" fill="none" stroke="rgba(59, 130, 246, 0.4)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M40 80 L30 70 L20 80" fill="none" stroke="rgba(59, 130, 246, 0.2)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M70 20 L120 40 L120 80 C120 110, 70 130, 70 130 C70 130, 20 110, 20 80 L20 40 Z" fill="rgba(236, 72, 153, 0.05)" stroke="rgba(236, 72, 153, 0.2)" strokeWidth="2" />
+                    <path d="M55 70 L65 80 L85 60" fill="none" stroke="rgba(236, 72, 153, 0.4)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )
-              },
+              }
             ].map((feat, i) => (
               <div key={i} className={`bento-item ${feat.large ? 'large' : ''}`} style={{ 
                 background: 'rgba(255, 255, 255, 0.85)', 
@@ -220,7 +234,7 @@ export default function Features() {
                 {/* Custom Elegant Symbolic Vector Art */}
                 {feat.symbolicArt}
 
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem' }}>
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '1.5rem', paddingRight: '3.5rem' }}>
                   <div style={{ 
                     width: '48px', height: '48px', borderRadius: '14px', 
                     background: '#ffffff',
@@ -232,8 +246,8 @@ export default function Features() {
                   }}>
                     {feat.icon}
                   </div>
-                  <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a', letterSpacing: '-0.02em' }}>{feat.title}</h3>
-                  <p style={{ color: '#475569', lineHeight: 1.6, margin: 0, fontSize: '1.05rem', fontWeight: 400 }}>{feat.desc}</p>
+                  <h3 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a', letterSpacing: '-0.02em', position: 'relative', zIndex: 10 }}>{feat.title}</h3>
+                  <p style={{ color: '#475569', lineHeight: 1.6, margin: 0, fontSize: '1.05rem', fontWeight: 400, textWrap: 'balance' }}>{feat.desc}</p>
                 </div>
               </div>
             ))}

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Plus, Trash2, CheckCircle2, AlertTriangle, X, Search, Filter, Phone, Calendar, Home, CreditCard, Edit2, MoreVertical, Send, RotateCcw, Copy, Check, MessageSquare, MessageCircle, Mail, CheckSquare, Square, Printer, Share2, CalendarCheck } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, AlertTriangle, X, Search, Filter, Phone, Calendar, Home, CreditCard, Edit2, MoreVertical, Send, RotateCcw, Copy, Check, MessageSquare, MessageCircle, Mail, CheckSquare, Square, Printer, Share2, CalendarCheck, FileText } from 'lucide-react';
 import { startOfMonth, format } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import BookingReceipt from '../components/BookingReceipt';
 import { WhatsAppErrorBoundary } from '../components/WhatsAppErrorBoundary';
 import html2canvas from 'html2canvas';
@@ -565,6 +566,7 @@ export default function Bookings() {
           resort_id: activeResortId,
           tenant_id: profile?.tenant_id,
           booking_id: b.id,
+          cottage_id: b.cottage_id || null,
           amount: amtSettled,
           source: 'Room Rent',
           notes: `OTA Settlement: ${b.guest_name} (${b.reference_number}) - via OTA`,
@@ -596,6 +598,17 @@ export default function Bookings() {
   ];
 
   const [activeTabs, setActiveTabs] = useState(['All']);
+
+    const handleConfirm = async (b) => {
+    try {
+      const { error } = await supabase.from('bookings').update({ status: 'Confirmed' }).eq('id', b.id);
+      if (error) throw error;
+      toast.success('Booking confirmed!');
+      fetchData();
+    } catch (err) {
+      toast.error('Failed to confirm booking: ' + err.message);
+    }
+  };
 
   const handleCheckIn = async (b) => {
     // Only allow check-in on or after the check_in_date
@@ -724,6 +737,7 @@ export default function Bookings() {
           resort_id: activeResortId,
           tenant_id: profile?.tenant_id,
           booking_id: settlingBooking.id,
+          cottage_id: settlingBooking.cottage_id || null,
           amount: amtPaid,
           source: 'Room Rent',
           notes: `Settlement: ${settlingBooking.guest_name} (${settlingBooking.reference_number})${discount > 0 ? ` [Discount: ₹${discount}]` : ''}${settlementData.notes ? ` - ${settlementData.notes}` : ''}`,
@@ -1238,8 +1252,11 @@ export default function Bookings() {
                     
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button onClick={() => navigate(`/bookings/edit/${b.id}`)} className="btn-icon" style={{ background: 'var(--bg-color)', border: '1px solid var(--border)' }}><Edit2 size={18} /></button>
+                      {b.status === 'Pending' && (
+                        <button onClick={(e) => { e.stopPropagation(); handleConfirm(b); }} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: '#3b82f6', borderColor: '#3b82f6' }}>Confirm</button>
+                      )}
                       {b.status === 'Confirmed' && (
-                        <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Check-in</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleCheckIn(b); }} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Check-in</button>
                       )}
                       {b.status === 'Checked-in' && (
                         <button onClick={() => handleCheckOut(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: '#8b5cf6', borderColor: '#8b5cf6' }}>Check-out</button>
@@ -1389,9 +1406,12 @@ export default function Bookings() {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
-                          {b.status === 'Confirmed' && (
-                            <button onClick={() => handleCheckIn(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Check-in</button>
-                          )}
+                          {b.status === 'Pending' && (
+                              <button onClick={(e) => { e.stopPropagation(); handleConfirm(b); }} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#3b82f6', borderColor: '#3b82f6' }}>Confirm</button>
+                            )}
+                            {b.status === 'Confirmed' && (
+                              <button onClick={(e) => { e.stopPropagation(); handleCheckIn(b); }} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Check-in</button>
+                            )}
                           {b.status === 'Checked-in' && (
                             <button onClick={() => handleCheckOut(b)} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#8b5cf6', borderColor: '#8b5cf6' }}>Check-out</button>
                           )}

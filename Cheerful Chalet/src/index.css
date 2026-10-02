@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&display=swap');
 
@@ -944,8 +945,6 @@ input:checked + .slider:before {
 
 /* Global Form Styles (Extracted from BookingForm) */
 
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        
         .booking-page-title {
           font-family: 'Plus Jakarta Sans', sans-serif;
           font-size: 1.85rem;
@@ -1160,4 +1159,10 @@ input[type="date"], input[type="time"] {
 
 [data-theme="dark"] ::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(200%);
+}
+
+/* AI Form Highlight */
+.ai-highlight {
+  border: 2px solid #10b981 !important;
+  background-color: #ecfdf5 !important;
 }

@@ -1,10 +1,11 @@
 import toast from 'react-hot-toast';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { CalendarCheck, CheckCircle2, ArrowLeft, User, Users, Calendar, Info, Globe, Wallet, Edit2, Save, ChevronUp, ChevronDown, ListCollapse, Trash2, Search, X, Lock } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, ArrowLeft, User, Users, Calendar, Info, Globe, Wallet, Edit2, Save, ChevronUp, ChevronDown, ListCollapse, Trash2, Search, X, Lock, Camera } from 'lucide-react';
 import { eachDayOfInterval, isWeekend, format } from 'date-fns';
 import { useSettingsStore } from '../lib/store';
+import IDScanner from '../components/IDScanner';
 
 const parseAgentSource = (sourceStr) => {
   if (!sourceStr) return { isAgent: false, name: '', phone: '' };
@@ -127,6 +128,7 @@ export default function BookingForm() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const frontScannerRef = useRef();
   const [collapsedSections, setCollapsedSections] = useState({ 1: false, 2: false, 3: false, 4: false, 5: false, 6: false });
   const toggleSection = (id) => setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
   const focusTarget = new URLSearchParams(location.search).get('focus');
@@ -151,7 +153,7 @@ export default function BookingForm() {
       booking_type: 'Room', cottage_id: '', room_ids: [],
       night_count: 0, price_type: 'Calculated', base_amount: 0, extra_guest_charges: 0, addons_cost: 0,
       total_amount: 0, advance_paid: 0, balance_amount: 0, booking_source: 'Direct', status: 'Pending', is_loading_edit: false,
-      reference_number: '', vehicle_number: '', id_proof_type: 'Aadhar', id_proof_other_type: '', id_proof_number: '',
+      reference_number: '', vehicle_number: '', id_proof_type: 'Aadhar', id_proof_other_type: '', id_proof_number: '', id_front_image_url: '', id_back_image_url: '', guest_address: '',
       addon_selections: [], addon_others: '', addon_costs_itemized: {},
       room_type: 'Deluxe',
       room_types_map: {},
@@ -163,7 +165,8 @@ export default function BookingForm() {
       is_ota_collected: false,
       ota_payment_status: 'Not Applicable',
       ota_channel: 'Airbnb',
-      custom_ota_channel: ''
+      custom_ota_channel: '',
+      billing_address_different: false, billing_door_no: '', billing_street: '', billing_city: '', billing_state: '', billing_pincode: ''
     });
     toast.success('Form cleared successfully');
   };
@@ -180,7 +183,7 @@ export default function BookingForm() {
     try {
       const { data, error } = await supabase
         .from('bookings')
-        .select('guest_name, guest_email, id_proof_type, id_proof_number, vehicle_number')
+        .select('guest_name, guest_email, id_proof_type, id_proof_number, vehicle_number, id_front_image_url, id_back_image_url, guest_door_no, guest_street, guest_city, guest_state, guest_pincode')
         .eq('tenant_id', profile?.tenant_id)
         .eq('phone_number', fullPhone)
         .order('created_at', { ascending: false })
@@ -198,10 +201,10 @@ export default function BookingForm() {
           ...prev,
           guest_name: guest.guest_name || prev.guest_name,
           guest_email: guest.guest_email || prev.guest_email,
-          vehicle_number: guest.vehicle_number || prev.vehicle_number,
+          vehicle_number: guest.vehicle_number || prev.vehicle_number, guest_door_no: guest.guest_door_no || prev.guest_door_no, guest_street: guest.guest_street || prev.guest_street, guest_city: guest.guest_city || prev.guest_city, guest_state: guest.guest_state || prev.guest_state, guest_pincode: guest.guest_pincode || prev.guest_pincode,
           id_proof_type: isStandard ? (guest.id_proof_type || 'Aadhar') : 'Other',
           id_proof_other_type: isStandard ? prev.id_proof_other_type : (guest.id_proof_type || ''),
-          id_proof_number: guest.id_proof_number || prev.id_proof_number
+          id_proof_number: guest.id_proof_number || prev.id_proof_number, id_front_image_url: guest.id_front_image_url || prev.id_front_image_url, id_back_image_url: guest.id_back_image_url || prev.id_back_image_url
         }));
         toast.success('Guest details found and populated!');
       } else {
@@ -276,7 +279,76 @@ export default function BookingForm() {
   const [rooms, setRooms] = useState([]);
   const [activeBookings, setActiveBookings] = useState([]);
 
-  const [bookingForm, setBookingForm] = useState({
+  const handleIDScanComplete = ({ side, url, aiData }) => {
+    setBookingForm(prev => {
+      const next = { ...prev };
+      if (side === 'front') next.id_front_image_url = url;
+      if (side === 'back') next.id_back_image_url = url;
+      
+      if (aiData) {
+        // Extract everything found on the image, regardless of side
+        if (aiData.name) {
+          next.guest_name = aiData.name;
+          next.highlight_guest_name = true;
+        }
+        if (aiData.idType) {
+          next.id_proof_type = aiData.idType;
+          next.highlight_id_proof_type = true;
+        }
+        if (aiData.idNumber) {
+          next.id_proof_number = aiData.idNumber;
+          next.highlight_id_proof_number = true;
+        }
+        if (aiData.door_no) {
+          next.guest_door_no = aiData.door_no;
+          next.highlight_guest_door_no = true;
+        }
+        if (aiData.street) {
+          next.guest_street = aiData.street;
+          next.highlight_guest_street = true;
+        }
+        if (aiData.city) {
+          next.guest_city = aiData.city;
+          next.highlight_guest_city = true;
+        }
+        if (aiData.state) {
+          next.guest_state = aiData.state;
+          next.highlight_guest_state = true;
+        }
+        if (aiData.pincode) {
+          next.guest_pincode = aiData.pincode;
+          next.highlight_guest_pincode = true;
+        }
+      }
+      return next;
+    });
+  };
+  const handleAdditionalGuestIDScanComplete = (index, { side, url, aiData }) => {
+    setBookingForm(prev => {
+      const guests = [...(prev.additional_guests || [])];
+      const g = { ...guests[index] };
+      
+      if (side === 'front') g.id_front_image_url = url;
+      if (side === 'back') g.id_back_image_url = url;
+      
+      if (aiData) {
+        if (aiData.name) { g.name = aiData.name; g.highlight_name = true; }
+        if (aiData.idType) { g.id_proof_type = aiData.idType; g.highlight_id_type = true; }
+        if (aiData.idNumber) { g.id_proof_number = aiData.idNumber; g.highlight_id_number = true; }
+        if (aiData.door_no) { g.guest_door_no = aiData.door_no; g.highlight_guest_door_no = true; }
+          if (aiData.street) { g.guest_street = aiData.street; g.highlight_guest_street = true; }
+          if (aiData.city) { g.guest_city = aiData.city; g.highlight_guest_city = true; }
+          if (aiData.state) { g.guest_state = aiData.state; g.highlight_guest_state = true; }
+          if (aiData.pincode) { g.guest_pincode = aiData.pincode; g.highlight_guest_pincode = true; }
+      }
+      
+      guests[index] = g;
+      return { ...prev, additional_guests: guests };
+    });
+  };
+
+
+    const [bookingForm, setBookingForm] = useState({
     guest_name: '', guest_email: '', guest_company_name: '', guest_gstin: '', gst_amount: 0, gst_rate: 0, phone_number: '', phone_code: '+91', phone_raw: '', check_in_date: '', check_out_date: '', adults_count: 1, kids_count: 0,
     booking_type: 'Room', cottage_id: '', room_ids: [],
     night_count: 0, price_type: 'Calculated', base_amount: 0, extra_guest_charges: 0, addons_cost: 0,
@@ -434,12 +506,21 @@ export default function BookingForm() {
               const parsedGuests = typeof b.additional_guests === 'string' ? JSON.parse(b.additional_guests) : b.additional_guests;
               if (Array.isArray(parsedGuests)) {
                 rawAdditionalGuests = parsedGuests.map(g => {
-                  const pgPhone = parsePhone(g.phone || g.phone_number);
+                  const pgPhone = parsePhone(g.phone || g.phone_number || (g.phone_code ? g.phone_code+g.phone_raw : ''));
                   return {
                     name: g.name || '',
                     email: g.email || '',
-                    phone_code: pgPhone.code,
-                    phone_raw: pgPhone.raw
+                    phone_code: g.phone_code || pgPhone.code,
+                    phone_raw: g.phone_raw || pgPhone.raw,
+                    id_proof_type: g.id_proof_type || 'Aadhar',
+                    id_proof_number: g.id_proof_number || '',
+                    guest_door_no: g.guest_door_no || '',
+                    guest_street: g.guest_street || '',
+                    guest_city: g.guest_city || '',
+                    guest_state: g.guest_state || '',
+                    guest_pincode: g.guest_pincode || '',
+                    id_front_image_url: g.id_front_image_url || '',
+                    id_back_image_url: g.id_back_image_url || ''
                   };
                 });
               }
@@ -509,7 +590,13 @@ export default function BookingForm() {
             vehicle_number: b.vehicle_number || '',
             id_proof_type: ['Aadhar', 'Pan Card', 'Driving License', 'Voter ID', 'Passport'].includes(b.id_proof_type || 'Aadhar') ? (b.id_proof_type || 'Aadhar') : 'Other',
             id_proof_other_type: ['Aadhar', 'Pan Card', 'Driving License', 'Voter ID', 'Passport'].includes(b.id_proof_type || 'Aadhar') ? '' : (b.id_proof_type || ''),
-            id_proof_number: b.id_proof_number || '',
+            id_proof_number: b.id_proof_number || '', guest_address: b.guest_address || '', id_front_image_url: b.id_front_image_url || '', id_back_image_url: b.id_back_image_url || '',
+              guest_door_no: b.guest_door_no || '',
+              guest_street: b.guest_street || '',
+              guest_city: b.guest_city || '',
+              guest_state: b.guest_state || '',
+              guest_pincode: b.guest_pincode || '',
+              billing_address_different: b.billing_address_different || false, billing_door_no: b.billing_door_no || '', billing_street: b.billing_street || '', billing_city: b.billing_city || '', billing_state: b.billing_state || '', billing_pincode: b.billing_pincode || '',
             price_type: b.price_type || 'Calculated',
             addon_selections: selections,
             addon_costs_itemized: b.addon_costs_itemized || {},
@@ -811,10 +898,21 @@ export default function BookingForm() {
 
     try {
       const formattedAdditionalGuests = (bookingForm.additional_guests || []).map(g => ({
-        name: g.name,
-        email: g.email || '',
-        phone: g.phone_code + g.phone_raw
-      }));
+          name: g.name,
+          email: g.email || '',
+          phone: g.phone_code + g.phone_raw,
+          phone_code: g.phone_code,
+          phone_raw: g.phone_raw,
+          id_proof_type: g.id_proof_type === 'Other' ? g.id_proof_other_type : (g.id_proof_type || 'Aadhar'),
+          id_proof_number: g.id_proof_number || '',
+          guest_door_no: g.guest_door_no || '',
+          guest_street: g.guest_street || '',
+          guest_city: g.guest_city || '',
+          guest_state: g.guest_state || '',
+          guest_pincode: g.guest_pincode || '',
+          id_front_image_url: g.id_front_image_url || '',
+          id_back_image_url: g.id_back_image_url || ''
+        }));
 
       // Auto-upsert Agent if applicable
       if (bookingForm.booking_source === 'Agent' && profile?.tenant_id) {
@@ -868,7 +966,14 @@ export default function BookingForm() {
         room_type: bookingForm.room_type,
         breakfast: bookingForm.breakfast,
         additional_guests: formattedAdditionalGuests,
-        guest_address: bookingForm.guest_address,
+        guest_door_no: bookingForm.guest_door_no,
+          guest_street: bookingForm.guest_street,
+          guest_city: bookingForm.guest_city,
+          guest_state: bookingForm.guest_state,
+          guest_pincode: bookingForm.guest_pincode,
+          billing_address_different: bookingForm.billing_address_different, billing_door_no: bookingForm.billing_door_no, billing_street: bookingForm.billing_street, billing_city: bookingForm.billing_city, billing_state: bookingForm.billing_state, billing_pincode: bookingForm.billing_pincode,
+          id_front_image_url: bookingForm.id_front_image_url,
+          id_back_image_url: bookingForm.id_back_image_url,
         guest_company_name: bookingForm.guest_company_name,
         guest_gstin: bookingForm.guest_gstin,
         gst_amount: bookingForm.gst_amount,
@@ -891,7 +996,7 @@ export default function BookingForm() {
         if (result.error && (result.error.message?.includes('column') || result.error.code === '42703')) {
           alert("Notice: Room Type, Breakfast, Additional Guests, or Guest Address columns could not be saved to the database. Please run the SQL migration scripts in your Supabase SQL Editor to add these columns.");
           console.warn("DB columns missing. Retrying save without them.");
-          const { room_type, breakfast, additional_guests, guest_address, guest_company_name, guest_gstin, gst_amount, gst_rate, addon_costs_itemized, ...cleanData } = bookingData;
+          const { room_type, breakfast, additional_guests, guest_door_no, guest_street, guest_city, guest_state, guest_pincode, billing_address_different, billing_door_no, billing_street, billing_city, billing_state, billing_pincode, guest_company_name, guest_gstin, gst_amount, gst_rate, addon_costs_itemized, ...cleanData } = bookingData;
           result = await supabase.from('bookings').update(cleanData).eq('id', id);
         }
       } else {
@@ -899,7 +1004,7 @@ export default function BookingForm() {
         if (result.error && (result.error.message?.includes('column') || result.error.code === '42703')) {
           alert("Notice: Room Type, Breakfast, Additional Guests, or Guest Address columns could not be saved to the database. Please run the SQL migration scripts in your Supabase SQL Editor to add these columns.");
           console.warn("DB columns missing. Retrying save without them.");
-          const { room_type, breakfast, additional_guests, guest_address, guest_company_name, guest_gstin, gst_amount, gst_rate, addon_costs_itemized, ...cleanData } = bookingData;
+          const { room_type, breakfast, additional_guests, guest_door_no, guest_street, guest_city, guest_state, guest_pincode, billing_address_different, billing_door_no, billing_street, billing_city, billing_state, billing_pincode, guest_company_name, guest_gstin, gst_amount, gst_rate, addon_costs_itemized, ...cleanData } = bookingData;
           result = await supabase.from('bookings').insert([cleanData]).select();
         }
       }
@@ -930,6 +1035,7 @@ export default function BookingForm() {
               resort_id: activeResortId,
               tenant_id: profile?.tenant_id,
               booking_id: targetId,
+              cottage_id: bookingForm.cottage_id || null,
               amount: difference,
               source: 'Room Rent',
               notes: difference > 0 
@@ -1163,23 +1269,49 @@ export default function BookingForm() {
           </div>
 
           
-          {/* SECTION 1: PRIMARY GUEST DETAILS */}
+          {/* SECTION 1: PRIMARY GUEST & OCCUPANCY DETAILS */}
           <div className={`form-section-card ${collapsedSections[1] ? 'collapsed' : ''}`}>
             <h3 className="form-section-title" onClick={() => toggleSection(1)}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={18} style={{ color: 'var(--primary)' }} /> Primary Guest Details</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={18} style={{ color: 'var(--primary)' }} /> Primary Guest & Occupancy Details</span>
               {collapsedSections[1] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
             </h3>
+              <div style={{ background: 'rgba(34, 197, 94, 0.05)', border: '1px dashed #22c55e', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem', marginTop: '1.5rem' }}>
+                  <label className="premium-label" style={{ color: 'var(--primary)', fontSize: '1rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Camera size={18} /> AI Smart Capture (Auto-Fill)
+                  </label>
+                  <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Take a photo of the guest's ID to instantly auto-fill the form. <strong>Start with the Front page.</strong>
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                    <IDScanner 
+                      ref={frontScannerRef}
+                      side="front" 
+                      tenantId={profile?.tenant_id} 
+                      existingUrl={bookingForm.id_front_image_url}
+                      onScanComplete={handleIDScanComplete} 
+                    />
+                    <IDScanner 
+                      side="back" 
+                      tenantId={profile?.tenant_id} 
+                      existingUrl={bookingForm.id_back_image_url}
+                      onScanComplete={handleIDScanComplete} 
+                    />
+                  </div>
+              </div>
             
             <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
               <div className="form-group">
-                <label className="premium-label">Primary Guest Full Name</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <label className="premium-label" style={{ marginBottom: 0 }}>Primary Guest Full Name {bookingForm.highlight_guest_name && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}</label>
+                  </div>
                 <input disabled={!isEditing} 
                   type="text" 
                   required 
-                  className="premium-input" 
-                  placeholder="Enter guest's first & last name"
+                  className={`premium-input ${bookingForm.highlight_guest_name ? 'ai-highlight' : ''}`}
+                    placeholder="Enter guest's first & last name"
+                  style={{ backgroundColor: bookingForm.highlight_guest_name ? '#ecfdf5' : '' }}
                   value={bookingForm.guest_name} 
-                  onChange={e => setBookingForm({...bookingForm, guest_name: e.target.value})} 
+                  onChange={e => setBookingForm({...bookingForm, guest_name: e.target.value, highlight_guest_name: false})} 
                 />
               </div>
               <div className="form-group">
@@ -1218,11 +1350,7 @@ export default function BookingForm() {
                     onChange={e => setBookingForm(prev => ({ ...prev, phone_code: e.target.value, phone_number: e.target.value + prev.phone_raw }))}
                   />
                   <input disabled={!isEditing} 
-                    type="text" 
-                    required 
-                    className="premium-input" 
-                    placeholder="9876543210" 
-                    value={bookingForm.phone_raw || ''} 
+                    type="tel" inputMode="tel" required className="premium-input" placeholder="9876543210" value={bookingForm.phone_raw || ''} 
                     onChange={e => setBookingForm(prev => ({ ...prev, phone_raw: e.target.value, phone_number: prev.phone_code + e.target.value }))} 
                   />
                 </div>
@@ -1251,61 +1379,314 @@ export default function BookingForm() {
               </div>
             </div>
 
-            <div className="form-group" style={{ marginTop: '1.25rem' }}>
-              <label className="premium-label">Guest Address (Optional)</label>
-              <textarea disabled={!isEditing} 
-                className="premium-input" 
-                placeholder="Enter guest's full address"
-                rows="2"
-                value={bookingForm.guest_address || ''} 
-                onChange={e => setBookingForm({...bookingForm, guest_address: e.target.value})} 
-                style={{ resize: 'vertical' }}
-              />
-            </div>
+              {/* Guest Address - Structured */}
+              <div style={{ marginTop: '1.5rem', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                Address Details
+              </div>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="premium-label">
+                    Door / Building No. 
+                    {bookingForm.highlight_guest_door_no && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    disabled={!isEditing} 
+                    className={`premium-input ${bookingForm.highlight_guest_door_no ? 'ai-highlight' : ''}`}
+                    value={bookingForm.guest_door_no || ''} 
+                    onChange={e => setBookingForm({...bookingForm, guest_door_no: e.target.value, highlight_guest_door_no: false})} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="premium-label">
+                    Street Name / Locality
+                    {bookingForm.highlight_guest_street && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    disabled={!isEditing} 
+                    className={`premium-input ${bookingForm.highlight_guest_street ? 'ai-highlight' : ''}`}
+                    value={bookingForm.guest_street || ''} 
+                    onChange={e => setBookingForm({...bookingForm, guest_street: e.target.value, highlight_guest_street: false})} 
+                  />
+                </div>
+              </div>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="premium-label">
+                    City / Town
+                    {bookingForm.highlight_guest_city && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    disabled={!isEditing} 
+                    className={`premium-input ${bookingForm.highlight_guest_city ? 'ai-highlight' : ''}`}
+                    value={bookingForm.guest_city || ''} 
+                    onChange={e => setBookingForm({...bookingForm, guest_city: e.target.value, highlight_guest_city: false})} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="premium-label">
+                    State
+                    {bookingForm.highlight_guest_state && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    disabled={!isEditing} 
+                    className={`premium-input ${bookingForm.highlight_guest_state ? 'ai-highlight' : ''}`}
+                    value={bookingForm.guest_state || ''} 
+                    onChange={e => setBookingForm({...bookingForm, guest_state: e.target.value, highlight_guest_state: false})} 
+                  />
+                </div>
+              </div>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="premium-label">
+                    Pincode
+                    {bookingForm.highlight_guest_pincode && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    disabled={!isEditing} 
+                    className={`premium-input ${bookingForm.highlight_guest_pincode ? 'ai-highlight' : ''}`}
+                    value={bookingForm.guest_pincode || ''} 
+                    onChange={e => setBookingForm({...bookingForm, guest_pincode: e.target.value, highlight_guest_pincode: false})} 
+                  />
+                </div>
+
+
+              <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--primary)', fontWeight: '600' }}>
+                  <input type="checkbox" disabled={!isEditing} checked={bookingForm.billing_address_different} onChange={e => setBookingForm({...bookingForm, billing_address_different: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }} />
+                  Billing address is different from ID address
+                </label>
+                
+                {bookingForm.billing_address_different && (
+                  <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="premium-label">Door / Building No.</label>
+                        <input type="text" disabled={!isEditing} className="premium-input" value={bookingForm.billing_door_no || ''} onChange={e => setBookingForm({...bookingForm, billing_door_no: e.target.value})} />
+                      </div>
+                      <div className="form-group">
+                        <label className="premium-label">Street Name / Locality</label>
+                        <input type="text" disabled={!isEditing} className="premium-input" value={bookingForm.billing_street || ''} onChange={e => setBookingForm({...bookingForm, billing_street: e.target.value})} />
+                      </div>
+                    </div>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="premium-label">City / Town</label>
+                        <input type="text" disabled={!isEditing} className="premium-input" value={bookingForm.billing_city || ''} onChange={e => setBookingForm({...bookingForm, billing_city: e.target.value})} />
+                      </div>
+                      <div className="form-group">
+                        <label className="premium-label">State</label>
+                        <input type="text" disabled={!isEditing} className="premium-input" value={bookingForm.billing_state || ''} onChange={e => setBookingForm({...bookingForm, billing_state: e.target.value})} />
+                      </div>
+                    </div>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label className="premium-label">Pincode</label>
+                        <input type="text" disabled={!isEditing} className="premium-input" value={bookingForm.billing_pincode || ''} onChange={e => setBookingForm({...bookingForm, billing_pincode: e.target.value})} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              </div>
           
+            <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '1.5rem', marginTop: '1.5rem', marginBottom: '1rem' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  Occupancy & Document Details
+                </h4>
+<div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="form-group">
+                <label className="premium-label">Number of Guests (Adults & Children)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <input disabled={!isEditing} type="number" min="1" placeholder="Adults" className="premium-input" value={bookingForm.adults_count} onChange={e => setBookingForm({...bookingForm, adults_count: e.target.value === '' ? '' : Number(e.target.value)})} />
+                  <input disabled={!isEditing} type="number" min="0" placeholder="Kids" className="premium-input" value={bookingForm.kids_count} onChange={e => setBookingForm({...bookingForm, kids_count: e.target.value === '' ? '' : Number(e.target.value)})} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="premium-label">Guest Vehicle Number (Optional)</label>
+                <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. KA-01-MX-1234" value={bookingForm.vehicle_number || ''} onChange={e => setBookingForm({...bookingForm, vehicle_number: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: bookingForm.id_proof_type === 'Other' ? '1fr 1fr 2fr' : '1fr 2fr', gap: '1.25rem' }}>
+              <div className="form-group">
+                <label className="premium-label">Identification Document (ID Type)</label>
+                <select disabled={!isEditing} className="premium-select" value={bookingForm.id_proof_type || 'Aadhar'} onChange={e => {
+                  const type = e.target.value;
+                  let val = bookingForm.id_proof_number || '';
+                  if (type === 'Aadhar') {
+                    val = val.replace(/\D/g, '').substring(0, 12);
+                    val = val.match(/.{1,4}/g)?.join('-') || val;
+                  } else if (type === 'Driving License') {
+                    val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                    if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
+                  }
+                  setBookingForm({...bookingForm, id_proof_type: type, id_proof_number: val});
+                }}>
+                  <option value="Aadhar">Aadhar Card</option>
+                  <option value="Pan Card">Pan Card</option>
+                  <option value="Driving License">Driving License</option>
+                  <option value="Voter ID">Voter ID</option>
+                  <option value="Passport">Passport</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              {bookingForm.id_proof_type === 'Other' && (
+                <div className="form-group">
+                  <label className="premium-label">Specify Document Type</label>
+                  <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. Company ID" value={bookingForm.id_proof_other_type || ''} onChange={e => setBookingForm({...bookingForm, id_proof_other_type: e.target.value})} />
+                </div>
+              )}
+              <div className="form-group">
+                <label className="premium-label">ID Document Number {bookingForm.highlight_id_proof_number && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">✨</span>}</label>                  <input disabled={!isEditing} 
+                    type={bookingForm.id_proof_type === 'Aadhar' ? 'tel' : 'text'}
+                    inputMode={bookingForm.id_proof_type === 'Aadhar' ? 'numeric' : 'text'}
+                    className={`premium-input ${bookingForm.highlight_id_proof_number ? 'ai-highlight' : ''}`}
+                      placeholder="Enter identification card number" 
+                    value={bookingForm.id_proof_number || ''} 
+                  onChange={e => {
+                    let val = e.target.value;
+                    if (bookingForm.id_proof_type === 'Aadhar') {
+                      val = val.replace(/\D/g, '').substring(0, 12);
+                      val = val.match(/.{1,4}/g)?.join('-') || val;
+                    } else if (bookingForm.id_proof_type === 'Driving License') {
+                      val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                      if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
+                    }
+                    setBookingForm({...bookingForm, id_proof_number: val});
+                  }} 
+                />
+                              </div>
+              </div>
+
+
+            
+              </div>
+
             {/* ADDITIONAL OCCUPANTS MERGED */}
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px dashed var(--border)' }}>
               <h4 style={{ margin: '0 0 1.25rem 0', fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Users size={16} /> Additional Occupants / Contacts
               </h4>
               {bookingForm.additional_guests && bookingForm.additional_guests.map((guest, index) => (
-              <div key={index} style={{ border: '1px solid var(--border)', padding: '1.25rem', borderRadius: '12px', background: 'var(--bg-primary)', position: 'relative', marginBottom: '1rem' }}>
-                <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}>
-                  <button 
-                    type="button" 
-                    onClick={() => handleRemoveAdditionalGuest(index)} 
-                    style={{ color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                  >
-                    Remove
-                  </button>
-                </div>
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Occupant #{index + 2}</h4>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label className="premium-label" style={{ fontSize: '0.7rem' }}>Guest Name</label>
-                    <input disabled={!isEditing} type="text" required className="premium-input" placeholder="Name" value={guest.name} onChange={e => handleUpdateAdditionalGuest(index, 'name', e.target.value)} />
+                <div key={index} style={{ border: '1px solid var(--border)', padding: '1.25rem', borderRadius: '12px', background: 'var(--bg-primary)', position: 'relative', marginBottom: '1.5rem' }}>
+                  <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => handleRemoveAdditionalGuest(index)} 
+                      style={{ color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    >
+                      Remove
+                    </button>
                   </div>
-                  <div className="form-group">
-                    <label className="premium-label" style={{ fontSize: '0.7rem' }}>Email Address</label>
-                    <input disabled={!isEditing} type="email" className="premium-input" placeholder="Email" value={guest.email} onChange={e => handleUpdateAdditionalGuest(index, 'email', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="premium-label" style={{ fontSize: '0.7rem' }}>Mobile Number</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                      <input disabled={!isEditing} 
-                        list="country-codes"
-                        className="premium-input" 
-                        value={guest.phone_code || '+91'} 
-                        placeholder="Code"
-                        onChange={e => handleUpdateAdditionalGuest(index, 'phone_code', e.target.value)}
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Occupant #{index + 2}</h4>
+                  
+                  <div style={{ background: 'rgba(34, 197, 94, 0.05)', border: '1px dashed #22c55e', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem', marginTop: '1rem' }}>
+                    <label className="premium-label" style={{ color: 'var(--primary)', fontSize: '0.9rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Camera size={16} /> AI Smart Capture for Occupant #{index + 2}
+                    </label>
+                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Take a photo of the guest's ID to auto-fill their details.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                      <IDScanner 
+                        side="front" 
+                        tenantId={profile?.tenant_id} 
+                        existingUrl={guest.id_front_image_url}
+                        onScanComplete={(res) => handleAdditionalGuestIDScanComplete(index, res)} 
                       />
-                      <input disabled={!isEditing} type="text" className="premium-input" placeholder="Phone" value={guest.phone_raw} onChange={e => handleUpdateAdditionalGuest(index, 'phone_raw', e.target.value)} />
+                      <IDScanner 
+                        side="back" 
+                        tenantId={profile?.tenant_id} 
+                        existingUrl={guest.id_back_image_url}
+                        onScanComplete={(res) => handleAdditionalGuestIDScanComplete(index, res)} 
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label className="premium-label" style={{ fontSize: '0.7rem' }}>Guest Name {guest.highlight_name && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">o"</span>}</label>
+                      <input disabled={!isEditing} type="text" required className={`premium-input ${guest.highlight_name ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_name ? '#ecfdf5' : '' }} placeholder="Name" value={guest.name} onChange={e => { handleUpdateAdditionalGuest(index, 'name', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_name', false); }} />
+                    </div>
+                    <div className="form-group">
+                      <label className="premium-label" style={{ fontSize: '0.7rem' }}>Email Address</label>
+                      <input disabled={!isEditing} type="email" className="premium-input" placeholder="Email" value={guest.email} onChange={e => handleUpdateAdditionalGuest(index, 'email', e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="premium-label" style={{ fontSize: '0.7rem' }}>Mobile Number</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '0.4rem' }}>
+                        <input disabled={!isEditing} list="country-codes" className="premium-input" value={guest.phone_code || '+91'} placeholder="Code" onChange={e => handleUpdateAdditionalGuest(index, 'phone_code', e.target.value)} />
+                        <input disabled={!isEditing} type="tel" inputMode="tel" className="premium-input" placeholder="Phone" value={guest.phone_raw} onChange={e => handleUpdateAdditionalGuest(index, 'phone_raw', e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: guest.id_proof_type === 'Other' ? '1fr 1fr 2fr' : '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <div className="form-group">
+                      <label className="premium-label" style={{ fontSize: '0.7rem' }}>ID Type</label>
+                      <select disabled={!isEditing} className="premium-select" value={guest.id_proof_type || 'Aadhar'} onChange={e => {
+                          const type = e.target.value;
+                          let val = guest.id_proof_number || '';
+                          if (type === 'Aadhar') {
+                            val = val.replace(/\D/g, '').substring(0, 12);
+                            val = val.match(/.{1,4}/g)?.join('-') || val;
+                          } else if (type === 'Driving License') {
+                            val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                            if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
+                          }
+                          handleUpdateAdditionalGuest(index, 'id_proof_type', type);
+                          handleUpdateAdditionalGuest(index, 'id_proof_number', val);
+                        }}>
+                        <option value="Aadhar">Aadhar Card</option>
+                        <option value="Pan Card">Pan Card</option>
+                        <option value="Driving License">Driving License</option>
+                        <option value="Voter ID">Voter ID</option>
+                        <option value="Passport">Passport</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    {guest.id_proof_type === 'Other' && (
+                      <div className="form-group">
+                        <label className="premium-label" style={{ fontSize: '0.7rem' }}>Specify Document</label>
+                        <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. Company ID" value={guest.id_proof_other_type || ''} onChange={e => handleUpdateAdditionalGuest(index, 'id_proof_other_type', e.target.value)} />
+                      </div>
+                    )}
+                    <div className="form-group">
+                      <label className="premium-label" style={{ fontSize: '0.7rem' }}>ID Number {guest.highlight_id_number && <span style={{marginLeft:'5px'}} title="Auto-filled by AI">o"</span>}</label>
+                      <input disabled={!isEditing} type={guest.id_proof_type === 'Aadhar' ? 'tel' : 'text'} inputMode={guest.id_proof_type === 'Aadhar' ? 'numeric' : 'text'} className={`premium-input ${guest.highlight_id_number ? 'ai-highlight' : ''}`} placeholder="ID Number" value={guest.id_proof_number || ''} onChange={e => {
+                        let val = e.target.value;
+                        if (guest.id_proof_type === 'Aadhar') {
+                          val = val.replace(/\D/g, '').substring(0, 12);
+                          val = val.match(/.{1,4}/g)?.join('-') || val;
+                        } else if (guest.id_proof_type === 'Driving License') {
+                          val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                          if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
+                        }
+                        handleUpdateAdditionalGuest(index, 'id_proof_number', val);
+                        handleUpdateAdditionalGuest(index, 'highlight_id_number', false);
+                      }} />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="premium-label" style={{ fontSize: '0.7rem' }}>Address Details</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <input disabled={!isEditing} type="text" className={`premium-input ${guest.highlight_guest_door_no ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_guest_door_no ? '#ecfdf5' : '' }} placeholder="Door No / Apt" value={guest.guest_door_no || ''} onChange={e => { handleUpdateAdditionalGuest(index, 'guest_door_no', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_guest_door_no', false); }} />
+                        <input disabled={!isEditing} type="text" className={`premium-input ${guest.highlight_guest_street ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_guest_street ? '#ecfdf5' : '' }} placeholder="Street Name / Area" value={guest.guest_street || ''} onChange={e => { handleUpdateAdditionalGuest(index, 'guest_street', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_guest_street', false); }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: '0.5rem' }}>
+                        <input disabled={!isEditing} type="text" className={`premium-input ${guest.highlight_guest_city ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_guest_city ? '#ecfdf5' : '' }} placeholder="City" value={guest.guest_city || ''} onChange={e => { handleUpdateAdditionalGuest(index, 'guest_city', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_guest_city', false); }} />
+                        <input disabled={!isEditing} type="text" className={`premium-input ${guest.highlight_guest_state ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_guest_state ? '#ecfdf5' : '' }} placeholder="State" value={guest.guest_state || ''} onChange={e => { handleUpdateAdditionalGuest(index, 'guest_state', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_guest_state', false); }} />
+                        <input disabled={!isEditing} type="text" className={`premium-input ${guest.highlight_guest_pincode ? 'ai-highlight' : ''}`} style={{ backgroundColor: guest.highlight_guest_pincode ? '#ecfdf5' : '' }} placeholder="Pincode" value={guest.guest_pincode || ''} onChange={e => { handleUpdateAdditionalGuest(index, 'guest_pincode', e.target.value); handleUpdateAdditionalGuest(index, 'highlight_guest_pincode', false); }} />
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
             
             
             <div style={{ textAlign: 'center' }}>
@@ -1321,7 +1702,8 @@ export default function BookingForm() {
           
             </div>
 
-          </div>
+          
+              </div>
 
           
 
@@ -1513,79 +1895,6 @@ export default function BookingForm() {
             </div>
           </div>
 
-          {/* SECTION 4: OCCUPANCY DETAILS */}
-          <div className={`form-section-card ${collapsedSections[4] ? 'collapsed' : ''}`}>
-            <h3 className="form-section-title" onClick={() => toggleSection(4)}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Info size={18} style={{ color: 'var(--primary)' }} /> Occupancy & Document Details</span>
-              {collapsedSections[4] ? <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} /> : <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />}
-            </h3>
-
-            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-              <div className="form-group">
-                <label className="premium-label">Number of Guests (Adults & Children)</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  <input disabled={!isEditing} type="number" min="1" placeholder="Adults" className="premium-input" value={bookingForm.adults_count} onChange={e => setBookingForm({...bookingForm, adults_count: e.target.value === '' ? '' : Number(e.target.value)})} />
-                  <input disabled={!isEditing} type="number" min="0" placeholder="Kids" className="premium-input" value={bookingForm.kids_count} onChange={e => setBookingForm({...bookingForm, kids_count: e.target.value === '' ? '' : Number(e.target.value)})} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="premium-label">Guest Vehicle Number (Optional)</label>
-                <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. KA-01-MX-1234" value={bookingForm.vehicle_number || ''} onChange={e => setBookingForm({...bookingForm, vehicle_number: e.target.value})} />
-              </div>
-            </div>
-
-            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: bookingForm.id_proof_type === 'Other' ? '1fr 1fr 2fr' : '1fr 2fr', gap: '1.25rem' }}>
-              <div className="form-group">
-                <label className="premium-label">Identification Document (ID Type)</label>
-                <select disabled={!isEditing} className="premium-select" value={bookingForm.id_proof_type || 'Aadhar'} onChange={e => {
-                  const type = e.target.value;
-                  let val = bookingForm.id_proof_number || '';
-                  if (type === 'Aadhar') {
-                    val = val.replace(/\D/g, '').substring(0, 12);
-                    val = val.match(/.{1,4}/g)?.join('-') || val;
-                  } else if (type === 'Driving License') {
-                    val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                    if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
-                  }
-                  setBookingForm({...bookingForm, id_proof_type: type, id_proof_number: val});
-                }}>
-                  <option value="Aadhar">Aadhar Card</option>
-                  <option value="Pan Card">Pan Card</option>
-                  <option value="Driving License">Driving License</option>
-                  <option value="Voter ID">Voter ID</option>
-                  <option value="Passport">Passport</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              {bookingForm.id_proof_type === 'Other' && (
-                <div className="form-group">
-                  <label className="premium-label">Specify Document Type</label>
-                  <input disabled={!isEditing} type="text" className="premium-input" placeholder="E.g. Company ID" value={bookingForm.id_proof_other_type || ''} onChange={e => setBookingForm({...bookingForm, id_proof_other_type: e.target.value})} />
-                </div>
-              )}
-              <div className="form-group">
-                <label className="premium-label">ID Document Number</label>
-                <input disabled={!isEditing} 
-                  type="text" 
-                  className="premium-input" 
-                  placeholder="Enter identification card number" 
-                  value={bookingForm.id_proof_number || ''} 
-                  onChange={e => {
-                    let val = e.target.value;
-                    if (bookingForm.id_proof_type === 'Aadhar') {
-                      val = val.replace(/\D/g, '').substring(0, 12);
-                      val = val.match(/.{1,4}/g)?.join('-') || val;
-                    } else if (bookingForm.id_proof_type === 'Driving License') {
-                      val = val.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                      if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4);
-                    }
-                    setBookingForm({...bookingForm, id_proof_number: val});
-                  }} 
-                />
-              </div>
-            </div>
-          </div>
-
           {/* SECTION 5: SERVICES & RESERVATION CHANNEL */}
           <div className={`form-section-card ${collapsedSections[5] ? 'collapsed' : ''}`}>
             <h3 className="form-section-title" onClick={() => toggleSection(5)}>
@@ -1770,10 +2079,7 @@ export default function BookingForm() {
                     )}
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <input disabled={!isEditing} 
-                        type="text" 
-                        className="premium-input" 
-                        placeholder="Agent's contact number" 
-                        value={bookingForm.agent_phone || ''} 
+                        type="tel" inputMode="tel" className="premium-input" placeholder="Agent's contact number" value={bookingForm.agent_phone || ''} 
                         onChange={e => setBookingForm({...bookingForm, agent_phone: e.target.value})} 
                         style={{ flex: 1 }}
                       />

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
-import { UserPlus, Trash2, Shield, Mail, Lock, User, Edit2 } from 'lucide-react';
+import { UserPlus, Trash2, Shield, Lock, User, Edit2, Building2, UserCheck, X } from 'lucide-react';
 import { useSettingsStore } from '../lib/store';
+import { getTenantEntitlements } from '../utils/planEntitlements';
 
 // Secondary client for creating users without affecting the admin session
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -20,15 +21,35 @@ export default function Staff() {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ id: '', username: '', password: '', fullName: '', cottage_id: '' });
   const [error, setError] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+
+  const entitlements = useMemo(() => {
+    return getTenantEntitlements({
+      profile: profile || (isPreview ? { plan_type: 'master', role: 'tenant_admin', tenant_id: 'demo-tenant' } : null),
+      globalPlans,
+      staff
+    });
+  }, [profile, globalPlans, staff, isPreview]);
 
   useEffect(() => {
-    if (profile) {
-      fetchStaff();
-      fetchCottages();
-    }
-  }, [profile]);
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    fetchStaff();
+    fetchCottages();
+  }, [profile, isPreview]);
 
   const fetchCottages = async () => {
+    if (isPreview) {
+      setCottages([{ id: 'cottage-1', name: 'The Grand Villa' }]);
+      return;
+    }
     if (!profile?.tenant_id) return;
     try {
       const { data, error } = await supabase
@@ -43,6 +64,28 @@ export default function Staff() {
   };
 
   const fetchStaff = async () => {
+    if (isPreview) {
+      setStaff([
+        {
+          id: 'staff-1',
+          full_name: 'ccstaff1',
+          username: 'ccstaff1',
+          role: 'staff',
+          cottage_id: null,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'staff-2',
+          full_name: 'Sarah Jenkins',
+          username: 'sjenkins',
+          role: 'staff',
+          cottage_id: 'cottage-1',
+          created_at: new Date().toISOString()
+        }
+      ]);
+      setLoading(false);
+      return;
+    }
     if (!profile?.tenant_id) {
       setLoading(false);
       return;
@@ -101,13 +144,14 @@ export default function Staff() {
         alert("Staff updated successfully!");
       } else {
         // Plan Gate Check
-        const currentPlanId = profile?.plan_type || 'free';
-        const planConfig = globalPlans?.[currentPlanId] || { maxStaff: 1, name: 'Free Starter' };
-        const staffLimit = planConfig.maxStaff || 1;
-        const planName = planConfig.name || currentPlanId.toUpperCase();
-
-        if (staff.length >= staffLimit) {
-          alert(`Limit Reached: Your current ${planName} plan allows only ${staffLimit} staff accounts. Please upgrade on our website for more.`);
+        if (!entitlements.canCreate.staff) {
+          if (entitlements.isUnknownPlan) {
+            alert(entitlements.reason);
+          } else if (entitlements.isSuspended) {
+            alert("Your account is currently suspended. Please contact support.");
+          } else {
+            alert(`Staff Limit Reached: Your ${entitlements.planName} plan allows only ${entitlements.limits.maxStaff} staff accounts (excluding Owner). Please upgrade on our website for more.`);
+          }
           setLoading(false);
           return;
         }
@@ -120,7 +164,7 @@ export default function Staff() {
           options: {
             data: {
               full_name: formData.fullName,
-              tenant_id: profile.tenant_id,
+              tenant_id: profile?.tenant_id,
               role: 'staff',
               cottage_id: formData.cottage_id || null,
               username: formData.username.trim()
@@ -151,8 +195,6 @@ export default function Staff() {
     }
   };
 
-  const [confirmingDelete, setConfirmingDelete] = useState(null);
-
   const removeStaff = async (staffId) => {
     if (confirmingDelete !== staffId) {
       setConfirmingDelete(staffId);
@@ -172,58 +214,111 @@ export default function Staff() {
     }
   };
 
-  if (loading && staff.length === 0) return <div>Loading Staff...</div>;
+  if (loading && staff.length === 0) {
+    return (
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading Staff...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+    <div style={{ 
+      maxWidth: '1100px', 
+      margin: '0 auto', 
+      padding: isMobile ? '0.5rem 0 5.5rem 0' : '1rem 0' 
+    }}>
+      {/* Shared Page Header Shell */}
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between', 
+        alignItems: isMobile ? 'flex-start' : 'center', 
+        gap: '1rem',
+        marginBottom: '1.5rem' 
+      }}>
         <div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Staff Management</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Create and oversee the personnel working at your property</p>
+          <h1 style={{ fontSize: isMobile ? '1.5rem' : '1.85rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+            Staff Management
+          </h1>
+          <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+            Manage team members and their access to Stay Pilot.
+          </p>
         </div>
         {!showForm && (
           <button className="btn btn-primary" onClick={() => {
-            const currentPlan = profile?.plan || 'free';
-            const maxStaff = globalPlans?.[currentPlan]?.maxStaff ?? 999999;
-            if (staff.length >= maxStaff) {
-              alert(`You have reached the maximum staff limit (${maxStaff}) for your ${globalPlans?.[currentPlan]?.name || 'current'} plan. Please upgrade your plan to add more staff.`);
-              return;
+            if (entitlements.isUnknownPlan) {
+              return alert(entitlements.reason);
+            }
+            if (entitlements.isSuspended) {
+              return alert("Your account is currently suspended. Please contact support.");
+            }
+            if (!entitlements.canCreate.staff) {
+              const maxS = entitlements.limits.maxStaff >= 999999 ? 'Unlimited' : entitlements.limits.maxStaff;
+              const staffWord = entitlements.limits.maxStaff === 1 ? 'staff member' : 'staff members';
+              return alert(`Staff Limit Reached\n\nYour ${entitlements.planName} plan supports up to ${maxS} ${staffWord} (excluding Owner). Current usage: ${entitlements.usage.staff} / ${maxS}.\n\nPlease upgrade your plan on our website for additional staff seats.`);
             }
             setShowForm(true);
+          }} style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem', 
+            fontWeight: 700, 
+            width: isMobile ? '100%' : 'auto', 
+            height: '48px',
+            minHeight: '48px',
+            justifyContent: 'center',
+            padding: '0 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.95rem'
           }}>
-            <UserPlus size={20} /> Add New Staff
+            <UserPlus size={18} /> Add Staff
           </button>
         )}
       </div>
 
+      {/* Register/Edit Staff Form */}
       {showForm && (
-        <div className="card" style={{ marginBottom: '2rem', animation: 'slideDown 0.3s ease-out' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.25rem' }}>{isEditing ? 'Edit Staff Details' : 'Register New Staff Member'}</h2>
-            <button className="btn btn-outline" onClick={resetForm}>Cancel</button>
+        <div className="card" style={{ marginBottom: '2rem', padding: isMobile ? '1.25rem' : '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--text-main)' }}>{isEditing ? 'Edit Staff Details' : 'Register New Staff Member'}</h2>
+            <button className="btn btn-outline" onClick={resetForm} style={{ minHeight: '40px', color: 'var(--text-main)', borderColor: 'var(--border)' }}>Cancel</button>
           </div>
           
-          {error && <div style={{ color: 'var(--danger)', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px' }}>{error}</div>}
+          {error && (
+            <div style={{ color: 'var(--danger)', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem 1rem', borderRadius: '8px', fontSize: '0.9rem' }}>
+              {error}
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
+            <div className="form-group" style={{ gridColumn: isMobile ? 'span 1' : 'span 2' }}>
               <label className="form-label">Full Name</label>
               <div style={{ position: 'relative' }}>
                 <User size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input type="text" className="form-input" required style={{ paddingLeft: '2.5rem' }} value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} placeholder="e.g. John Doe" />
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  required 
+                  style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)', color: 'var(--text-main)', borderColor: 'var(--border)' }} 
+                  value={formData.fullName} 
+                  onChange={e => setFormData({...formData, fullName: e.target.value})} 
+                  placeholder="e.g. John Doe" 
+                />
               </div>
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group" style={{ gridColumn: isMobile ? 'span 1' : 'span 2' }}>
               <label className="form-label">Assign Property</label>
               <select 
                 className="form-select" 
                 value={formData.cottage_id || ''} 
                 onChange={e => setFormData({...formData, cottage_id: e.target.value})}
+                style={{ background: 'var(--bg-color)', color: 'var(--text-main)', borderColor: 'var(--border)' }}
               >
-                <option value="">All Properties (General Staff)</option>
+                <option value="" style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)' }}>All Properties (General Staff)</option>
                 {cottages.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id} style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)' }}>{c.name}</option>
                 ))}
               </select>
             </div>
@@ -234,36 +329,207 @@ export default function Staff() {
                   <label className="form-label">Username</label>
                   <div style={{ position: 'relative' }}>
                     <User size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input type="text" className="form-input" required style={{ paddingLeft: '2.5rem' }} value={formData.username} onChange={e => setFormData({...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')})} placeholder="staffuser123" />
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      required 
+                      style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)', color: 'var(--text-main)', borderColor: 'var(--border)' }} 
+                      value={formData.username} 
+                      onChange={e => setFormData({...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')})} 
+                      placeholder="staffuser123" 
+                    />
                   </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Default Password</label>
                   <div style={{ position: 'relative' }}>
                     <Lock size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input type="password" minLength={6} className="form-input" required style={{ paddingLeft: '2.5rem' }} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" />
+                    <input 
+                      type="password" 
+                      minLength={6} 
+                      className="form-input" 
+                      required 
+                      style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)', color: 'var(--text-main)', borderColor: 'var(--border)' }} 
+                      value={formData.password} 
+                      onChange={e => setFormData({...formData, password: e.target.value})} 
+                      placeholder="••••••••" 
+                    />
                   </div>
                 </div>
               </>
             )}
- 
-            <div style={{ gridColumn: 'span 2' }}>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '50px' }} disabled={loading}>
+
+            <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', marginTop: '0.5rem' }}>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', height: '48px', minHeight: '48px', fontWeight: 700 }} disabled={loading}>
                 {loading ? 'Processing...' : (isEditing ? 'Save Changes' : 'Create Staff Account')}
               </button>
             </div>
           </form>
         </div>
       )}
- 
-      <div className="card">
-        <h3 style={{ marginBottom: '1.5rem' }}>Active Personnel</h3>
+
+      {/* Staff List View */}
+      <div className={isMobile ? '' : 'card'} style={{ padding: isMobile ? '0' : '1.75rem' }}>
+        <div style={{ 
+          display: 'flex', 
+          justify: 'space-between', 
+          alignItems: 'center', 
+          gap: '0.75rem',
+          marginBottom: isMobile ? '1rem' : '1.25rem',
+          padding: isMobile ? '0 0.25rem' : 0
+        }}>
+          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>Active Personnel</h3>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+            {staff.length} {staff.length === 1 ? 'member' : 'members'}
+          </span>
+        </div>
+
         {staff.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 0', opacity: 0.5 }}>
-            <User size={48} style={{ marginBottom: '1rem' }} />
-            <p>No staff identified. Use the button above to register your team.</p>
+          <div className={isMobile ? 'card' : ''} style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+            <User size={48} style={{ marginBottom: '1rem', color: 'var(--primary)', opacity: 0.3 }} />
+            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No Staff Added Yet</h4>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Use the button above to register team members and manage their access.</p>
+          </div>
+        ) : isMobile ? (
+          /* Mobile / Android Staff Cards View */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {staff.map(member => {
+              const assignedCottageName = member.cottage_id 
+                ? (cottages.find(c => c.id === member.cottage_id)?.name || 'Loading...')
+                : 'All Properties';
+              const isDeletingThis = confirmingDelete === member.id;
+
+              return (
+                <div key={member.id} style={{ 
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md, 12px)',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  {/* Top Row: Avatar & Identity + Role Badge */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: '1 1 180px', minWidth: 0 }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        background: 'var(--primary)', 
+                        color: 'white', 
+                        borderRadius: '50%', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        fontWeight: 700,
+                        fontSize: '1rem',
+                        flexShrink: 0
+                      }}>
+                        {member.full_name?.charAt(0).toUpperCase() || 'S'}
+                      </div>
+                      <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {member.full_name}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          @{member.username || member.id.split('-')[0]}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '0.3rem', 
+                      color: 'var(--primary)', 
+                      background: 'rgba(59, 130, 246, 0.1)', 
+                      padding: '0.25rem 0.6rem', 
+                      borderRadius: '20px', 
+                      fontSize: '0.75rem', 
+                      fontWeight: '700',
+                      whiteSpace: 'nowrap',
+                      alignSelf: 'center'
+                    }}>
+                      <Shield size={12} /> OPERATIONAL STAFF
+                    </span>
+                  </div>
+
+                  {/* Property Info Row - Dark Theme Bug Fix & Responsive Wrap */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    gap: '0.5rem',
+                    padding: '0.6rem 0.75rem',
+                    background: 'var(--bg-color)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '0.85rem',
+                    flexWrap: 'wrap'
+                  }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem' }}>Assigned Property</span>
+                    <span style={{ 
+                      fontWeight: 700, 
+                      color: 'var(--text-main)', 
+                      textAlign: 'right',
+                      wordBreak: 'break-word',
+                      flexShrink: 1,
+                      fontSize: '0.85rem'
+                    }}>
+                      {assignedCottageName}
+                    </span>
+                  </div>
+
+                  {/* Actions Row */}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.15rem' }}>
+                    <button 
+                      className="btn btn-outline" 
+                      style={{ 
+                        flex: 1, 
+                        minHeight: '44px',
+                        padding: '0.5rem', 
+                        fontSize: '0.85rem', 
+                        fontWeight: 600, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '0.35rem',
+                        color: 'var(--text-main)',
+                        borderColor: 'var(--border)'
+                      }} 
+                      onClick={() => handleEdit(member)}
+                    >
+                      <Edit2 size={15} /> Edit
+                    </button>
+                    <button 
+                      className="btn btn-outline" 
+                      style={{ 
+                        flex: isDeletingThis ? 1.5 : 1, 
+                        minHeight: '44px',
+                        color: isDeletingThis ? 'white' : 'var(--danger)', 
+                        background: isDeletingThis ? 'var(--danger)' : 'rgba(239, 68, 68, 0.05)',
+                        borderColor: isDeletingThis ? 'var(--danger)' : 'rgba(239, 68, 68, 0.3)',
+                        padding: '0.5rem', 
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.35rem',
+                        transition: 'all 0.2s ease'
+                      }} 
+                      onClick={() => removeStaff(member.id)}
+                    >
+                      <Trash2 size={15} /> {isDeletingThis ? 'Confirm Delete?' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
+          /* Desktop Table View */
           <div className="table-container">
             <table className="table">
               <thead>
@@ -271,7 +537,7 @@ export default function Staff() {
                   <th>Identity</th>
                   <th>Assigned Property</th>
                   <th>Permission Level</th>
-                  <th>Actions</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -279,11 +545,11 @@ export default function Staff() {
                   <tr key={member.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ width: 32, height: 32, background: 'var(--primary)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                          {member.full_name?.charAt(0)}
+                        <div style={{ width: 36, height: 36, background: 'var(--primary)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                          {member.full_name?.charAt(0).toUpperCase() || 'S'}
                         </div>
                         <div>
-                          <strong>{member.full_name}</strong>
+                          <strong style={{ color: 'var(--text-main)' }}>{member.full_name}</strong>
                           <br/><small style={{ color: 'var(--text-muted)' }}>Username: {member.username || member.id.split('-')[0]}</small>
                         </div>
                       </div>
@@ -299,20 +565,26 @@ export default function Staff() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn btn-outline" style={{ padding: '0.4rem' }} onClick={() => handleEdit(member)}>
-                          <Edit2 size={18} />
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button className="btn btn-outline" style={{ padding: '0.4rem 0.75rem', minHeight: '36px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-main)', borderColor: 'var(--border)' }} onClick={() => handleEdit(member)}>
+                          <Edit2 size={16} /> Edit
                         </button>
                         <button 
                           className="btn btn-outline" 
                           style={{ 
                             color: confirmingDelete === member.id ? 'white' : 'var(--danger)', 
-                            background: confirmingDelete === member.id ? 'var(--danger)' : 'transparent',
-                            padding: '0.4rem' 
+                            background: confirmingDelete === member.id ? 'var(--danger)' : 'rgba(239, 68, 68, 0.05)',
+                            borderColor: confirmingDelete === member.id ? 'var(--danger)' : 'rgba(239, 68, 68, 0.3)',
+                            padding: '0.4rem 0.75rem',
+                            minHeight: '36px',
+                            fontSize: '0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.35rem'
                           }} 
                           onClick={() => removeStaff(member.id)}
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={16} /> {confirmingDelete === member.id ? 'Confirm?' : 'Delete'}
                         </button>
                       </div>
                     </td>

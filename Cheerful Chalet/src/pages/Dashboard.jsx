@@ -54,6 +54,8 @@ export default function Dashboard() {
   const endOfYearStr = `${selectedYearNum}-12-31`;
 
   const formattedMonthHeading = format(selectedDateObj, 'MMMM yyyy');
+  const formattedMonthShort = useMemo(() => format(selectedDateObj, 'MMM yyyy'), [selectedDateObj]);
+  const formattedMonthExtraShort = useMemo(() => format(selectedDateObj, 'MMM yy'), [selectedDateObj]);
 
   // Property Label for Section Headings
   const selectedPropertyLabel = useMemo(() => {
@@ -410,62 +412,154 @@ export default function Dashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '1.25rem' : '2rem' }}>
       
       {/* --- DASHBOARD FILTER BAR --- */}
+      {/* --- DASHBOARD UNIFIED TOOLBAR FILTER BAR --- */}
       <div className="card" style={{ 
-        padding: '0.75rem 1.25rem', 
-        display: 'flex',
+        padding: isMobile ? '0 0.5rem' : '0 0.75rem', 
+        display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '1rem',
+        flexWrap: 'nowrap',
+        gap: '0.25rem',
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border)',
-        borderRadius: '14px'
+        borderRadius: '12px',
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)',
+        height: isMobile ? '46px' : '44px',
+        width: isMobile ? '100%' : 'fit-content',
+        alignSelf: isMobile ? 'stretch' : 'flex-end',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
       }}>
         {/* Left: Property Selector (Shown for Multi-property Accounts Only) */}
         {hasMultipleProperties && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Building2 size={16} color="var(--primary)" />
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Property:</span>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.35rem',
+            flex: isMobile ? '1 1 55%' : '0 0 auto',
+            minWidth: 0,
+            padding: '0 0.2rem'
+          }}>
+            <Building2 size={15} color="var(--primary)" style={{ flexShrink: 0, opacity: 0.85 }} />
             <select
-              className="form-select"
-              style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', background: 'var(--bg-color)' }}
+              aria-label="Select property"
+              style={{ 
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                fontSize: isMobile ? '0.8rem' : '0.85rem', 
+                fontWeight: 600, 
+                color: 'var(--text-main)',
+                cursor: 'pointer', 
+                padding: '0.35rem 0.2rem',
+                width: isMobile ? '100%' : 'auto',
+                minWidth: 0,
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden'
+              }}
               value={selectedPropertyId}
               onChange={e => handlePropertyChange(e.target.value)}
             >
-              <option value="all">All Properties ({cottagesList.length})</option>
+              <option value="all" style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)' }}>All Properties ({cottagesList.length})</option>
               {cottagesList.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id} style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)' }}>{c.name}</option>
               ))}
             </select>
           </div>
         )}
 
+        {/* Divider */}
+        {hasMultipleProperties && (
+          <div style={{ width: '1px', height: '20px', background: 'var(--border)', flexShrink: 0, margin: '0 0.35rem', opacity: 0.7 }} />
+        )}
+
         {/* Right: Month Selector Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: hasMultipleProperties ? 'auto' : '0' }}>
-          <CalendarIcon size={16} color="var(--primary)" />
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Month:</span>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.1rem', 
+          flex: isMobile ? (hasMultipleProperties ? '0 0 auto' : '1 1 100%') : '0 0 auto',
+          justifyContent: (isMobile && !hasMultipleProperties) ? 'center' : 'flex-end'
+        }}>
           <button
             type="button"
-            className="btn btn-outline"
-            style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={handlePrevMonth}
+            aria-label="Previous month"
             title="Previous Month"
+            style={{ 
+              border: 'none', 
+              background: 'transparent', 
+              borderRadius: '6px', 
+              width: '32px',
+              height: '32px',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--text-main)',
+              padding: 0
+            }}
+            onClick={handlePrevMonth}
           >
             <ChevronLeft size={16} />
           </button>
-          <input
-            type="month"
-            className="form-input"
-            style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', fontWeight: 700, borderRadius: '8px', cursor: 'pointer', width: 'auto', background: 'var(--bg-color)' }}
-            value={selectedMonth}
-            onChange={e => e.target.value && handleMonthChange(e.target.value)}
-          />
+
+          {/* Direct Month Picker Trigger Container */}
+          <div style={{ 
+            position: 'relative', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '0 0.4rem',
+            height: '32px',
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}>
+            <span style={{ 
+              fontSize: isMobile ? '0.8rem' : '0.85rem', 
+              fontWeight: 600, 
+              color: 'var(--text-main)', 
+              whiteSpace: 'nowrap',
+              userSelect: 'none'
+            }}>
+              {isMobile 
+                ? (window.innerWidth <= 340 ? formattedMonthExtraShort : formattedMonthShort)
+                : formattedMonthHeading}
+            </span>
+            <input
+              type="month"
+              aria-label="Select month"
+              style={{ 
+                position: 'absolute', 
+                inset: 0, 
+                opacity: 0, 
+                width: '100%', 
+                height: '100%', 
+                cursor: 'pointer' 
+              }}
+              value={selectedMonth}
+              onChange={e => e.target.value && handleMonthChange(e.target.value)}
+            />
+          </div>
+
           <button
             type="button"
-            className="btn btn-outline"
-            style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={handleNextMonth}
+            aria-label="Next month"
             title="Next Month"
+            style={{ 
+              border: 'none', 
+              background: 'transparent', 
+              borderRadius: '6px', 
+              width: '32px',
+              height: '32px',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--text-main)',
+              padding: 0
+            }}
+            onClick={handleNextMonth}
           >
             <ChevronRight size={16} />
           </button>

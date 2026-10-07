@@ -17,7 +17,7 @@ const secondarySupabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export default function SuperAdmin() {
-  const { profile, setWebsitePricing } = useSettingsStore();
+  const { profile, session, isDataLoaded, setWebsitePricing } = useSettingsStore();
   const [stats, setStats] = useState({ users: 0, properties: 0, bookings: 0, revenue: 0 });
   const [tenants, setTenants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -292,7 +292,8 @@ export default function SuperAdmin() {
     password: '', 
     fullName: '', 
     role: 'tenant_admin',
-    tenantId: '' 
+    tenantId: '',
+    planType: 'pro' 
   });
   const [formError, setFormError] = useState(null);
 
@@ -308,15 +309,20 @@ export default function SuperAdmin() {
   );
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
 
-  const isPlatformAdmin = ['super_admin', 'support_admin', 'billing_admin'].includes(profile?.role);
+    const isAuthReady = isDataLoaded && Boolean(session?.user?.id);
+  const isPlatformAdmin = isAuthReady && ['super_admin', 'support_admin', 'billing_admin'].includes(profile?.role);
 
   const getMasterSuperAdmin = () => {
     const superAdmins = tenants.filter(u => u.role === 'super_admin').sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     return superAdmins.length > 0 ? superAdmins[0] : profile;
   };
 
+  const profileId = profile?.id;
+  const profileRole = profile?.role;
+  const userId = session?.user?.id;
+
   useEffect(() => {
-    if (!isPlatformAdmin) return;
+    if (!isAuthReady || !isPlatformAdmin) return;
     fetchGlobalData();
     fetchUnreadTickets();
     
@@ -330,7 +336,7 @@ export default function SuperAdmin() {
     return () => {
       supabase.removeChannel(ticketsSubscription);
     };
-  }, [profile]);
+  }, [isAuthReady, isPlatformAdmin, userId, profileId, profileRole]);
 
   const fetchUnreadTickets = async () => {
     const { count } = await supabase
@@ -388,7 +394,7 @@ export default function SuperAdmin() {
 const fetchGlobalData = async () => {
     setLoading(true);
     try {
-      const [{ data: u }, { data: r }, { data: b }, { data: inc }] = await Promise.all([
+      const [{ data: u, error: uErr }, { data: r }, { data: b }, { data: inc }] = await Promise.all([
         supabase.from('profiles').select('*').order('created_at', { ascending: false }),
         supabase.from('resorts').select('id, tenant_id, name, email, phone'),
         supabase.from('bookings').select('id, tenant_id'),
@@ -583,6 +589,7 @@ const fetchGlobalData = async () => {
           data: {
             full_name: userFormData.fullName,
             role: userFormData.role,
+            plan_type: userFormData.role === 'tenant_admin' ? (userFormData.planType || 'pro') : undefined,
             tenant_id: userFormData.role === 'staff' ? userFormData.tenantId : undefined
           }
         }
@@ -593,7 +600,10 @@ const fetchGlobalData = async () => {
       if (data?.user?.id) {
         await supabase
           .from('profiles')
-          .update({ email: userFormData.email })
+          .update({ 
+            email: userFormData.email,
+            plan_type: userFormData.role === 'tenant_admin' ? (userFormData.planType || 'pro') : undefined
+          })
           .eq('id', data.user.id);
       }
 
@@ -870,7 +880,7 @@ const fetchGlobalData = async () => {
     );
   }
 
-  if (loading && tenants.length === 0) return <div>Loading Global Control Panel...</div>;
+  if (!isDataLoaded || (loading && tenants.length === 0)) return <div>Loading Global Control Panel...</div>;
 
   return (
     <div>
@@ -1065,6 +1075,17 @@ const fetchGlobalData = async () => {
                     )}
                   </select>
                 </div>
+                
+                {userFormData.role === 'tenant_admin' && (
+                  <div className="form-group">
+                    <label className="form-label">Subscription Plan</label>
+                    <select className="form-select" value={userFormData.planType || 'pro'} onChange={e => setUserFormData({...userFormData, planType: e.target.value})}>
+                      <option value="custom_1786983013013">Solo (1 Property, 10 Rooms)</option>
+                      <option value="pro">Growth (3 Properties, 30 Rooms)</option>
+                      <option value="premium">Stay Master (7 Properties, 70 Rooms)</option>
+                    </select>
+                  </div>
+                )}
                 
                 {userFormData.role === 'staff' && (
                   <div className="form-group" style={{ gridColumn: 'span 2' }}>

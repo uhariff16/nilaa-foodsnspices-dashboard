@@ -919,6 +919,9 @@ const AdminDataIngestion = () => {
         let updateCount = 0;
         let skipCount = 0;
         let dataRows = [];
+        let reconciliation = null;
+        let reportingPeriod = null;
+        let worksheetScope = null;
 
         if (type === 'sales') {
             const result = await parseExcelFile([file]);
@@ -1032,10 +1035,6 @@ const AdminDataIngestion = () => {
                 ...formatRows(data.preProduction, 'usage'),
                 ...formatRows(data.postProduction, 'production')
             ];
-
-            let reconciliation = null;
-            let reportingPeriod = null;
-            let worksheetScope = null;
 
             if (allRows.length > 0) {
                 // Task 1: Unambiguous Worksheet Scope Resolution

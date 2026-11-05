@@ -212,12 +212,20 @@ export const classifyReconciliationRecords = ({
 
     // 2. Index DB Rows by ID and by Scoped Logical Signature
     // CRITICAL STAGE 3I RULE: Only future reconciliation-managed records participate in reconciliation.
-    // All historical legacy records (is_reconciliation_managed === false) are protected, excluded from comparison,
-    // never modified, and never flagged as missing.
-    const isManaged = (r) => r.is_reconciliation_managed !== false;
-    const activeDbRows = existingDbRows.filter(r => isManaged(r) && r.status !== 'approved_deleted' && r.is_deleted !== true);
-    const softDeletedDbRows = existingDbRows.filter(r => isManaged(r) && (r.status === 'approved_deleted' || r.is_deleted === true));
-    const legacyDbRows = existingDbRows.filter(r => r.is_reconciliation_managed === false);
+    // When cutoverDate is active, only records with is_reconciliation_managed === true participate.
+    // All historical legacy records are protected, excluded from comparison, never modified, and never flagged as missing.
+    const isManaged = (r) => cutoverDate ? (r.is_reconciliation_managed === true) : (r.is_reconciliation_managed !== false);
+    const matchesWorksheet = (r, ws) => {
+        if (!ws) return true;
+        const cleanWs = ws.trim();
+        if (r.source_lineage && r.source_lineage.includes(`::${cleanWs}`)) return true;
+        if (r.remarks && r.remarks.includes(`Sheet: ${cleanWs}`)) return true;
+        if (!r.source_lineage && !r.remarks) return true;
+        return false;
+    };
+    const activeDbRows = existingDbRows.filter(r => isManaged(r) && matchesWorksheet(r, worksheetScope) && r.status !== 'approved_deleted' && r.is_deleted !== true);
+    const softDeletedDbRows = existingDbRows.filter(r => isManaged(r) && matchesWorksheet(r, worksheetScope) && (r.status === 'approved_deleted' || r.is_deleted === true));
+    const legacyDbRows = existingDbRows.filter(r => !isManaged(r));
     
     const dbById = new Map();
     const dbBySignature = new Map(); // signature -> Array of DB rows
@@ -479,10 +487,14 @@ export const classifyReconciliationRecords = ({
     });
 
     function recordMatch(inboundRow, matchedDbRow) {
+        // Aligned with server RPC reconcile_production_batch:
+        // Record is classified as modified if business fields (weight, date, material) differ.
         const isWeightDiff = Math.abs(Number(matchedDbRow.weight) - Number(inboundRow.weight)) >= 0.0001;
-        const isRemarksDiff = (matchedDbRow.remarks || '').trim() !== (inboundRow.remarks || '').trim();
+        const isDateDiff = inboundRow.date && matchedDbRow.date !== inboundRow.date;
+        const isMaterialDiff = inboundRow.material && String(matchedDbRow.material).toUpperCase().trim() !== String(inboundRow.material).toUpperCase().trim();
+        const isBusinessDiff = isWeightDiff || isDateDiff || isMaterialDiff;
 
-        if (isWeightDiff || isRemarksDiff) {
+        if (isBusinessDiff) {
             results.modifiedRecords.push({
                 id: matchedDbRow.id,
                 inbound: inboundRow,

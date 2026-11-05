@@ -93,6 +93,12 @@ const AdminDataIngestion = () => {
     const [previewData, setPreviewData] = useState(null);
     const [approvedDeletions, setApprovedDeletions] = useState(new Set());
     const toggleApproveDeletion = (dbId) => {
+        // Task 4 Hardening: Validate that dbId belongs strictly to an eligible managed missing record
+        const mRow = previewData?.reconciliation?.missingRecords?.find(r => r.id === dbId);
+        if (!mRow || mRow.is_reconciliation_managed !== true) {
+            console.warn(`[SECURITY] Blocked deletion approval attempt for unmanaged/ineligible record: ${dbId}`);
+            return;
+        }
         setApprovedDeletions(prev => {
             const next = new Set(prev);
             if (next.has(dbId)) next.delete(dbId);
@@ -562,6 +568,44 @@ const AdminDataIngestion = () => {
         return allRecords;
     };
 
+    // Task 2: Reliable paginated retrieval for scoped production logs with fail-closed safety
+    const fetchScopedProductionLogs = async (pStart, pEnd) => {
+        let allRecords = [];
+        let from = 0;
+        const PAGE_SIZE = 1000;
+        let more = true;
+
+        while (more) {
+            const { data, error, count } = await supabase
+                .from('production_logs')
+                .select('id, date, type, material, weight, remarks, source_file, source_lineage, is_reconciliation_managed, is_deleted, status', { count: 'exact' })
+                .gte('date', pStart)
+                .lte('date', pEnd)
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (error) {
+                throw new Error(`Database query error: ${error.message}`);
+            }
+
+            if (data && data.length > 0) {
+                allRecords = allRecords.concat(data);
+                if (data.length < PAGE_SIZE) {
+                    more = false;
+                } else {
+                    from += PAGE_SIZE;
+                }
+            } else {
+                more = false;
+            }
+
+            if (count !== null && count !== undefined && !more) {
+                if (allRecords.length !== count) {
+                    throw new Error(`Pagination record count mismatch: expected ${count} records, but retrieved ${allRecords.length}.`);
+                }
+            }
+        }
+        return allRecords;
+    };
 
     const handleFileSelect = (e, type) => {
         const file = e.target.files[0];
@@ -569,6 +613,8 @@ const AdminDataIngestion = () => {
 
         if (type === 'sales') setSalesFile(file);
         if (type === 'production') setProductionFile(file);
+        setPreviewData(null);
+        setApprovedDeletions(new Set());
         e.target.value = null;
         setStatus({ type: 'idle', message: '' });
     };
@@ -773,8 +819,16 @@ const AdminDataIngestion = () => {
             return { success: false, message: "No valid rows extracted from production file." };
         }
 
-        const reportingPeriod = previewData?.reportingPeriod || normalizeReportingPeriod(allRows[0]?.date) || '2026-09-01';
-        const worksheetScope = previewData?.worksheetScope || allRows[0]?.source_sheet || 'Sheet1';
+        const reportingPeriod = previewData?.reportingPeriod;
+        const worksheetScope = previewData?.worksheetScope;
+
+        if (!reportingPeriod || !worksheetScope) {
+            return {
+                success: false,
+                message: "Reconciliation aborted: Reporting period or worksheet scope could not be determined unambiguously from preview."
+            };
+        }
+
         const decisions = Array.from(approvedDeletions).map(id => ({ db_id: id, action: 'approve_delete' }));
 
         // [STAGE 3F] STRICT FAIL-CLOSED RECONCILIATION COMMIT
@@ -979,38 +1033,106 @@ const AdminDataIngestion = () => {
                 ...formatRows(data.postProduction, 'production')
             ];
 
+            let reconciliation = null;
+            let reportingPeriod = null;
+            let worksheetScope = null;
+
             if (allRows.length > 0) {
-                const ids = allRows.map(r => r.id);
-                const { data: existingLogs, error: fetchErr } = await supabase
-                    .from('production_logs')
-                    .select('id, date, type, material, weight, remarks, source_file')
-                    .in('id', ids);
-
-                if (!fetchErr && existingLogs) {
-                    const existingMap = new Map(existingLogs.map(l => [l.id, l]));
-
-                    allRows.forEach(row => {
-                        const existing = existingMap.get(row.id);
-                        if (!existing) {
-                            newCount++;
-                        } else {
-                            const isDifferent =
-                                existing.date !== row.date ||
-                                existing.type !== row.type ||
-                                existing.material !== row.material ||
-                                Number(existing.weight) !== Number(row.weight) ||
-                                existing.remarks !== row.remarks ||
-                                existing.source_file !== row.source_file;
-
-                            if (isDifferent) {
-                                updateCount++;
-                            } else {
-                                skipCount++;
-                            }
-                        }
-                    });
+                // Task 1: Unambiguous Worksheet Scope Resolution
+                const distinctSheets = Array.from(new Set(allRows.map(r => r.source_sheet).filter(Boolean)));
+                if (distinctSheets.length === 0) {
+                    errors.push("Error: Cannot determine worksheet scope. No worksheet name found in workbook.");
+                } else if (distinctSheets.length > 1) {
+                    errors.push(`Error: Ambiguous worksheet scope. Workbook contains rows from multiple worksheets (${distinctSheets.join(', ')}). Daily Stocks & Production reconciliation must be scoped to a single worksheet.`);
                 } else {
-                    newCount = allRows.length;
+                    worksheetScope = distinctSheets[0];
+                }
+
+                // Task 1: Unambiguous Reporting Period Resolution (validate all row dates, detect mixed months or unparseable dates)
+                const distinctPeriods = new Set();
+                const invalidDateRows = [];
+                allRows.forEach((r, idx) => {
+                    if (!r.date || typeof r.date !== 'string') {
+                        invalidDateRows.push(idx + 1);
+                        return;
+                    }
+                    const p = normalizeReportingPeriod(r.date);
+                    if (!p) {
+                        invalidDateRows.push(idx + 1);
+                    } else {
+                        distinctPeriods.add(p);
+                    }
+                });
+
+                if (invalidDateRows.length > 0) {
+                    errors.push(`Error: ${invalidDateRows.length} row(s) have missing or unparseable dates (e.g. row ${invalidDateRows.slice(0, 5).join(', ')}). A valid date is required for every row.`);
+                }
+
+                if (distinctPeriods.size === 0) {
+                    errors.push("Error: Cannot determine valid reporting period from workbook dates. Confirmation is blocked.");
+                } else if (distinctPeriods.size > 1) {
+                    errors.push(`Error: Ambiguous reporting scope. Workbook contains rows spanning multiple reporting periods (${Array.from(distinctPeriods).join(', ')}). Each upload must represent a single consistent reporting period.`);
+                } else {
+                    reportingPeriod = Array.from(distinctPeriods)[0];
+                }
+
+                // Server-configured cutover date (used strictly for eligibility/historical check, NEVER as fallback date)
+                let cutoverDate = '2026-11-01';
+                try {
+                    const { data: cutoverSetting, error: cutoverErr } = await supabase
+                        .from('system_settings')
+                        .select('value')
+                        .eq('key', 'reconciliation_cutover_date')
+                        .maybeSingle();
+                    if (cutoverErr) throw cutoverErr;
+                    if (cutoverSetting?.value) cutoverDate = cutoverSetting.value;
+                } catch (e) {
+                    console.warn("Could not fetch cutover date:", e);
+                }
+
+                // Task 2: Reliable paginated retrieval and fail-closed handling
+                if (reportingPeriod && worksheetScope && errors.length === 0) {
+                    const [rYear, rMonth] = reportingPeriod.split('-');
+                    const pStart = `${rYear}-${rMonth}-01`;
+                    const lastDay = new Date(parseInt(rYear, 10), parseInt(rMonth, 10), 0).getDate();
+                    const pEnd = `${rYear}-${rMonth}-${String(lastDay).padStart(2, '0')}`;
+
+                    let scopedLogs = [];
+                    try {
+                        scopedLogs = await fetchScopedProductionLogs(pStart, pEnd);
+                    } catch (fetchErr) {
+                        console.error("Scoped logs fetch failed:", fetchErr);
+                        errors.push(`Database error: Failed to fetch scoped production logs (${fetchErr.message}). Preview cannot proceed safely.`);
+                    }
+
+                    if (errors.length === 0) {
+                        reconciliation = classifyReconciliationRecords({
+                            inboundRows: allRows,
+                            existingDbRows: scopedLogs,
+                            worksheetScope,
+                            reportingPeriod,
+                            isAuthoritativeSnapshot: true,
+                            cutoverDate
+                        });
+
+                        newCount = reconciliation.counts.newCount;
+                        updateCount = reconciliation.counts.modifiedCount;
+                        skipCount = reconciliation.counts.unchangedCount;
+
+                        if (reconciliation.invalidRecords && reconciliation.invalidRecords.length > 0) {
+                            reconciliation.invalidRecords.forEach(inv => {
+                                errors.push(`Row ${inv.rowIndex || '?'}: ${inv.errors?.join(', ')}`);
+                            });
+                        }
+                        if (reconciliation.isHistoricalPeriod) {
+                            errors.push(reconciliation.cutoverMessage);
+                        }
+                        if (reconciliation.conflictRecords && reconciliation.conflictRecords.length > 0) {
+                            reconciliation.conflictRecords.forEach(c => {
+                                errors.push(`Reconciliation Conflict: ${c.reason}`);
+                            });
+                        }
+                    }
                 }
 
                 dataRows = allRows.slice(0, 5); // Take first 5 rows for UI preview
@@ -1026,12 +1148,16 @@ const AdminDataIngestion = () => {
             updateCount,
             skipCount,
             errors,
-            dataRows
+            dataRows,
+            reconciliation,
+            reportingPeriod,
+            worksheetScope
         };
     };
 
     const runDryRunValidation = async (file, type) => {
         setLoading(true);
+        setApprovedDeletions(new Set()); // Task 4: Always clear approval state when starting validation
         setStatus({ type: 'idle', message: `Running dry-run validation for ${file.name}...` });
 
         try {
@@ -1057,6 +1183,32 @@ const AdminDataIngestion = () => {
 
     const confirmIngestion = async () => {
         if (!previewData) return;
+
+        // Task 4 Hardening: Fail-Closed Preflight Gate
+        if (!previewData.isFolder) {
+            const hasErrors = previewData.errors && previewData.errors.length > 0;
+            const hasConflicts = (previewData.reconciliation?.counts?.conflictCount || 0) > 0;
+            const hasInvalids = (previewData.reconciliation?.counts?.invalidCount || 0) > 0;
+            const isHistorical = Boolean(previewData.reconciliation?.isHistoricalPeriod);
+            const isDuplicate = Boolean(previewData.isDuplicateFile);
+
+            if (hasErrors || hasConflicts || hasInvalids || isHistorical || isDuplicate) {
+                setStatus({
+                    type: 'error',
+                    message: 'Confirmation blocked: All validation errors, historical boundary restrictions, and reconciliation conflicts must be resolved before committing.'
+                });
+                return;
+            }
+
+            const hasActions = (previewData.newCount > 0) || (previewData.updateCount > 0) || (approvedDeletions.size > 0);
+            if (!hasActions) {
+                setStatus({
+                    type: 'error',
+                    message: 'Confirmation blocked: No new records, updates, or approved deletions to commit.'
+                });
+                return;
+            }
+        }
 
         setLoading(true);
         try {
@@ -1351,10 +1503,10 @@ const AdminDataIngestion = () => {
                 {/* Global Controls */}
                 <div className="flex-center" style={{ marginTop: '1.5rem', flexDirection: 'column', gap: '1rem' }}>
                     <div className="btn-toggle-group">
-                        <button onClick={() => setUploadMode('file')} disabled={isWatching} className={`btn-toggle ${uploadMode === 'file' ? 'active blue' : ''}`}>
+                        <button onClick={() => { setUploadMode('file'); setPreviewData(null); setApprovedDeletions(new Set()); }} disabled={isWatching} className={`btn-toggle ${uploadMode === 'file' ? 'active blue' : ''}`}>
                             <FileIcon size={16} /> Single File
                         </button>
-                        <button onClick={() => setUploadMode('folder')} className={`btn-toggle ${uploadMode === 'folder' ? 'active blue' : ''}`}>
+                        <button onClick={() => { setUploadMode('folder'); setPreviewData(null); setApprovedDeletions(new Set()); }} className={`btn-toggle ${uploadMode === 'folder' ? 'active blue' : ''}`}>
                             <FolderInput size={16} /> Folder Mode
                         </button>
                     </div>
@@ -1485,7 +1637,7 @@ const AdminDataIngestion = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {previewData.reconciliation.missingRecords.map((mRow) => (
+                                                        {previewData.reconciliation.missingRecords.filter(m => m.is_reconciliation_managed === true).map((mRow) => (
                                                             <tr key={mRow.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                                                                 <td style={{ padding: '0.35rem', textAlign: 'center' }}>
                                                                     <input
@@ -1705,6 +1857,7 @@ const AdminDataIngestion = () => {
                                 setPreviewData(null);
                                 setSalesFile(null);
                                 setProductionFile(null);
+                                setApprovedDeletions(new Set());
                                 setStatus({ type: 'idle', message: '' });
                             }}
                             className="btn-secondary"
@@ -1714,14 +1867,14 @@ const AdminDataIngestion = () => {
                         </button>
                         <button
                             onClick={confirmIngestion}
-                            disabled={loading || (previewData.isFolder ? (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0) : (previewData.isDuplicateFile || (previewData.errors.length > 0 && previewData.newCount === 0 && previewData.updateCount === 0)))}
+                            disabled={loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))}
                             className="btn-primary"
                             style={{
                                 height: '42px',
                                 padding: '0 2rem',
-                                background: (previewData.isFolder ? false : previewData.isDuplicateFile) ? 'rgba(255,255,255,0.1)' : '#10b981',
+                                background: (previewData.isFolder ? (previewData.totals.errorCount > 0) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod))) ? 'rgba(255,255,255,0.1)' : '#10b981',
                                 border: 'none',
-                                opacity: (loading || (previewData.isFolder ? (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0) : (previewData.isDuplicateFile || (previewData.errors.length > 0 && previewData.newCount === 0 && previewData.updateCount === 0)))) ? 0.5 : 1
+                                opacity: (loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))) ? 0.5 : 1
                             }}
                         >
                             {loading ? 'Processing...' : 'Confirm Ingestion Write'}
@@ -1990,7 +2143,7 @@ const AdminDataIngestion = () => {
                             {salesFile && (
                                 <div style={{ padding: '0.5rem 1rem', background: 'rgba(30, 58, 138, 0.3)', color: '#bfdbfe', fontSize: '0.75rem', borderRadius: '9999px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="animate-fade-in">
                                     <FileSpreadsheet size={12} /> {salesFile.name}
-                                    <button onClick={() => setSalesFile(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
+                                    <button onClick={() => { setSalesFile(null); setPreviewData(null); setApprovedDeletions(new Set()); }} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
                             )}
 
@@ -2047,7 +2200,7 @@ const AdminDataIngestion = () => {
                             {productionFile && (
                                 <div style={{ padding: '0.5rem 1rem', background: 'rgba(6, 78, 59, 0.3)', color: '#a7f3d0', fontSize: '0.75rem', borderRadius: '9999px', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className="animate-fade-in">
                                     <FileSpreadsheet size={12} /> {productionFile.name}
-                                    <button onClick={() => setProductionFile(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
+                                    <button onClick={() => { setProductionFile(null); setPreviewData(null); setApprovedDeletions(new Set()); }} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
                             )}
 

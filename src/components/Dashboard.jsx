@@ -554,8 +554,7 @@ const Dashboard = (props) => {
     // [NEW] Identify Returns early for cross-referencing, explicitly ignoring orphaned MISSING data
     const salesReturns = React.useMemo(() => {
         return filteredTransactions.filter(t => 
-            t.parsedType === 'Sales Return' && 
-            !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+            t.parsedType === 'Sales Return'
         );
     }, [filteredTransactions]);
 
@@ -564,8 +563,7 @@ const Dashboard = (props) => {
     // [FIX] Separate Granular Sales from Summary Rows to prevent double counting.
     // Explicitly filter out MISSING invoices to keep data consistent with expected verified totals.
     const allSalesTransactions = filteredTransactions.filter(t => 
-        String(t.parsedType).toLowerCase().includes('sale') &&
-        !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+        String(t.parsedType).toLowerCase().includes('sale')
     );
 
     // Identify Summary Rows (usually Type='Sales Summary' or similar)
@@ -573,8 +571,7 @@ const Dashboard = (props) => {
 
     // [FIX] New Priority: "Invoice Total" rows from parser
     const invoiceTotalRows = filteredTransactions.filter(t => 
-        t.parsedType === 'Invoice Total' &&
-        !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+        t.parsedType === 'Invoice Total'
     );
 
     const salesAppearsGranular = allSalesTransactions.filter(t => {
@@ -804,8 +801,7 @@ const Dashboard = (props) => {
 
         // 1. Calculate salesRevenue
         const allSales = uniqueTxs.filter(t => 
-            String(t.parsedType).toLowerCase().includes('sale') &&
-            !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+            String(t.parsedType).toLowerCase().includes('sale')
         );
 
         const salesAppearsGran = allSales.filter(t => {
@@ -980,7 +976,7 @@ const Dashboard = (props) => {
                 const invNo = String(t.invoiceNo || '').toUpperCase();
                 
                 // Skip missing/orphaned invoices entirely for sales consistency
-                if ((type.includes('sale') || type.includes('invoice total')) && invNo.includes('MISSING')) return;
+                if (type === 'invoice total' && invNo.includes('MISSING')) return;
 
                 if (type === 'sales return' || type === 'invoice total') return; // Skip returns and totals for raw addition 
 
@@ -1121,8 +1117,7 @@ const Dashboard = (props) => {
         if (result.length === 0 && selectedMonth !== 'Overall' && filteredTransactions.length > 0) {
             const salesTx = filteredTransactions.filter(t => 
                 String(t.parsedType).toLowerCase().includes('sale') && 
-                t.parsedType !== 'Sales Return' &&
-                !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                t.parsedType !== 'Sales Return'
             );
             const fallbackMap = {};
             salesTx.forEach(t => {

@@ -663,16 +663,13 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
             if (monthTxns.length > 0) {
                 // --- SALES LOGIC ---
                 const allSales = monthTxns.filter(t =>
-                    String(t.parsedType).toLowerCase().includes('sale') &&
-                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                    String(t.parsedType).toLowerCase().includes('sale')
                 );
                 const salesReturns = monthTxns.filter(t =>
-                    t.parsedType === 'Sales Return' &&
-                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                    t.parsedType === 'Sales Return'
                 );
                 const invoiceTotalRows = monthTxns.filter(t =>
-                    t.parsedType === 'Invoice Total' &&
-                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                    t.parsedType === 'Invoice Total'
                 );
                 const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary' && t.parsedType !== 'Sales Return');
 
@@ -1194,12 +1191,10 @@ const YearlyAnalysis = ({ selectedYear, selectedMonth = 'Overall', transactions 
 
                 // Gross Sales
                 const allSales = monthTxns.filter(t =>
-                    String(t.parsedType).toLowerCase().includes('sale') &&
-                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                    String(t.parsedType).toLowerCase().includes('sale')
                 );
                 const salesReturns = monthTxns.filter(t =>
-                    t.parsedType === 'Sales Return' &&
-                    !String(t.invoiceNo || '').toUpperCase().includes('MISSING')
+                    t.parsedType === 'Sales Return'
                 );
                 const salesSummaryRows = allSales.filter(t => String(t.parsedType || '').toLowerCase() === 'sales summary' && t.parsedType !== 'Sales Return');
                 const salesAppearsGranular = allSales.filter(t => {

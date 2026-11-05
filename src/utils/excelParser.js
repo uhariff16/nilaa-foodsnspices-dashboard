@@ -292,31 +292,34 @@ export const parseExcelFile = (files) => {
 
                             const valStr = colParticulars.toLowerCase();
 
-                            // 1. Detect Header Row: "INV-1165 ... Client : HOTEL BISMI"
-                            if (/^inv-/i.test(valStr)) {
-                                debugLog.push(`Found Header Row: ${valStr}`);
+                            // 1. Detect Header Row: "GST-106 ... Client : AMEEN MASTER CHEF", "INV-1165 ... Client : HOTEL BISMI"
+                            const isHeaderRow = /^(?:gst|inv|bill|tax)[-_ ]*\d+/i.test(valStr) ||
+                                                (valStr.includes('date') && (valStr.includes('client') || valStr.includes('party') || valStr.includes('customer')));
 
-                                // Extract Client Name
-                                const clientMatch = valStr.match(/(?:client|party|customer)\s*[:.-]\s*(.+)$/i);
+                            if (isHeaderRow) {
+                                debugLog.push(`Found Header Row: ${colParticulars}`);
+
+                                // Extract Client Name (preserve original casing)
+                                const clientMatch = colParticulars.match(/(?:client|party|customer)\s*[:.-]\s*(.+)$/i);
                                 if (clientMatch) {
                                     currentCustomer = clientMatch[1].trim();
-                                    if (currentCustomer.match(/date\s*:/i)) {
-                                        currentCustomer = currentCustomer.split(/date\s*:/i)[0].trim();
+                                    if (currentCustomer.match(/date\s*[:.-]/i)) {
+                                        currentCustomer = currentCustomer.split(/date\s*[:.-]/i)[0].trim();
                                     }
                                     debugLog.push(`Captured Customer: ${currentCustomer}`);
                                 }
 
-                                // Extract Date "Date : 01-Dec-25"
-                                const dateMatch = valStr.match(/date\s*[:.-]\s*([\w-]+)/i);
+                                // Extract Date "Date : 01-Dec-25" or "Date : 01-Nov-26"
+                                const dateMatch = colParticulars.match(/date\s*[:.-]\s*([\w-]+)/i);
                                 if (dateMatch) {
                                     currentInvDate = normalizeDate(dateMatch[1]);
                                     debugLog.push(`Captured Date: ${dateMatch[1]} -> ${currentInvDate}`);
                                 }
 
-                                // Extract Invoice No
-                                const invMatch = valStr.match(/(inv-\d+)/i);
+                                // Extract Invoice No (e.g. GST-106, INV-1165, BILL-123)
+                                const invMatch = colParticulars.match(/((?:gst|inv|bill|tax)[-_ ]*\d+)/i) || colParticulars.match(/^([a-z0-9_-]+)/i);
                                 if (invMatch) {
-                                    currentInvoiceNo = invMatch[1];
+                                    currentInvoiceNo = invMatch[1].toUpperCase().replace(/\s+/g, '-');
                                 }
                                 return;
                             }

@@ -1026,7 +1026,8 @@ const AdminDataIngestion = () => {
                     material: item.material,
                     weight: item.weight || 0,
                     remarks: `Sheet: ${item.source_sheet || 'N/A'}`,
-                    source_file: item.source_file || file.name
+                    source_file: item.source_file || file.name,
+                    source_sheet: item.source_sheet
                 };
             }).filter(row => row.date && row.weight);
 

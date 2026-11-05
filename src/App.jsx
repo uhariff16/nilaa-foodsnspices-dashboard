@@ -202,7 +202,9 @@ const DashboardLayout = () => {
             // Split Production Logs
             const newProdData = { stockIn: [], preProduction: [], postProduction: [] };
             allLogs.forEach(log => {
-                const entry = { id: log.id, date: log.date, createdAt: log.created_at, material: log.material, weight: Number(log.weight), source: 'Database' };
+                // [STAGE 3D] Filter approved soft-deleted records from operational state
+                if (log.status === 'approved_deleted') return;
+                const entry = { id: log.id, date: log.date, createdAt: log.created_at, material: log.material, weight: Number(log.weight), source: 'Database', status: log.status || 'active' };
                 if (log.type === 'stock_in') newProdData.stockIn.push(entry);
                 else if (log.type === 'usage') newProdData.preProduction.push(entry);
                 else if (log.type === 'production') newProdData.postProduction.push(entry);

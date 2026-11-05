@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Package, Factory, TrendingUp, AlertCircle, Settings, Clock, Zap, PlusCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import ReconciliationDiscrepancyBanner from './ReconciliationDiscrepancyBanner';
 
 // Images (Relative paths assuming they are in the public/assets or accessible)
 // Since we generated them, we'll assume they are served. If not, we fall back to icons.
@@ -969,6 +970,8 @@ const ProductionDashboard = ({ data = {}, selectedMonth, selectedYear, isAdmin }
 
     return (
         <div className="animate-fade-in">
+            {/* Stage 3D: Persistent Discrepancy Alert Banner */}
+            <ReconciliationDiscrepancyBanner selectedMonth={selectedMonth} selectedYear={selectedYear} />
             {/* Admin Controls */}
             {isAdmin && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1.5rem' }}>

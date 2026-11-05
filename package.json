@@ -10,9 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@supabase/supabase-js": "^2.89.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.300.0",
+    "pg": "^8.23.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.11.0",

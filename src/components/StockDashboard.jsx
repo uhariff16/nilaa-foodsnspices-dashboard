@@ -3,6 +3,7 @@ import { Package, TrendingUp, TrendingDown, ArrowRight, Activity, Layers, AlertC
 import gingerIcon from '../assets/ginger.png';
 import garlicIcon from '../assets/garlic.png';
 import { supabase } from '../lib/supabaseClient';
+import ReconciliationDiscrepancyBanner from './ReconciliationDiscrepancyBanner';
 
 const StockSummaryCard = ({ title, icon, color, opening, purchased, total, used, available }) => (
     <div style={{

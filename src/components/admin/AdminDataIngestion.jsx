@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { parseExcelFile } from '../../utils/excelParser';
 import { parseProductionFile } from '../../utils/productionParser';
+import { computeFileSha256, detectDuplicateWorksheets, classifyReconciliationRecords, normalizeReportingPeriod } from '../../utils/reconciliationEngine';
 import { Upload, CheckCircle, AlertCircle, Database, FileText, Layers, RefreshCw, FileSpreadsheet, CloudLightning, FolderInput, File as FileIcon, PlayCircle, StopCircle, Radio, X, Users, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { loadGapi, loadGis, createPicker, downloadDriveFile } from '../../utils/driveUtils';
@@ -90,6 +91,15 @@ const AdminDataIngestion = () => {
         return saved ? JSON.parse(saved) : [];
     });
     const [previewData, setPreviewData] = useState(null);
+    const [approvedDeletions, setApprovedDeletions] = useState(new Set());
+    const toggleApproveDeletion = (dbId) => {
+        setApprovedDeletions(prev => {
+            const next = new Set(prev);
+            if (next.has(dbId)) next.delete(dbId);
+            else next.add(dbId);
+            return next;
+        });
+    };
 
     useEffect(() => {
         localStorage.setItem('processedFileHashes', JSON.stringify(processedFileHashes));
@@ -739,7 +749,7 @@ const AdminDataIngestion = () => {
     const processProductionData = async (file) => {
         const data = await parseProductionFile([file]);
         if (!data.stockIn.length && !data.preProduction.length && !data.postProduction.length) {
-            return { success: false, message: "No valid production logs found." };
+            return { success: false, message: "No valid production logs found in file." };
         }
 
         const formatRows = (items, type) => items.map(item => ({
@@ -749,7 +759,8 @@ const AdminDataIngestion = () => {
             material: item.material,
             weight: item.weight || 0,
             remarks: `Sheet: ${item.source_sheet || 'N/A'}`,
-            source_file: item.source_file || file.name
+            source_file: item.source_file || file.name,
+            source_sheet: item.source_sheet
         })).filter(row => row.date && row.weight);
 
         const allRows = [
@@ -758,65 +769,49 @@ const AdminDataIngestion = () => {
             ...formatRows(data.postProduction, 'production')
         ];
 
-        let newCount = 0;
-        let updateCount = 0;
-        let skipCount = 0;
-
-        if (allRows.length > 0) {
-            const ids = allRows.map(r => r.id);
-            const { data: existingLogs, error: fetchErr } = await supabase
-                .from('production_logs')
-                .select('id, date, type, material, weight, remarks, source_file')
-                .in('id', ids);
-
-            if (!fetchErr && existingLogs) {
-                const existingMap = new Map(existingLogs.map(l => [l.id, l]));
-                const rowsToInsert = [];
-                const rowsToUpdate = [];
-
-                allRows.forEach(row => {
-                    const existing = existingMap.get(row.id);
-                    if (!existing) {
-                        newCount++;
-                        rowsToInsert.push(row);
-                    } else {
-                        const isDifferent =
-                            existing.date !== row.date ||
-                            existing.type !== row.type ||
-                            existing.material !== row.material ||
-                            Number(existing.weight) !== Number(row.weight) ||
-                            existing.remarks !== row.remarks ||
-                            existing.source_file !== row.source_file;
-
-                        if (isDifferent) {
-                            updateCount++;
-                            rowsToUpdate.push(row);
-                        } else {
-                            skipCount++;
-                        }
-                    }
-                });
-
-                if (rowsToInsert.length > 0) {
-                    const { error } = await supabase.from('production_logs').insert(rowsToInsert);
-                    if (error) throw error;
-                }
-                if (rowsToUpdate.length > 0) {
-                    const { error } = await supabase.from('production_logs').upsert(rowsToUpdate);
-                    if (error) throw error;
-                }
-            } else {
-                const { error } = await supabase.from('production_logs').upsert(allRows);
-                if (error) throw error;
-                newCount = allRows.length;
-            }
+        if (allRows.length === 0) {
+            return { success: false, message: "No valid rows extracted from production file." };
         }
+
+        const reportingPeriod = previewData?.reportingPeriod || normalizeReportingPeriod(allRows[0]?.date) || '2026-09-01';
+        const worksheetScope = previewData?.worksheetScope || allRows[0]?.source_sheet || 'Sheet1';
+        const decisions = Array.from(approvedDeletions).map(id => ({ db_id: id, action: 'approve_delete' }));
+
+        // [STAGE 3F] STRICT FAIL-CLOSED RECONCILIATION COMMIT
+        // Ingestion writes MUST execute strictly through the authoritative server-side RPC.
+        // If RPC is missing, unauthorized, or fails, writes are BLOCKED. Legacy fallback is strictly prohibited.
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('reconcile_production_batch', {
+            p_dataset_name: 'Daily Stocks & Production',
+            p_worksheet_name: worksheetScope,
+            p_reporting_period: reportingPeriod,
+            p_file_name: file.name,
+            p_file_sha256: previewData?.hash || '',
+            p_is_authoritative: true,
+            p_records: allRows,
+            p_decisions: decisions,
+            p_is_dry_run: false
+        });
+
+        if (rpcErr || !rpcRes || !rpcRes.success) {
+            const errDetail = rpcErr ? (rpcErr.message || JSON.stringify(rpcErr)) : 'Unknown server rejection';
+            console.error("FAIL-CLOSED INGESTION BLOCKED:", errDetail);
+            throw new Error(`Reconciliation write blocked (Fail-Closed): ${errDetail}. Direct database writes are disallowed for security and audit integrity. Please ensure the reconciliation RPC is deployed and your user role is authorized.`);
+        }
+
+        // Authoritative Server-Verified Counts
+        const newCount = rpcRes.counts.new || 0;
+        const updateCount = rpcRes.counts.modified || 0;
+        const skipCount = rpcRes.counts.unchanged || 0;
+        const missingCount = rpcRes.counts.missing || 0;
+        const approvedDelCount = rpcRes.counts.approved_deleted || 0;
+
+        window.dispatchEvent(new Event('reconciliationUpdated'));
 
         return {
             success: true,
             totalNew: newCount + updateCount,
             details: `Stock-In: ${data.stockIn.length}, Usage: ${data.preProduction.length}, Production: ${data.postProduction.length}`,
-            message: `Imported: ${newCount} new logs, ${updateCount} updated, ${skipCount} skipped.`
+            message: `Authoritative Reconciliation Committed: ${newCount} new, ${updateCount} modified, ${skipCount} unchanged. ${missingCount} missing (${approvedDelCount} approved deleted).`
         };
     };
 
@@ -1422,26 +1417,154 @@ const AdminDataIngestion = () => {
 
                     {(!previewData.isFolder ? !previewData.isDuplicateFile : true) && (
                         <>
-                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                                <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
-                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>New Records</span>
-                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>
-                                        {previewData.isFolder ? previewData.totals.newCount : previewData.newCount}
-                                    </span>
+                            {/* Stage 3C: Reconciliation Status Counters */}
+                            {previewData.reconciliation ? (
+                                <>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>New Records</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#34d399' }}>{previewData.reconciliation.counts.newCount}</span>
+                                        </div>
+                                        <div style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Modified</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#60a5fa' }}>{previewData.reconciliation.counts.modifiedCount}</span>
+                                        </div>
+                                        <div style={{ background: 'rgba(148, 163, 184, 0.15)', border: '1px solid rgba(148, 163, 184, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Unchanged</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#94a3b8' }}>{previewData.reconciliation.counts.unchangedCount}</span>
+                                        </div>
+                                        <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Missing in File</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#fbbf24' }}>{previewData.reconciliation.counts.missingCount}</span>
+                                        </div>
+                                        <div style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Conflicts</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f43f5e' }}>{previewData.reconciliation.counts.conflictCount}</span>
+                                        </div>
+                                        <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+                                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Invalid</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>{previewData.reconciliation.counts.invalidCount}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Stock Impact Preview Widget */}
+                                    {previewData.reconciliation.stockImpact && (
+                                        <div style={{ background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '1.5rem', fontSize: '0.8rem' }}>
+                                            <div style={{ fontWeight: 600, color: '#38bdf8', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <Layers size={16} /> Projected Stock Impact (Reconciliation Delta):
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: 'var(--text-primary)' }}>
+                                                <span>Stock-In Delta: <strong style={{ color: previewData.reconciliation.stockImpact.stockInDelta >= 0 ? '#34d399' : '#f87171' }}>{previewData.reconciliation.stockImpact.stockInDelta.toFixed(2)} kg</strong></span>
+                                                <span>Usage Delta: <strong style={{ color: previewData.reconciliation.stockImpact.usageDelta >= 0 ? '#fbbf24' : '#60a5fa' }}>{previewData.reconciliation.stockImpact.usageDelta.toFixed(2)} kg</strong></span>
+                                                <span>Production Delta: <strong style={{ color: previewData.reconciliation.stockImpact.productionDelta >= 0 ? '#34d399' : '#f87171' }}>{previewData.reconciliation.stockImpact.productionDelta.toFixed(2)} kg</strong></span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Missing Records Review & Approval */}
+                                    {previewData.reconciliation.missingRecords.length > 0 && (
+                                        <div style={{ marginBottom: '1.5rem', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '0.5rem', padding: '1rem', background: 'rgba(245, 158, 11, 0.08)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                                <h4 style={{ color: '#fbbf24', fontSize: '0.875rem', fontWeight: 'bold', margin: 0 }}>
+                                                    ⚠️ Missing Records in Authoritative File ({previewData.reconciliation.missingRecords.length})
+                                                </h4>
+                                                <span style={{ fontSize: '0.75rem', color: 'rgba(254, 243, 199, 0.8)' }}>
+                                                    Check to approve soft-delete; unchecked records remain active as open warnings.
+                                                </span>
+                                            </div>
+                                            <div style={{ maxHeight: '180px', overflowY: 'auto' }} className="custom-scrollbar">
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                                            <th style={{ padding: '0.35rem', width: '30px' }}>Approve</th>
+                                                            <th style={{ padding: '0.35rem' }}>Date</th>
+                                                            <th style={{ padding: '0.35rem' }}>Type</th>
+                                                            <th style={{ padding: '0.35rem' }}>Material</th>
+                                                            <th style={{ padding: '0.35rem', textAlign: 'right' }}>Weight (kg)</th>
+                                                            <th style={{ padding: '0.35rem' }}>Remarks</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {previewData.reconciliation.missingRecords.map((mRow) => (
+                                                            <tr key={mRow.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                                                                <td style={{ padding: '0.35rem', textAlign: 'center' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={approvedDeletions.has(mRow.id)}
+                                                                        onChange={() => toggleApproveDeletion(mRow.id)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    />
+                                                                </td>
+                                                                <td style={{ padding: '0.35rem' }}>{mRow.date}</td>
+                                                                <td style={{ padding: '0.35rem' }}>{mRow.type}</td>
+                                                                <td style={{ padding: '0.35rem', fontWeight: 600 }}>{mRow.material}</td>
+                                                                <td style={{ padding: '0.35rem', textAlign: 'right', fontWeight: 600 }}>{mRow.weight}</td>
+                                                                <td style={{ padding: '0.35rem', color: 'var(--text-secondary)' }}>{mRow.remarks || 'N/A'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Modified Records Diff Review */}
+                                    {previewData.reconciliation.modifiedRecords.length > 0 && (
+                                        <div style={{ marginBottom: '1.5rem', border: '1px solid rgba(59, 130, 246, 0.4)', borderRadius: '0.5rem', padding: '1rem', background: 'rgba(59, 130, 246, 0.08)' }}>
+                                            <h4 style={{ color: '#60a5fa', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                                🔄 Modified Records Diff ({previewData.reconciliation.modifiedRecords.length})
+                                            </h4>
+                                            <div style={{ maxHeight: '160px', overflowY: 'auto' }} className="custom-scrollbar">
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                                                    <thead>
+                                                        <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                                                            <th style={{ padding: '0.35rem' }}>Date</th>
+                                                            <th style={{ padding: '0.35rem' }}>Item</th>
+                                                            <th style={{ padding: '0.35rem', textAlign: 'right' }}>Old Weight</th>
+                                                            <th style={{ padding: '0.35rem', textAlign: 'right' }}>New Weight</th>
+                                                            <th style={{ padding: '0.35rem', textAlign: 'right' }}>Delta</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {previewData.reconciliation.modifiedRecords.map((modRow, i) => (
+                                                            <tr key={i} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                                                                <td style={{ padding: '0.35rem' }}>{modRow.inbound.date}</td>
+                                                                <td style={{ padding: '0.35rem', fontWeight: 600 }}>{modRow.inbound.material}</td>
+                                                                <td style={{ padding: '0.35rem', textAlign: 'right', color: '#f87171' }}>{modRow.diff.weightBefore} kg</td>
+                                                                <td style={{ padding: '0.35rem', textAlign: 'right', color: '#34d399' }}>{modRow.diff.weightAfter} kg</td>
+                                                                <td style={{ padding: '0.35rem', textAlign: 'right', fontWeight: 600, color: modRow.diff.delta >= 0 ? '#34d399' : '#f87171' }}>
+                                                                    {modRow.diff.delta >= 0 ? '+' : ''}{modRow.diff.delta.toFixed(2)} kg
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>New Records</span>
+                                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#34d399' }}>
+                                            {previewData.isFolder ? previewData.totals.newCount : previewData.newCount}
+                                        </span>
+                                    </div>
+                                    <div style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Updates Detected</span>
+                                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                                            {previewData.isFolder ? previewData.totals.updateCount : previewData.updateCount}
+                                        </span>
+                                    </div>
+                                    <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Duplicate / Skip</span>
+                                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fbbf24' }}>
+                                            {previewData.isFolder ? previewData.totals.skipCount : previewData.skipCount}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
-                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Updates Detected</span>
-                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa' }}>
-                                        {previewData.isFolder ? previewData.totals.updateCount : previewData.updateCount}
-                                    </span>
-                                </div>
-                                <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.75rem 1.25rem', borderRadius: '0.5rem', flex: 1, textAlign: 'center' }}>
-                                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Duplicate / Skip</span>
-                                    <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fbbf24' }}>
-                                        {previewData.isFolder ? previewData.totals.skipCount : previewData.skipCount}
-                                    </span>
-                                </div>
-                            </div>
+                            )}
 
                             {previewData.isFolder && (
                                 <div style={{ marginBottom: '1.5rem' }}>

@@ -834,6 +834,15 @@ const AdminDataIngestion = () => {
         // [STAGE 3F] STRICT FAIL-CLOSED RECONCILIATION COMMIT
         // Ingestion writes MUST execute strictly through the authoritative server-side RPC.
         // If RPC is missing, unauthorized, or fails, writes are BLOCKED. Legacy fallback is strictly prohibited.
+        const targetRows = allRows.filter(r => 
+            normalizeReportingPeriod(r.date) === reportingPeriod &&
+            (!worksheetScope || r.source_sheet === worksheetScope)
+        );
+
+        if (targetRows.length === 0) {
+            return { success: false, message: "No valid rows extracted for reporting period: " + reportingPeriod };
+        }
+
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('reconcile_production_batch', {
             p_dataset_name: 'Daily Stocks & Production',
             p_worksheet_name: worksheetScope,
@@ -841,7 +850,7 @@ const AdminDataIngestion = () => {
             p_file_name: file.name,
             p_file_sha256: previewData?.hash || '',
             p_is_authoritative: true,
-            p_records: allRows,
+            p_records: targetRows,
             p_decisions: decisions,
             p_is_dry_run: false
         });
@@ -1038,20 +1047,63 @@ const AdminDataIngestion = () => {
             ];
 
             if (allRows.length > 0) {
-                // Task 1: Unambiguous Worksheet Scope Resolution
-                const distinctSheets = Array.from(new Set(allRows.map(r => r.source_sheet).filter(Boolean)));
+                // Server-configured cutover date (used strictly for eligibility/historical check, NEVER as fallback date)
+                let cutoverDate = '2026-11-01';
+                try {
+                    const { data: cutoverSetting, error: cutoverErr } = await supabase
+                        .from('system_settings')
+                        .select('value')
+                        .eq('key', 'reconciliation_cutover_date')
+                        .maybeSingle();
+                    if (cutoverErr) throw cutoverErr;
+                    if (cutoverSetting?.value) cutoverDate = cutoverSetting.value;
+                } catch (e) {
+                    console.warn("Could not fetch cutover date:", e);
+                }
+
+                // Determine all valid distinct reporting periods across workbook
+                const allDistinctPeriods = Array.from(new Set(allRows.map(r => normalizeReportingPeriod(r.date)).filter(Boolean))).sort();
+
+                // Current calendar month period (e.g. 2026-11-01)
+                const now = new Date();
+                const currentMonthPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+                let activeRows = allRows;
+                let targetPeriod = null;
+
+                if (allDistinctPeriods.length === 1) {
+                    targetPeriod = allDistinctPeriods[0];
+                } else if (allDistinctPeriods.length > 1) {
+                    // Cumulative multi-month workbook: scope to current month data only
+                    if (allDistinctPeriods.includes(currentMonthPeriod)) {
+                        targetPeriod = currentMonthPeriod;
+                    } else {
+                        // Fall back to latest post-cutover period present in the workbook
+                        const eligiblePeriods = allDistinctPeriods.filter(p => !cutoverDate || p >= cutoverDate);
+                        targetPeriod = eligiblePeriods.length > 0 ? eligiblePeriods[eligiblePeriods.length - 1] : currentMonthPeriod;
+                    }
+
+                    activeRows = allRows.filter(r => normalizeReportingPeriod(r.date) === targetPeriod);
+                }
+
+                if (activeRows.length === 0) {
+                    errors.push(`Error: No production records found for current month (${targetPeriod || currentMonthPeriod}) in workbook.`);
+                }
+
+                // Worksheet Scope Resolution on active scoped rows
+                const distinctSheets = Array.from(new Set(activeRows.map(r => r.source_sheet).filter(Boolean)));
                 if (distinctSheets.length === 0) {
                     errors.push("Error: Cannot determine worksheet scope. No worksheet name found in workbook.");
                 } else if (distinctSheets.length > 1) {
-                    errors.push(`Error: Ambiguous worksheet scope. Workbook contains rows from multiple worksheets (${distinctSheets.join(', ')}). Daily Stocks & Production reconciliation must be scoped to a single worksheet.`);
+                    errors.push(`Error: Ambiguous worksheet scope for period ${targetPeriod}. Found multiple worksheets (${distinctSheets.join(', ')}).`);
                 } else {
                     worksheetScope = distinctSheets[0];
                 }
 
-                // Task 1: Unambiguous Reporting Period Resolution (validate all row dates, detect mixed months or unparseable dates)
+                // Reporting Period Resolution on active scoped rows
                 const distinctPeriods = new Set();
                 const invalidDateRows = [];
-                allRows.forEach((r, idx) => {
+                activeRows.forEach((r, idx) => {
                     if (!r.date || typeof r.date !== 'string') {
                         invalidDateRows.push(idx + 1);
                         return;
@@ -1071,23 +1123,9 @@ const AdminDataIngestion = () => {
                 if (distinctPeriods.size === 0) {
                     errors.push("Error: Cannot determine valid reporting period from workbook dates. Confirmation is blocked.");
                 } else if (distinctPeriods.size > 1) {
-                    errors.push(`Error: Ambiguous reporting scope. Workbook contains rows spanning multiple reporting periods (${Array.from(distinctPeriods).join(', ')}). Each upload must represent a single consistent reporting period.`);
+                    errors.push(`Error: Inconsistent reporting period within current month data (${Array.from(distinctPeriods).join(', ')}).`);
                 } else {
                     reportingPeriod = Array.from(distinctPeriods)[0];
-                }
-
-                // Server-configured cutover date (used strictly for eligibility/historical check, NEVER as fallback date)
-                let cutoverDate = '2026-11-01';
-                try {
-                    const { data: cutoverSetting, error: cutoverErr } = await supabase
-                        .from('system_settings')
-                        .select('value')
-                        .eq('key', 'reconciliation_cutover_date')
-                        .maybeSingle();
-                    if (cutoverErr) throw cutoverErr;
-                    if (cutoverSetting?.value) cutoverDate = cutoverSetting.value;
-                } catch (e) {
-                    console.warn("Could not fetch cutover date:", e);
                 }
 
                 // Task 2: Reliable paginated retrieval and fail-closed handling
@@ -1107,7 +1145,7 @@ const AdminDataIngestion = () => {
 
                     if (errors.length === 0) {
                         reconciliation = classifyReconciliationRecords({
-                            inboundRows: allRows,
+                            inboundRows: activeRows,
                             existingDbRows: scopedLogs,
                             worksheetScope,
                             reportingPeriod,
@@ -1135,7 +1173,7 @@ const AdminDataIngestion = () => {
                     }
                 }
 
-                dataRows = allRows.slice(0, 5); // Take first 5 rows for UI preview
+                dataRows = activeRows.slice(0, 5); // Take first 5 rows for UI preview
             }
         }
 

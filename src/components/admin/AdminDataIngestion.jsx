@@ -1153,9 +1153,12 @@ const AdminDataIngestion = () => {
                             cutoverDate
                         });
 
+                        const confirmedDuplicates = (reconciliation.conflictRecords || []).filter(c => c.type === 'confirmed_legacy_duplicate');
+                        const blockingConflicts = (reconciliation.conflictRecords || []).filter(c => c.type !== 'confirmed_legacy_duplicate');
+
                         newCount = reconciliation.counts.newCount;
                         updateCount = reconciliation.counts.modifiedCount;
-                        skipCount = reconciliation.counts.unchangedCount;
+                        skipCount = reconciliation.counts.unchangedCount + confirmedDuplicates.length;
 
                         if (reconciliation.invalidRecords && reconciliation.invalidRecords.length > 0) {
                             reconciliation.invalidRecords.forEach(inv => {
@@ -1165,8 +1168,8 @@ const AdminDataIngestion = () => {
                         if (reconciliation.isHistoricalPeriod) {
                             errors.push(reconciliation.cutoverMessage);
                         }
-                        if (reconciliation.conflictRecords && reconciliation.conflictRecords.length > 0) {
-                            reconciliation.conflictRecords.forEach(c => {
+                        if (blockingConflicts.length > 0) {
+                            blockingConflicts.forEach(c => {
                                 errors.push(`Reconciliation Conflict: ${c.reason}`);
                             });
                         }
@@ -1219,13 +1222,18 @@ const AdminDataIngestion = () => {
         }
     };
 
+
+    const getBlockingConflictCount = (preview) => {
+        return (preview?.reconciliation?.conflictRecords || []).filter(c => c.type !== 'confirmed_legacy_duplicate').length;
+    };
+
     const confirmIngestion = async () => {
         if (!previewData) return;
 
         // Task 4 Hardening: Fail-Closed Preflight Gate
         if (!previewData.isFolder) {
             const hasErrors = previewData.errors && previewData.errors.length > 0;
-            const hasConflicts = (previewData.reconciliation?.counts?.conflictCount || 0) > 0;
+            const hasConflicts = getBlockingConflictCount(previewData) > 0;
             const hasInvalids = (previewData.reconciliation?.counts?.invalidCount || 0) > 0;
             const isHistorical = Boolean(previewData.reconciliation?.isHistoricalPeriod);
             const isDuplicate = Boolean(previewData.isDuplicateFile);
@@ -1621,7 +1629,7 @@ const AdminDataIngestion = () => {
                                         </div>
                                         <div style={{ background: 'rgba(148, 163, 184, 0.15)', border: '1px solid rgba(148, 163, 184, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
                                             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Unchanged</span>
-                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#94a3b8' }}>{previewData.reconciliation.counts.unchangedCount}</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#94a3b8' }}>{previewData.reconciliation.counts.unchangedCount + ((previewData.reconciliation.conflictRecords || []).filter(c => c.type === 'confirmed_legacy_duplicate').length)}</span>
                                         </div>
                                         <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
                                             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Missing in File</span>
@@ -1629,7 +1637,7 @@ const AdminDataIngestion = () => {
                                         </div>
                                         <div style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
                                             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Conflicts</span>
-                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f43f5e' }}>{previewData.reconciliation.counts.conflictCount}</span>
+                                            <span style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f43f5e' }}>{getBlockingConflictCount(previewData)}</span>
                                         </div>
                                         <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.75rem 0.5rem', borderRadius: '0.5rem', textAlign: 'center' }}>
                                             <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Invalid</span>
@@ -1905,14 +1913,14 @@ const AdminDataIngestion = () => {
                         </button>
                         <button
                             onClick={confirmIngestion}
-                            disabled={loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))}
+                            disabled={loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || getBlockingConflictCount(previewData) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))}
                             className="btn-primary"
                             style={{
                                 height: '42px',
                                 padding: '0 2rem',
-                                background: (previewData.isFolder ? (previewData.totals.errorCount > 0) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod))) ? 'rgba(255,255,255,0.1)' : '#10b981',
+                                background: (previewData.isFolder ? (previewData.totals.errorCount > 0) : (previewData.isDuplicateFile || previewData.errors.length > 0 || getBlockingConflictCount(previewData) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod))) ? 'rgba(255,255,255,0.1)' : '#10b981',
                                 border: 'none',
-                                opacity: (loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || (previewData.reconciliation?.counts?.conflictCount || 0) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))) ? 0.5 : 1
+                                opacity: (loading || (previewData.isFolder ? (previewData.totals.errorCount > 0 || (previewData.totals.newCount === 0 && previewData.totals.updateCount === 0 && approvedDeletions.size === 0)) : (previewData.isDuplicateFile || previewData.errors.length > 0 || getBlockingConflictCount(previewData) > 0 || (previewData.reconciliation?.counts?.invalidCount || 0) > 0 || Boolean(previewData.reconciliation?.isHistoricalPeriod) || (previewData.newCount === 0 && previewData.updateCount === 0 && approvedDeletions.size === 0)))) ? 0.5 : 1
                             }}
                         >
                             {loading ? 'Processing...' : 'Confirm Ingestion Write'}

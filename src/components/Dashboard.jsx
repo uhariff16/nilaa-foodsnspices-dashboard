@@ -12,7 +12,7 @@ import TransactionTable from './TransactionTable';
 import SalesSummaryTable from './SalesSummaryTable';
 
 
-import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown, ChevronRight, AlertTriangle, AlertCircle, X, ShieldAlert, Sparkles, Info } from 'lucide-react';
+import { RefreshCw, RotateCw, Download, LayoutDashboard, Package, Users, User, Settings, Receipt, Wallet, Search, List, BarChart2, Factory, DollarSign, CreditCard, ShoppingCart, Activity, Moon, Sun, Upload, Filter, ShoppingBag, Layers, IndianRupee, LogOut, Calculator, Leaf, Tag, TrendingUp, TrendingDown, Clock, Target, Check, Briefcase, ChevronDown, ChevronRight, AlertTriangle, AlertCircle, X, ShieldAlert, Sparkles, Info, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import CostSimulator from './CostSimulator'; // [NEW]
@@ -3201,12 +3201,24 @@ const Dashboard = (props) => {
                                         <select 
                                             value={invoiceSort} 
                                             onChange={(e) => setInvoiceSort(e.target.value)}
-                                            style={{ padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                            style={{ padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}
                                         >
-                                            <option value="date_desc">Newest First</option>
-                                            <option value="date_asc">Oldest First</option>
-                                            <option value="amount_desc">Amount (High to Low)</option>
-                                            <option value="amount_asc">Amount (Low to High)</option>
+                                            <optgroup label="Date Wise">
+                                                <option value="date_desc">Date: Newest First</option>
+                                                <option value="date_asc">Date: Oldest First</option>
+                                            </optgroup>
+                                            <optgroup label="Invoice Wise">
+                                                <option value="invoice_asc">Invoice No: Low to High (Ascending)</option>
+                                                <option value="invoice_desc">Invoice No: High to Low (Descending)</option>
+                                            </optgroup>
+                                            <optgroup label="Amount Wise">
+                                                <option value="amount_desc">Amount: High to Low</option>
+                                                <option value="amount_asc">Amount: Low to High</option>
+                                            </optgroup>
+                                            <optgroup label="Customer Wise">
+                                                <option value="customer_asc">Customer: A to Z</option>
+                                                <option value="customer_desc">Customer: Z to A</option>
+                                            </optgroup>
                                         </select>
                                     </div>
                                 </div>
@@ -3215,10 +3227,54 @@ const Dashboard = (props) => {
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                                             <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-primary)', zIndex: 10 }}>
                                                 <tr style={{ borderBottom: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
-                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Date</th>
-                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Invoice No</th>
-                                                    <th style={{ textAlign: 'left', padding: '1rem', fontWeight: 500 }}>Customer</th>
-                                                    <th style={{ textAlign: 'right', padding: '1rem', fontWeight: 500 }}>Total Amount</th>
+                                                    <th 
+                                                        onClick={() => setInvoiceSort(prev => prev === 'date_desc' ? 'date_asc' : 'date_desc')}
+                                                        style={{ textAlign: 'left', padding: '1rem', fontWeight: 500, cursor: 'pointer', userSelect: 'none' }}
+                                                        title="Click to sort date wise"
+                                                    >
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            Date
+                                                            {invoiceSort === 'date_desc' && <ArrowDown size={14} color="#3b82f6" />}
+                                                            {invoiceSort === 'date_asc' && <ArrowUp size={14} color="#3b82f6" />}
+                                                            {!invoiceSort.startsWith('date') && <ArrowUpDown size={14} style={{ opacity: 0.35 }} />}
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setInvoiceSort(prev => prev === 'invoice_asc' ? 'invoice_desc' : 'invoice_asc')}
+                                                        style={{ textAlign: 'left', padding: '1rem', fontWeight: 500, cursor: 'pointer', userSelect: 'none' }}
+                                                        title="Click to sort invoice wise"
+                                                    >
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            Invoice No
+                                                            {invoiceSort === 'invoice_asc' && <ArrowUp size={14} color="#3b82f6" />}
+                                                            {invoiceSort === 'invoice_desc' && <ArrowDown size={14} color="#3b82f6" />}
+                                                            {!invoiceSort.startsWith('invoice') && <ArrowUpDown size={14} style={{ opacity: 0.35 }} />}
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setInvoiceSort(prev => prev === 'customer_asc' ? 'customer_desc' : 'customer_asc')}
+                                                        style={{ textAlign: 'left', padding: '1rem', fontWeight: 500, cursor: 'pointer', userSelect: 'none' }}
+                                                        title="Click to sort customer wise"
+                                                    >
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                            Customer
+                                                            {invoiceSort === 'customer_asc' && <ArrowUp size={14} color="#3b82f6" />}
+                                                            {invoiceSort === 'customer_desc' && <ArrowDown size={14} color="#3b82f6" />}
+                                                            {!invoiceSort.startsWith('customer') && <ArrowUpDown size={14} style={{ opacity: 0.35 }} />}
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setInvoiceSort(prev => prev === 'amount_desc' ? 'amount_asc' : 'amount_desc')}
+                                                        style={{ textAlign: 'right', padding: '1rem', fontWeight: 500, cursor: 'pointer', userSelect: 'none' }}
+                                                        title="Click to sort amount wise"
+                                                    >
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'flex-end', width: '100%' }}>
+                                                            Total Amount
+                                                            {invoiceSort === 'amount_desc' && <ArrowDown size={14} color="#3b82f6" />}
+                                                            {invoiceSort === 'amount_asc' && <ArrowUp size={14} color="#3b82f6" />}
+                                                            {!invoiceSort.startsWith('amount') && <ArrowUpDown size={14} style={{ opacity: 0.35 }} />}
+                                                        </div>
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -3243,10 +3299,41 @@ const Dashboard = (props) => {
                                                         const s = invoiceSearch.toLowerCase();
                                                         return (inv.invoiceNo || '').toLowerCase().includes(s) || (inv.customerName || '').toLowerCase().includes(s);
                                                     }).sort((a,b) => {
-                                                        if (invoiceSort === 'date_desc') return new Date(b.parsedDate) - new Date(a.parsedDate);
-                                                        if (invoiceSort === 'date_asc') return new Date(a.parsedDate) - new Date(b.parsedDate);
+                                                        const parseInvoiceNum = (inv) => {
+                                                            const match = String(inv || '').match(/(\d+)/);
+                                                            return match ? parseInt(match[1], 10) : null;
+                                                        };
+                                                        const compareInvoicesNatural = (aInv, bInv, isAsc = true) => {
+                                                            const numA = parseInvoiceNum(aInv);
+                                                            const numB = parseInvoiceNum(bInv);
+                                                            if (numA !== null && numB !== null && numA !== numB) {
+                                                                return isAsc ? numA - numB : numB - numA;
+                                                            }
+                                                            return isAsc
+                                                                ? String(aInv || '').localeCompare(String(bInv || ''), undefined, { numeric: true, sensitivity: 'base' })
+                                                                : String(bInv || '').localeCompare(String(aInv || ''), undefined, { numeric: true, sensitivity: 'base' });
+                                                        };
+
+                                                        if (invoiceSort === 'date_desc') {
+                                                            const dDiff = new Date(b.parsedDate) - new Date(a.parsedDate);
+                                                            if (dDiff !== 0) return dDiff;
+                                                            return compareInvoicesNatural(a.invoiceNo, b.invoiceNo, false);
+                                                        }
+                                                        if (invoiceSort === 'date_asc') {
+                                                            const dDiff = new Date(a.parsedDate) - new Date(b.parsedDate);
+                                                            if (dDiff !== 0) return dDiff;
+                                                            return compareInvoicesNatural(a.invoiceNo, b.invoiceNo, true);
+                                                        }
+                                                        if (invoiceSort === 'invoice_asc') {
+                                                            return compareInvoicesNatural(a.invoiceNo, b.invoiceNo, true);
+                                                        }
+                                                        if (invoiceSort === 'invoice_desc') {
+                                                            return compareInvoicesNatural(a.invoiceNo, b.invoiceNo, false);
+                                                        }
                                                         if (invoiceSort === 'amount_desc') return b.parsedAmount - a.parsedAmount;
                                                         if (invoiceSort === 'amount_asc') return a.parsedAmount - b.parsedAmount;
+                                                        if (invoiceSort === 'customer_asc') return String(a.customerName || '').localeCompare(String(b.customerName || ''));
+                                                        if (invoiceSort === 'customer_desc') return String(b.customerName || '').localeCompare(String(a.customerName || ''));
                                                         return 0;
                                                     }).map((inv, i) => {
                                                         const originalTxns = (data.transactions || []).filter(t => 

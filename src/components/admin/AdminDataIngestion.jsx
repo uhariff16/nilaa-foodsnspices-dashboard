@@ -723,26 +723,74 @@ const AdminDataIngestion = () => {
                 const existingTxMap = new Map();
                 existingTxns.forEach(t => existingTxMap.set(createTxSig(t), t));
 
+                // Map by invoice_no and item_name to detect amendments on previous bills/invoices
+                const existingInvItemMap = new Map();
+                existingTxns.forEach(t => {
+                    const inv = String(t.invoice_no || '').trim().toLowerCase();
+                    const item = String(t.item_name || '').trim().toLowerCase();
+                    if (inv && inv !== 'null' && inv !== 'undefined' && !inv.startsWith('inv-missing-')) {
+                        existingInvItemMap.set(`${inv}|${item}`, t);
+                    }
+                });
+
+                const stagedAmendments = [];
+
                 formattedData.forEach(t => {
                     const sig = createTxSig(t);
                     const existing = existingTxMap.get(sig);
 
-                    if (!existing) {
-                        uniqueTransactions.push(t);
-                    } else if (
-                        existing.payment_mode !== t.payment_mode ||
-                        (t.customer_name && existing.customer_name !== t.customer_name)
-                    ) {
-                        updates.push({ ...t, id: existing.id });
+                    if (existing) {
+                        if (
+                            existing.payment_mode !== t.payment_mode ||
+                            (t.customer_name && existing.customer_name !== t.customer_name)
+                        ) {
+                            updates.push({ ...t, id: existing.id });
+                        }
+                    } else {
+                        // Check if an existing record exists with the same invoice number and item name
+                        const inv = String(t.invoice_no || '').trim().toLowerCase();
+                        const item = String(t.item_name || '').trim().toLowerCase();
+                        const existingMatch = (inv && inv !== 'null' && inv !== 'undefined' && !inv.startsWith('inv-missing-'))
+                            ? existingInvItemMap.get(`${inv}|${item}`)
+                            : null;
+
+                        if (existingMatch) {
+                            // Stage as an amendment for management review rather than inserting a duplicate
+                            const oldAmt = Number(existingMatch.amount || 0);
+                            const newAmt = Number(t.amount || 0);
+                            const delta = newAmt - oldAmt;
+
+                            stagedAmendments.push({
+                                transaction_id: existingMatch.id,
+                                invoice_no: t.invoice_no,
+                                item_name: t.item_name,
+                                transaction_type: (t.payment_mode === 'Sales' || t.payment_mode === 'Invoice Total') ? 'Sales' : 'Purchase',
+                                amendment_type: oldAmt !== newAmt ? 'amount_change' : 'details_change',
+                                field_name: oldAmt !== newAmt ? 'amount' : 'details',
+                                old_value: String(oldAmt),
+                                new_value: String(newAmt),
+                                amount_delta: delta,
+                                source_file: (watchConfig && watchConfig.folderId) ? 'Google Drive Sync' : 'Excel Upload',
+                                status: 'pending_acknowledgment',
+                                notes: `Detected amendment: previous amount ₹${oldAmt}, revised sheet has ₹${newAmt}`
+                            });
+                        } else {
+                            uniqueTransactions.push(t);
+                        }
                     }
                 });
 
                 newTxCount = uniqueTransactions.length;
                 updateTxCount = updates.length;
-                skippedTxns = formattedData.length - newTxCount - updateTxCount;
+                const stagedCount = stagedAmendments.length;
+                skippedTxns = formattedData.length - newTxCount - updateTxCount - stagedCount;
 
                 if (uniqueTransactions.length > 0) await supabase.from('transactions').insert(uniqueTransactions);
                 if (updates.length > 0) await supabase.from('transactions').upsert(updates);
+                if (stagedAmendments.length > 0) {
+                    await supabase.from('transaction_amendments').insert(stagedAmendments);
+                    window.dispatchEvent(new Event('amendmentsUpdated'));
+                }
             }
         }
 

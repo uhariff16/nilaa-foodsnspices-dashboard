@@ -166,13 +166,19 @@ const DashboardLayout = () => {
             ]);
             const uniqueTxnsMap = new Map();
             allTxns.forEach(t => {
-                // [FIX] Deduplication Strategy - Content Based
-                // We ignore the DB ID for unique check because re-uploads might generate new IDs for the same data.
-                // We create a composite key from the business data fields.
-                // Including item_name in the key ensures that different types of expenses (e.g., Water vs Salary) on the same day with the same amount aren't merged.
-                // For Supplier_Payments, we ignore invoice_no because duplicate manual entries over several days might generate different PAY-X IDs.
-                const invKey = t.payment_mode === 'Supplier_Payment' ? '' : t.invoice_no;
-                const key = `${t.date}-${invKey}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
+                // [STAGE 3Q] Controlled Frontend Deduplication
+                // For Sales and Invoice Total transactions, preserve every distinct database row by its stable primary key (t.id).
+                // This prevents legitimate repeated sales line items (multi-line invoices with identical product/price/qty) from being collapsed.
+                // If a record appears multiple times with the same primary key (e.g. from pagination or merging), it is deduplicated.
+                // For non-sales transactions (Expenses, Purchases, Supplier_Payments), preserve the established business key to protect procurement and settlement integrity.
+                const isSales = t.payment_mode === 'Sales' || t.payment_mode === 'Invoice Total';
+                let key;
+                if (isSales) {
+                    key = t.id || `${t.date}-${t.invoice_no}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
+                } else {
+                    const invKey = t.payment_mode === 'Supplier_Payment' ? '' : t.invoice_no;
+                    key = `${t.date}-${invKey}-${Number(t.amount).toFixed(2)}-${Number(t.quantity || 0)}-${t.customer_name}-${t.item_name}`;
+                }
 
                 if (!uniqueTxnsMap.has(key)) {
                     uniqueTxnsMap.set(key, t);

@@ -25,6 +25,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import CustomerInsights from './CustomerInsights';
 import InvestmentsDashboard from './InvestmentsDashboard';
 import PurchasePendingWidget from './PurchasePendingWidget';
+import TransactionAmendmentBanner from './TransactionAmendmentBanner';
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -789,10 +790,14 @@ const Dashboard = (props) => {
             t.parsedDate && t.parsedDate.startsWith(targetPrefix)
         );
 
-        // Content-based deduplication matching App.jsx logic
+        // [STAGE 3Q] Deduplication matching App.jsx logic
+        // Use stable primary key (t.id) for sales/invoice total to preserve multi-line invoice items
         const uniqueTxnsMap = new Map();
         monthTxs.forEach(t => {
-            const key = `${t.parsedDate}-${t.invoiceNo}-${Number(t.parsedAmount).toFixed(2)}-${Number(t.parsedQty || 0)}-${t.customerName}-${t.name}`;
+            const isSales = String(t.parsedType || '').toLowerCase().includes('sale') || t.parsedType === 'Invoice Total';
+            const key = isSales
+                ? (t.id || `${t.parsedDate}-${t.invoiceNo}-${Number(t.parsedAmount).toFixed(2)}-${Number(t.parsedQty || 0)}-${t.customerName}-${t.name}`)
+                : `${t.parsedDate}-${t.parsedType === 'Supplier_Payment' ? '' : t.invoiceNo}-${Number(t.parsedAmount).toFixed(2)}-${Number(t.parsedQty || 0)}-${t.customerName}-${t.name}`;
             if (!uniqueTxnsMap.has(key)) {
                 uniqueTxnsMap.set(key, t);
             }
@@ -2349,6 +2354,7 @@ const Dashboard = (props) => {
             </div >
 
             {/* Content */}
+            <TransactionAmendmentBanner selectedMonth={selectedMonth} selectedYear={selectedYear} onRefreshData={onRefresh} />
 
             {
                 activeTab === 'overview' && (
